@@ -33,9 +33,16 @@ git remote -v
 ```bash
 BASE_BRANCH="$(gh pr view --json baseRefName --jq .baseRefName 2>/dev/null || true)"
 if [ -z "$BASE_BRANCH" ]; then
-  BASE_BRANCH="$(git rev-parse --abbrev-ref origin/HEAD 2>/dev/null | sed 's|origin/||')"
+  ORIGIN_HEAD="$(git symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+  BASE_BRANCH="${ORIGIN_HEAD#origin/}"
 fi
-BASE_BRANCH="${BASE_BRANCH:-main}"
+if [ -z "$BASE_BRANCH" ]; then
+  if git rev-parse --verify main >/dev/null 2>&1; then
+    BASE_BRANCH="main"
+  else
+    BASE_BRANCH="master"
+  fi
+fi
 if git rev-parse --verify "origin/$BASE_BRANCH" >/dev/null 2>&1; then
   BASE="origin/$BASE_BRANCH"
 else
