@@ -14,5 +14,6 @@ The stack is intentionally split into:
 - `docs/public-safety.md`: rules for what must not be committed here.
 - `skills/`: reusable, public-safe workflow skills.
 - `docs/external-workflow-integrations.md`: integration decisions for outside workflow ideas.
+- `docs/external-account-research.md`: public accounts and repositories worth monitoring for future stack improvements.
 
 Private project skills, credentials, local caches, machine hostnames, and client-specific release procedures are intentionally excluded.
