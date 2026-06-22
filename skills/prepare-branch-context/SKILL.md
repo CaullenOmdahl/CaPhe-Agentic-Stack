@@ -53,7 +53,8 @@ git log --oneline "$BASE"..HEAD
 if PR_DATA="$(gh pr view --json number,title,body,url,state,comments,reviews,reviewDecision,statusCheckRollup 2>/dev/null)"; then
   printf '%s\n' "$PR_DATA"
   NUMBER="$(printf '%s\n' "$PR_DATA" | jq -r .number)"
-  gh api "repos/:owner/:repo/pulls/$NUMBER/comments"
+  REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
+  gh api "repos/$REPO/pulls/$NUMBER/comments"
 fi
 ```
 
