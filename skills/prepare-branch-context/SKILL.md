@@ -31,16 +31,19 @@ git remote -v
 3. Inspect branch changes:
 
 ```bash
-git diff <base>...HEAD --stat
-git diff <base>...HEAD
-git log --oneline <base>..HEAD
+# Set BASE to the detected base branch from step 2.
+BASE=origin/main
+git diff "$BASE"...HEAD --stat
+git diff "$BASE"...HEAD
+git log --oneline "$BASE"..HEAD
 ```
 
 4. Inspect PR context when available:
 
 ```bash
 gh pr view --json number,title,body,url,state,comments,reviews,reviewDecision,statusCheckRollup
-gh api repos/:owner/:repo/pulls/<number>/comments
+NUMBER="$(gh pr view --json number --jq .number)"
+gh api repos/{owner}/{repo}/pulls/"$NUMBER"/comments
 ```
 
 5. Report:
