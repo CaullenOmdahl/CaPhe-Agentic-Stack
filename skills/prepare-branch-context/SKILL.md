@@ -43,7 +43,8 @@ git log --oneline "$BASE"..HEAD
 ```bash
 gh pr view --json number,title,body,url,state,comments,reviews,reviewDecision,statusCheckRollup
 NUMBER="$(gh pr view --json number --jq .number)"
-gh api repos/{owner}/{repo}/pulls/"$NUMBER"/comments
+REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
+gh api "repos/$REPO/pulls/$NUMBER/comments"
 ```
 
 5. Report:
