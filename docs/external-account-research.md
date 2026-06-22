@@ -106,7 +106,7 @@ Candidate follow-up:
 
 Sources:
 
-- [joelhooks/opencode global AGENTS prompt](https://gist.github.com/joelhooks/3c3db5ea5df87e2df9aad15207bd6512)
+- [joelhooks/OpenCode global AGENTS prompt](https://gist.github.com/joelhooks/3c3db5ea5df87e2df9aad15207bd6512)
 - [joelhooks/swarm-tools](https://github.com/joelhooks/swarm-tools)
 - [joelhooks/opencode-config](https://github.com/joelhooks/opencode-config)
 
@@ -172,6 +172,10 @@ Why it matters:
 - Agent skills ecosystem and distribution notes.
 - Useful for understanding conventions, not necessarily workflow behavior.
 
+Candidate follow-up:
+
+- Monitor for updates on standardized skill distribution formats.
+
 ### RedEagle-dh
 
 Source:
@@ -183,6 +187,10 @@ Why it matters:
 - Cross-agent skill sharing and symlink setup across local tool directories.
 - Relevant only if we decide to support local installation automation.
 
+Candidate follow-up:
+
+- Keep as reference if local symlink automation becomes a priority.
+
 ### littlebearapps
 
 Source:
@@ -193,6 +201,10 @@ Why it matters:
 
 - AGENTS-first context file model spanning multiple agent tools.
 - Low current adoption, but relevant to context-maintenance ideas.
+
+Candidate follow-up:
+
+- Evaluate contextdocs structure if we design multi-agent context templates.
 
 ## Immediate Recommendation
 
