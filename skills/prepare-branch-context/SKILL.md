@@ -24,7 +24,7 @@ git remote -v
 2. Detect the base branch in this order:
 
 - PR base from `gh pr view --json baseRefName,headRefName,url,state`;
-- remote default from `git symbolic-ref refs/remotes/origin/HEAD`;
+- remote default from `git symbolic-ref -q refs/remotes/origin/HEAD`;
 - `main`;
 - `master`.
 
@@ -41,10 +41,12 @@ git log --oneline "$BASE"..HEAD
 4. Inspect PR context when available:
 
 ```bash
-gh pr view --json number,title,body,url,state,comments,reviews,reviewDecision,statusCheckRollup
-NUMBER="$(gh pr view --json number --jq .number)"
-REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
-gh api "repos/$REPO/pulls/$NUMBER/comments"
+if gh pr view --json number >/dev/null 2>&1; then
+  gh pr view --json number,title,body,url,state,comments,reviews,reviewDecision,statusCheckRollup
+  NUMBER="$(gh pr view --json number --jq .number)"
+  REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
+  gh api "repos/$REPO/pulls/$NUMBER/comments"
+fi
 ```
 
 5. Report:
