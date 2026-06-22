@@ -37,7 +37,11 @@ if [ -z "$BASE_BRANCH" ]; then
   BASE_BRANCH="${ORIGIN_HEAD#origin/}"
 fi
 if [ -z "$BASE_BRANCH" ]; then
-  if git rev-parse --verify main >/dev/null 2>&1; then
+  if git rev-parse --verify origin/main >/dev/null 2>&1; then
+    BASE_BRANCH="main"
+  elif git rev-parse --verify origin/master >/dev/null 2>&1; then
+    BASE_BRANCH="master"
+  elif git rev-parse --verify main >/dev/null 2>&1; then
     BASE_BRANCH="main"
   else
     BASE_BRANCH="master"
