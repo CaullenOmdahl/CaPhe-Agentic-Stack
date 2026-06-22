@@ -15,8 +15,8 @@ Never commit:
 Before pushing, run a content scan for obvious leaks:
 
 ```bash
-rg --hidden --no-ignore --glob '!.git' -n 'token|secret|password|api[_-]?key|private[_-]?key|BEGIN .*KEY|ssh-rsa|ghp_|gho_|ghu_|ghs_|ghr_|github_pat|\bsk-' .
-rg --hidden --no-ignore --glob '!.git' -n '/Users/|/home/|\.env|ddns|localhost:[0-9]+|[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' .
+rg --hidden --no-ignore --glob '!.git' -n 'token|secret|password|api[_-]?key|private[_-]?key|BEGIN .*KEY|ssh-rsa|ghp_|gho_|ghu_|ghs_|ghr_|github_pat|\bsk[_-]' .
+rg --hidden --no-ignore --glob '!.git' -n '/Users/|/home/|[A-Za-z]:\\Users\\|\.env|ddns|localhost:[0-9]+|[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' .
 find . -path ./.git -prune -o -type f \( -name '.env' -o -name '.env.*' -o -name '.npmrc' -o -name '*credential*' -o -name '*secret*' \) -print
 ```
 

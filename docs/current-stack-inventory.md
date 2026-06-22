@@ -6,6 +6,7 @@ This is a public-safe inventory of the current setup shape. It intentionally avo
 
 The current local setup uses one shared global canon with thin agent-specific adapters:
 
+- Root tool files: detected by each agent and point to the adapter plus canon.
 - Codex adapter: points to the shared canon and adds sandbox, memory, and offload cautions.
 - Claude adapter: points to the shared canon and adds skill/review reminders.
 - Gemini / Antigravity adapter: points to the shared canon and adds model-effort and offload reminders.

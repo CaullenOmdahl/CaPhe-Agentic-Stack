@@ -6,6 +6,7 @@ This repository anchors a shared development methodology that can be used by mul
 
 The stack is intentionally split into:
 
+- `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`: root-level tool entrypoints.
 - `docs/canon.md`: shared operating rules every agent should follow.
 - `adapters/`: thin agent-specific entrypoints that point back to the canon.
 - `docs/review-workflow.md`: the peer-review and pull-request route.
