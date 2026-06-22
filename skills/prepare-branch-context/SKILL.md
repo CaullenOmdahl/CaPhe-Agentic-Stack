@@ -31,8 +31,13 @@ git remote -v
 3. Inspect branch changes:
 
 ```bash
-# Set BASE to the detected base branch from step 2.
-BASE=origin/main
+BASE_BRANCH="$(gh pr view --json baseRefName --jq .baseRefName 2>/dev/null || true)"
+if [ -z "$BASE_BRANCH" ]; then
+  BASE_BRANCH="$(git rev-parse --abbrev-ref origin/HEAD 2>/dev/null | sed 's|origin/||')"
+fi
+BASE_BRANCH="${BASE_BRANCH:-main}"
+BASE="origin/$BASE_BRANCH"
+
 git diff "$BASE"...HEAD --stat
 git diff "$BASE"...HEAD
 git log --oneline "$BASE"..HEAD
@@ -41,9 +46,9 @@ git log --oneline "$BASE"..HEAD
 4. Inspect PR context when available:
 
 ```bash
-if gh pr view --json number >/dev/null 2>&1; then
-  gh pr view --json number,title,body,url,state,comments,reviews,reviewDecision,statusCheckRollup
-  NUMBER="$(gh pr view --json number --jq .number)"
+if PR_DATA="$(gh pr view --json number,title,body,url,state,comments,reviews,reviewDecision,statusCheckRollup 2>/dev/null)"; then
+  printf '%s\n' "$PR_DATA"
+  NUMBER="$(printf '%s\n' "$PR_DATA" | jq -r .number)"
   REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
   gh api "repos/$REPO/pulls/$NUMBER/comments"
 fi
