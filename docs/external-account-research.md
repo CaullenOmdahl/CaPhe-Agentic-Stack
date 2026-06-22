@@ -15,10 +15,10 @@ The filter for this repository is strict:
 
 Sources:
 
-- `https://github.com/vercel-labs/agent-skills`
-- `https://github.com/vercel-labs/skills`
-- `https://github.com/vercel-labs/coding-agent-template`
-- `https://github.com/vercel-labs/open-agents`
+- [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills)
+- [vercel-labs/skills](https://github.com/vercel-labs/skills)
+- [vercel-labs/coding-agent-template](https://github.com/vercel-labs/coding-agent-template)
+- [vercel-labs/open-agents](https://github.com/vercel-labs/open-agents)
 
 Why it matters:
 
@@ -35,7 +35,7 @@ Candidate follow-up:
 
 Source:
 
-- `https://gist.github.com/waterrmalann/6e1b2b60006b54087a5c07b032bc4773`
+- [waterrmalann/How I use AI agents effectively](https://gist.github.com/waterrmalann/6e1b2b60006b54087a5c07b032bc4773)
 
 Why it matters:
 
@@ -52,7 +52,7 @@ Candidate follow-up:
 
 Source:
 
-- `https://gist.github.com/davidgibsonp/337be9b80b3f03eccd188235c287bb05`
+- [davidgibsonp/Agent-Agnostic Repository Guide](https://gist.github.com/davidgibsonp/337be9b80b3f03eccd188235c287bb05)
 
 Why it matters:
 
@@ -68,7 +68,7 @@ Candidate follow-up:
 
 Source:
 
-- `https://gist.github.com/bradfeld/1deb0c385d12289947ff83f145b7e4d2`
+- [bradfeld/Advanced Claude Code Configuration Guide](https://gist.github.com/bradfeld/1deb0c385d12289947ff83f145b7e4d2)
 
 Why it matters:
 
@@ -86,7 +86,7 @@ Candidate follow-up:
 
 Source:
 
-- `https://github.com/fcakyon/claude-codex-settings`
+- [fcakyon/claude-codex-settings](https://github.com/fcakyon/claude-codex-settings)
 
 Why it matters:
 
@@ -106,9 +106,9 @@ Candidate follow-up:
 
 Sources:
 
-- `https://gist.github.com/joelhooks/3c3db5ea5df87e2df9aad15207bd6512`
-- `https://github.com/joelhooks/swarm-tools`
-- `https://github.com/joelhooks/opencode-config`
+- [joelhooks/opencode global AGENTS prompt](https://gist.github.com/joelhooks/3c3db5ea5df87e2df9aad15207bd6512)
+- [joelhooks/swarm-tools](https://github.com/joelhooks/swarm-tools)
+- [joelhooks/opencode-config](https://github.com/joelhooks/opencode-config)
 
 Why it matters:
 
@@ -128,7 +128,7 @@ Candidate follow-up:
 
 Source:
 
-- `https://github.com/wshobson/agents`
+- [wshobson/agents](https://github.com/wshobson/agents)
 
 Why it matters:
 
@@ -150,7 +150,7 @@ Candidate follow-up:
 
 Source:
 
-- `https://github.com/Anbeeld/AGENTS.md`
+- [Anbeeld/AGENTS.md](https://github.com/Anbeeld/AGENTS.md)
 
 Why it matters:
 
@@ -165,7 +165,7 @@ Candidate follow-up:
 
 Source:
 
-- `https://gist.github.com/zoharbabin/cf5ab80b2b0af50e34328b5eb2bfdc93`
+- [zoharbabin/Agent Skills Ecosystem Guide](https://gist.github.com/zoharbabin/cf5ab80b2b0af50e34328b5eb2bfdc93)
 
 Why it matters:
 
@@ -176,7 +176,7 @@ Why it matters:
 
 Source:
 
-- `https://gist.github.com/RedEagle-dh/adc52131e27b272d97aa18c9030d808d`
+- [RedEagle-dh/Sharing AI Agent Skills](https://gist.github.com/RedEagle-dh/adc52131e27b272d97aa18c9030d808d)
 
 Why it matters:
 
@@ -187,7 +187,7 @@ Why it matters:
 
 Source:
 
-- `https://github.com/littlebearapps/contextdocs`
+- [littlebearapps/contextdocs](https://github.com/littlebearapps/contextdocs)
 
 Why it matters:
 
