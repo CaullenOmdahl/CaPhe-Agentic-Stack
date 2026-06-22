@@ -15,8 +15,8 @@ Never commit:
 Before pushing, run a content scan for obvious leaks:
 
 ```bash
-rg -n "token|secret|password|api[_-]?key|private[_-]?key|BEGIN .*KEY|ssh-rsa|gho_|github_pat|sk-" .
-rg -n "/Users/|/home/|\\.env|ddns|localhost:[0-9]+|[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+" .
+rg -n 'token|secret|password|api[_-]?key|private[_-]?key|BEGIN .*KEY|ssh-rsa|gho_|github_pat|sk-' .
+rg -n '/Users/|/home/|\.env|ddns|localhost:[0-9]+|[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' .
 ```
 
 If a useful workflow depends on private details, document the shape of the workflow and keep the private values in a separate ignored local file or private repository.

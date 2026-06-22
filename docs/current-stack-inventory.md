@@ -10,7 +10,7 @@ The current local setup uses one shared global canon with thin agent-specific ad
 - Claude adapter: points to the shared canon and adds skill/review reminders.
 - Gemini / Antigravity adapter: points to the shared canon and adds model-effort and offload reminders.
 
-The important pattern is single-source canon plus small adapters. Parallel full copies should be avoided because they drift.
+The important pattern is single-source canon plus small adapters. Parallel full copies should be avoided because they drift. Tool-native filenames can coexist with consistent human-facing adapter filenames when a tool expects a specific entrypoint.
 
 ## Skill Categories
 
