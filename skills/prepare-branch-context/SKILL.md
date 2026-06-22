@@ -36,7 +36,11 @@ if [ -z "$BASE_BRANCH" ]; then
   BASE_BRANCH="$(git rev-parse --abbrev-ref origin/HEAD 2>/dev/null | sed 's|origin/||')"
 fi
 BASE_BRANCH="${BASE_BRANCH:-main}"
-BASE="origin/$BASE_BRANCH"
+if git rev-parse --verify "origin/$BASE_BRANCH" >/dev/null 2>&1; then
+  BASE="origin/$BASE_BRANCH"
+else
+  BASE="$BASE_BRANCH"
+fi
 
 git diff "$BASE"...HEAD --stat
 git diff "$BASE"...HEAD
@@ -49,8 +53,7 @@ git log --oneline "$BASE"..HEAD
 if PR_DATA="$(gh pr view --json number,title,body,url,state,comments,reviews,reviewDecision,statusCheckRollup 2>/dev/null)"; then
   printf '%s\n' "$PR_DATA"
   NUMBER="$(printf '%s\n' "$PR_DATA" | jq -r .number)"
-  REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
-  gh api "repos/$REPO/pulls/$NUMBER/comments"
+  gh api "repos/:owner/:repo/pulls/$NUMBER/comments"
 fi
 ```
 
