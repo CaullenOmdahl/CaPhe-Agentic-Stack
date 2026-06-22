@@ -27,6 +27,12 @@ Current skills fall into these public-safe categories:
 
 Only generic, reusable, public-safe skills should be promoted into this repository.
 
+## Public Skills In This Repository
+
+- `skills/code-refactor-review`: local review lens for reuse, consistency, composition, and slop detection.
+- `skills/prepare-branch-context`: read-only branch and PR orientation before follow-up work.
+- `skills/ux-flow-plan`: UX-first flow mapping before implementation planning.
+
 ## Current Review Policy
 
 Implementation review should happen through pull requests. Local peer review can supplement design work or act as an emergency fallback, but it should not block opening a PR or be represented as completed implementation review.

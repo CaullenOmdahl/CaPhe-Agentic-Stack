@@ -12,5 +12,7 @@ The stack is intentionally split into:
 - `docs/review-workflow.md`: the peer-review and pull-request route.
 - `docs/current-stack-inventory.md`: public-safe inventory of the current setup shape.
 - `docs/public-safety.md`: rules for what must not be committed here.
+- `skills/`: reusable, public-safe workflow skills.
+- `docs/external-workflow-integrations.md`: integration decisions for outside workflow ideas.
 
 Private project skills, credentials, local caches, machine hostnames, and client-specific release procedures are intentionally excluded.
