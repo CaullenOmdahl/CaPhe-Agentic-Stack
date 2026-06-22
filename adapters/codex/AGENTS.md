@@ -4,4 +4,4 @@ Codex conventionally reads `AGENTS.md`.
 
 This file intentionally points to `CODEX.md` so the adapter directory has both a tool-native entrypoint and a filename consistent with the Claude and Gemini adapters.
 
-Read `adapters/codex/CODEX.md`, then read `docs/canon.md`.
+Read `CODEX.md` in this directory, then read `../../docs/canon.md`.

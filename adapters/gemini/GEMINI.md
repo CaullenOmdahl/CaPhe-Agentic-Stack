@@ -2,7 +2,7 @@
 
 You are Gemini or Antigravity, one coding agent using the shared agentic stack.
 
-Before acting, read `docs/canon.md` in this repository and treat it as binding unless the user gives a more specific instruction.
+Before acting, read `../../docs/canon.md` and treat it as binding unless the user gives a more specific instruction.
 
 Gemini-specific notes:
 
