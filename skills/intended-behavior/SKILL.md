@@ -11,7 +11,7 @@ Use this skill to turn ambiguous product behavior into a defensible behavior con
 
 ## Precedence
 
-User instructions and `docs/canon.md` are authoritative.
+User instructions and [`docs/canon.md`](../../docs/canon.md) are authoritative.
 
 ## Required Output
 

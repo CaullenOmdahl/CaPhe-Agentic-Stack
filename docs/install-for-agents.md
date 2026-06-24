@@ -28,10 +28,11 @@ The repository is the distribution source. The local machine is the runtime envi
    - Identify their normal config and skill directories.
    - Prefer existing CLI tools for inspection.
 
-2. Preserve existing target files only when the user asks for rollback artifacts.
-   - Do not leave persistent backup canons or copied stack trees by default.
-   - The normal final state is active installed files in agent config locations.
-   - If the user requests backups, put them where the user asks and remove temporary install staging once verification passes.
+2. Preserve existing target content without leaving persistent backup canons.
+   - Read existing target files before replacing them, and merge user-specific instructions instead of blindly overwriting.
+   - If replacement is necessary, keep a temporary rollback copy only for the install operation.
+   - Remove temporary rollback copies and install staging once verification passes unless the user explicitly asks to keep rollback artifacts.
+   - The normal final state is active installed files in agent config locations, with no backup canons or copied stack trees.
 
 3. Install the shared canon.
    - Copy `docs/canon.md` to the machine-level canon location, usually `~/AGENTS_GLOBAL.md`.
@@ -40,7 +41,7 @@ The repository is the distribution source. The local machine is the runtime envi
 
 4. Install tool entrypoints.
    - Codex: install an `AGENTS.md` in the Codex global config location, usually `~/.codex/AGENTS.md`.
-   - Claude: install a `CLAUDE.md` in the Claude global config location, usually `~/.claude/CLAUDE.md`; some Claude Code environments read `~/.claude.md` directly, so use the path the installed tool actually loads.
+   - Claude: install a `CLAUDE.md` in the Claude global config location, usually `~/.claude/CLAUDE.md`; some Claude environments read a home-level Markdown file directly, so verify and use the path the installed tool actually loads.
    - Gemini / Antigravity: install a `GEMINI.md` in the Gemini global config location, usually `~/.gemini/GEMINI.md`.
    - Merge or copy the relevant adapter instructions from `adapters/`.
    - Rewrite repo-relative references such as `docs/canon.md` or `../../docs/canon.md` so they point to the installed machine-level canon.
