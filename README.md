@@ -160,9 +160,11 @@ For a repo that should follow this stack:
 
 ### Globally On A Machine
 
-For machine-global use, install the canon and adapters into the relevant tool config locations for that machine. Back up existing files before replacing them.
+For machine-global use, keep a complete copy or symlinked checkout of this stack at a stable local stack root, then point each tool's global entrypoint at that stack. Back up existing files before replacing them.
 
-Typical targets are:
+The checked-in entrypoints use repo-relative paths such as `docs/canon.md` and `../../docs/canon.md`. Do not copy those files into `~/.codex/`, `~/.claude/`, or `~/.gemini/` verbatim unless you also rewrite those references for the global layout. `~/AGENTS_GLOBAL.md` is a machine-level wrapper target, not a drop-in replacement for `docs/canon.md` unless the entrypoints are adjusted to read it.
+
+Typical target roles are:
 
 - `~/AGENTS_GLOBAL.md` as the shared machine-level canon;
 - `~/.codex/AGENTS.md` as the Codex global entrypoint;
