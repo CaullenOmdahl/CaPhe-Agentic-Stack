@@ -39,6 +39,7 @@ If a workflow depends on private operational details, document the shape of the 
 ├── GEMINI.md
 ├── adapters/
 │   ├── claude/CLAUDE.md
+│   ├── codex/AGENTS.md
 │   ├── codex/CODEX.md
 │   └── gemini/GEMINI.md
 ├── docs/
@@ -83,6 +84,7 @@ These files are intentionally short. They direct the agent to the relevant adapt
 
 The `adapters/` directory contains tool-specific instructions:
 
+- [`adapters/codex/AGENTS.md`](adapters/codex/AGENTS.md): Codex-native adapter-local entrypoint that forwards to `CODEX.md`.
 - [`adapters/codex/CODEX.md`](adapters/codex/CODEX.md): Codex-specific notes around filesystem/network access, memory, and offload boundaries.
 - [`adapters/claude/CLAUDE.md`](adapters/claude/CLAUDE.md): Claude-specific skill and review reminders.
 - [`adapters/gemini/GEMINI.md`](adapters/gemini/GEMINI.md): Gemini / Antigravity-specific model-effort and offload reminders.
@@ -185,7 +187,7 @@ Use the same workflow this stack recommends:
 6. Address agent and human review.
 7. Merge only after review is satisfactory.
 
-For new skills, keep `SKILL.md` concise and public-safe. Put detailed reference material in a linked `references/` file only when needed.
+For new skills, keep `SKILL.md` concise and public-safe. Put detailed reference material in a linked `references/` directory only when needed.
 
 ## Current Status
 
