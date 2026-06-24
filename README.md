@@ -162,13 +162,13 @@ For machine-global use, install the canon and adapters into the relevant tool co
 
 Typical targets are:
 
-- `~/AGENTS_GLOBAL.md`
-- `~/.codex/AGENTS.md`
-- `~/.claude/CLAUDE.md`
-- `~/.gemini/GEMINI.md`
-- `~/.codex/skills/<skill-name>/`
-- `~/.claude/skills/<skill-name>/`
-- `~/.gemini/skills/<skill-name>/` when the local Gemini setup supports skills there;
+- `~/AGENTS_GLOBAL.md` as the shared machine-level canon;
+- `~/.codex/AGENTS.md` as the Codex global entrypoint;
+- `~/.claude/CLAUDE.md` as the Claude global entrypoint;
+- `~/.gemini/GEMINI.md` as the Gemini / Antigravity global entrypoint;
+- `~/.codex/skills/<skill-name>/` for Codex-readable reusable skills;
+- `~/.claude/skills/<skill-name>/` for Claude-readable reusable skills;
+- `~/.gemini/skills/<skill-name>/` for Gemini-readable reusable skills when supported;
 - `~/.agents/skills/<skill-name>/` as a shared compatibility location for tools that read common agent skills.
 
 Do not commit machine-global install scripts or paths here if they contain private hostnames, usernames, or local infrastructure details.
