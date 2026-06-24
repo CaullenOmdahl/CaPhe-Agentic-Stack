@@ -13,6 +13,8 @@ The current local setup uses one shared global canon with thin agent-specific ad
 
 The important pattern is single-source canon plus small adapters. Parallel full copies should be avoided because they drift. Tool-native filenames can coexist with consistent human-facing adapter filenames when a tool expects a specific entrypoint.
 
+Machine-global installs should use the agents' normal config locations rather than a runtime checkout of this repository. The repository files are source templates; installed copies should point at the machine-level canon and installed skills.
+
 ## Skill Categories
 
 Current skills fall into these public-safe categories:

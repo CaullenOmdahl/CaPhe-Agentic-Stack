@@ -160,9 +160,9 @@ For a repo that should follow this stack:
 
 ### Globally On A Machine
 
-For machine-global use, keep a complete copy or symlinked checkout of this stack at a stable local stack root, then point each tool's global entrypoint at that stack. Back up existing files before replacing them.
+For machine-global use, install the stack into each tool's normal config locations. Do not keep a runtime checkout of this repository on every machine just so agents can read it.
 
-The checked-in entrypoints use repo-relative paths such as `docs/canon.md` and `../../docs/canon.md`. Do not copy those files into `~/.codex/`, `~/.claude/`, or `~/.gemini/` verbatim unless you also rewrite those references for the global layout. `~/AGENTS_GLOBAL.md` is a machine-level wrapper target, not a drop-in replacement for `docs/canon.md` unless the entrypoints are adjusted to read it.
+The checked-in entrypoints are repository templates and use repo-relative paths such as `docs/canon.md` and `../../docs/canon.md`. For global installation, adapt those references to the machine-level canon, usually `~/AGENTS_GLOBAL.md`, and copy only the entrypoints and skills the machine needs. Back up existing files before replacing them.
 
 Typical target roles are:
 
