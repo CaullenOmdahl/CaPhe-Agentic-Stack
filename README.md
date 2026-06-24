@@ -172,7 +172,7 @@ The checked-in entrypoints are repository templates and use repo-relative paths 
 1. Copy the canon to the machine-level canon location, usually `~/AGENTS_GLOBAL.md`.
 2. Merge or copy the relevant adapter instructions into each tool's global entrypoint.
 3. Rewrite repo-relative canon references so global entrypoints read the machine-level canon.
-4. Install only the skills the machine needs into that tool's normal skill directories.
+4. Install only the skill directories, including any subdirectories, the machine needs into that tool's normal skill directories.
 5. Update installed skills so their canon reference points to the machine-level canon.
 6. Back up existing files before replacing them.
 

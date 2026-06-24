@@ -51,4 +51,4 @@ For non-trivial behavior decisions, state:
 
 ## Reference
 
-Read `references/behavior-heuristics.md` when action-label semantics, UI placement, recurrence, or ask-vs-infer thresholds are unclear.
+Read [behavior-heuristics.md](references/behavior-heuristics.md) when action-label semantics, UI placement, recurrence, or ask-vs-infer thresholds are unclear.
