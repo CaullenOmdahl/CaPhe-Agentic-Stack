@@ -1,8 +1,8 @@
 # CaPhe Agentic Stack
 
-CaPhe Agentic Stack is a public-safe, agent-agnostic development workflow kit for teams or solo developers using multiple coding agents in the same codebase.
+CaPhe Agentic Stack is a public-safe, agent-agnostic distribution bundle for teams or solo developers using multiple coding agents in the same codebase.
 
-It is not an app framework, prompt dump, or private machine backup. It is a small set of shared operating rules, agent entrypoints, reusable workflow skills, and review/safety documentation designed to keep Codex, Claude, Gemini / Antigravity, and adjacent tools aligned.
+It is not an app framework, prompt dump, private machine backup, or runtime state store. It is a small set of shared operating rules, agent entrypoints, reusable workflow skills, and install documentation designed to seed Codex, Claude, Gemini / Antigravity, and adjacent tools on a developer machine.
 
 ## What This Repository Does
 
@@ -11,12 +11,16 @@ This repository provides:
 - one shared canon for how coding agents should work;
 - root-level entrypoint files that common agent tools can auto-detect;
 - thin agent-specific adapters for Codex, Claude, and Gemini / Antigravity;
-- reusable skills for review, branch orientation, and UX-first planning;
+- reusable skills for intended behavior, review, branch orientation, and UX-first planning;
 - a pull-request-centered review workflow;
+- CLI-first tool-selection rules that prefer the developer's existing environment over auth-dependent integrations;
+- an agent-facing install route for copying prompts, entrypoints, and skills into normal local config locations;
 - public-safety rules for keeping private machine and client details out of public docs;
 - a research index of outside public accounts and repositories worth monitoring.
 
 The main design goal is to prevent drift. Instead of maintaining unrelated `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md` files with subtly different rules, each tool gets a thin entrypoint that points back to the same canon.
+
+The intended direction is one-way: install from this repository onto a machine. Local agents may inventory tools, paths, accounts, repositories, and environment quirks in private local notes, but that runtime inventory does not flow back into this public repository.
 
 ## What This Is Not
 
@@ -47,10 +51,12 @@ If a workflow depends on private operational details, document the shape of the 
 │   ├── current-stack-inventory.md
 │   ├── external-account-research.md
 │   ├── external-workflow-integrations.md
+│   ├── install-for-agents.md
 │   ├── public-safety.md
 │   └── review-workflow.md
 └── skills/
     ├── code-refactor-review/SKILL.md
+    ├── intended-behavior/SKILL.md
     ├── prepare-branch-context/SKILL.md
     └── ux-flow-plan/SKILL.md
 ```
@@ -64,6 +70,8 @@ If a workflow depends on private operational details, document the shape of the 
 - autonomy and when agents should keep going;
 - when to stop for a human;
 - how to handle non-trivial behavior changes;
+- how to choose local CLI tools before auth-dependent integrations;
+- how to use non-code analysis artifacts before code;
 - the expected build and verification discipline;
 - the pull-request review rule;
 - public/private environment boundaries.
@@ -96,6 +104,7 @@ Adapters should stay small. If a rule applies to every agent, put it in `docs/ca
 The `skills/` directory contains reusable public workflow skills:
 
 - [`skills/code-refactor-review`](skills/code-refactor-review/SKILL.md): review diffs for reuse, composition, codebase consistency, unnecessary indirection, React/frontend state slop, and avoidable churn.
+- [`skills/intended-behavior`](skills/intended-behavior/SKILL.md): infer product behavior, UI placement, recurrence, and ask-versus-infer thresholds before implementation.
 - [`skills/prepare-branch-context`](skills/prepare-branch-context/SKILL.md): build read-only context for a branch or PR before follow-up work.
 - [`skills/ux-flow-plan`](skills/ux-flow-plan/SKILL.md): map current and desired product flows before attaching implementation files.
 
@@ -135,6 +144,8 @@ The public-safety rule is conservative by design: if a workflow needs private de
 
 [`docs/current-stack-inventory.md`](docs/current-stack-inventory.md) describes the current public-safe shape of the stack: entrypoints, adapter roles, skill categories, review policy, worktree policy, and the boundary between reusable public workflow and private operational details.
 
+[`docs/install-for-agents.md`](docs/install-for-agents.md) gives agents the one-way installation procedure for copying this stack into normal local config locations.
+
 ## External Workflow Research
 
 The stack includes two research documents:
@@ -160,9 +171,18 @@ For a repo that should follow this stack:
 
 ### Globally On A Machine
 
-For machine-global use, keep a complete copy or symlinked checkout of this stack at a stable local stack root, then point each tool's global entrypoint at that stack. Back up existing files before replacing them.
+For machine-global use, install the stack into each tool's normal config locations. Do not keep a runtime checkout of this repository on every machine just so agents can read it.
 
-The checked-in entrypoints use repo-relative paths such as `docs/canon.md` and `../../docs/canon.md`. Do not copy those files into `~/.codex/`, `~/.claude/`, or `~/.gemini/` verbatim unless you also rewrite those references for the global layout. `~/AGENTS_GLOBAL.md` is a machine-level wrapper target, not a drop-in replacement for `docs/canon.md` unless the entrypoints are adjusted to read it.
+The checked-in entrypoints are repository templates and use repo-relative paths such as `docs/canon.md` and `../../docs/canon.md`. For global installation:
+
+1. Copy the canon to the machine-level canon location, usually `~/AGENTS_GLOBAL.md`.
+2. Merge or copy the relevant adapter instructions into each tool's global entrypoint.
+3. Rewrite repo-relative canon references so global entrypoints read the machine-level canon.
+4. Rewrite any other repo-relative support references in copied adapters, such as review workflow docs, or remove those links if the supporting docs are not installed.
+5. Install only the skill directories, including any subdirectories, the machine needs into that tool's normal skill directories.
+6. Update installed skills so their canon reference points to the machine-level canon.
+7. Leave only the active installed files in normal config locations by default. Do not leave backup canons, runtime repo checkouts, or copied stack trees unless the user explicitly asks for rollback artifacts.
+8. Store machine inventory and private operational notes only in local files outside this repository.
 
 Typical target roles are:
 
@@ -175,7 +195,7 @@ Typical target roles are:
 - `~/.gemini/skills/<skill-name>/` for Gemini-readable reusable skills when supported;
 - `~/.agents/skills/<skill-name>/` as a shared compatibility location for tools that read common agent skills.
 
-Do not commit machine-global install scripts or paths here if they contain private hostnames, usernames, or local infrastructure details.
+Do not commit machine-global install outputs, private paths, hostnames, usernames, account names, or local infrastructure details here. Local install notes may contain those details when useful; they just belong outside this public repository.
 
 ## How To Change This Stack
 
@@ -197,7 +217,7 @@ The current stack includes:
 
 - shared canon and root entrypoints;
 - Codex, Claude, and Gemini / Antigravity adapters;
-- three workflow skills;
+- four workflow skills;
 - PR-review and public-safety documentation;
 - external workflow and account research notes.
 
