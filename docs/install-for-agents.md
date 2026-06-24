@@ -40,7 +40,7 @@ The repository is the distribution source. The local machine is the runtime envi
 
 4. Install tool entrypoints.
    - Codex: install an `AGENTS.md` in the Codex global config location, usually `~/.codex/AGENTS.md`.
-   - Claude: install a `CLAUDE.md` in the Claude global config location, usually `~/.claude/CLAUDE.md`.
+   - Claude: install a `CLAUDE.md` in the Claude global config location, usually `~/.claude/CLAUDE.md`; some Claude Code environments read `~/.claude.md` directly, so use the path the installed tool actually loads.
    - Gemini / Antigravity: install a `GEMINI.md` in the Gemini global config location, usually `~/.gemini/GEMINI.md`.
    - Merge or copy the relevant adapter instructions from `adapters/`.
    - Rewrite repo-relative references such as `docs/canon.md` or `../../docs/canon.md` so they point to the installed machine-level canon.
@@ -69,7 +69,7 @@ When taking stock of a machine, prefer local commands before integrations:
 
 ```bash
 for cmd in git gh rg jq python3 node npm yarn pnpm make docker ssh rsync; do
-  echo "$cmd: $(command -v "$cmd" || echo "not found")"
+  echo "$cmd: $(command -v "$cmd" 2>/dev/null || echo "not found")"
 done
 command -v git >/dev/null && git --version || true
 command -v gh >/dev/null && gh auth status || true
