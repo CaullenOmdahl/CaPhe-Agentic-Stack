@@ -162,7 +162,7 @@ For a repo that should follow this stack:
 
 For machine-global use, install the stack into each tool's normal config locations. Do not keep a runtime checkout of this repository on every machine just so agents can read it.
 
-The checked-in entrypoints are repository templates and use repo-relative paths such as `docs/canon.md` and `../../docs/canon.md`. For global installation, copy the canon to the machine-level canon location, usually `~/AGENTS_GLOBAL.md`; adapt entrypoint and skill references to point to it; and copy only the entrypoints and skills the machine needs. Back up existing files before replacing them.
+The checked-in entrypoints are repository templates and use repo-relative paths such as `docs/canon.md` and `../../docs/canon.md`. For global installation, copy the canon to the machine-level canon location, usually `~/AGENTS_GLOBAL.md`; merge or copy the relevant adapter instructions into each tool's global entrypoint; update installed skills so their canon reference points to the machine-level canon; and copy only the entrypoints and skills the machine needs. Back up existing files before replacing them.
 
 Typical target roles are:
 
