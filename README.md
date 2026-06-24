@@ -39,7 +39,6 @@ If a workflow depends on private operational details, document the shape of the 
 ├── GEMINI.md
 ├── adapters/
 │   ├── claude/CLAUDE.md
-│   ├── codex/AGENTS.md
 │   ├── codex/CODEX.md
 │   └── gemini/GEMINI.md
 ├── docs/
@@ -85,7 +84,6 @@ These files are intentionally short. They direct the agent to the relevant adapt
 The `adapters/` directory contains tool-specific instructions:
 
 - [`adapters/codex/CODEX.md`](adapters/codex/CODEX.md): Codex-specific notes around filesystem/network access, memory, and offload boundaries.
-- [`adapters/codex/AGENTS.md`](adapters/codex/AGENTS.md): optional Codex-native compatibility entrypoint for cases where an adapter directory is copied or symlinked directly.
 - [`adapters/claude/CLAUDE.md`](adapters/claude/CLAUDE.md): Claude-specific skill and review reminders.
 - [`adapters/gemini/GEMINI.md`](adapters/gemini/GEMINI.md): Gemini / Antigravity-specific model-effort and offload reminders.
 
@@ -170,8 +168,8 @@ Typical targets are:
 - `~/.gemini/GEMINI.md`
 - `~/.codex/skills/<skill-name>/`
 - `~/.claude/skills/<skill-name>/`
-- `~/.gemini/skills/<skill-name>/` when the local Gemini setup supports skills there;
-- `~/.agents/skills/<skill-name>/` as a shared compatibility location for tools that read common agent skills.
+- `~/.gemini/skills/<skill-name>/` when the local Gemini setup supports skills there
+- `~/.agents/skills/<skill-name>/` as a shared compatibility location for tools that read common agent skills
 
 Do not commit machine-global install scripts or paths here if they contain private hostnames, usernames, or local infrastructure details.
 
