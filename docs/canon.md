@@ -45,7 +45,7 @@ Use the developer's existing environment before reaching for auth-dependent inte
 - Check what exists before choosing a tool. A quick `command -v`, version check, repo script inspection, or `git status` is usually better than assuming an MCP or hosted connector is needed.
 - Use MCP servers, hosted connectors, browser sessions, or app integrations when they provide unique access, safer structured data, or the user explicitly asks for them. Do not sign in, install, publish, or change external state through those surfaces without explicit human approval.
 - Prefer `gh` for GitHub work when it is authenticated and sufficient. Use GitHub MCP or app integrations for data the CLI cannot fetch cleanly, or when the connector is the safer read path.
-- Record reusable tool-selection rules in this public canon. Keep private paths, account names, hostnames, tokens, and machine-specific inventories out of the public stack.
+- Record machine-specific tool discoveries in private local notes when useful. Promote only generalized, reusable tool-selection rules back to this public stack by pull request.
 
 ## Analysis Artifacts
 
@@ -81,6 +81,11 @@ Local review tools are useful for preparation and cleanup. They do not replace p
 - Do not self-merge.
 - Preserve a clean distinction between tracked changes, untracked files, staged changes, and unpushed commits.
 
-## Environment Boundaries
+## Distribution Boundary
 
-Keep environment-specific details out of the canon. Hostnames, private repo names, client operations, credentials, tokens, signing assets, and local cache paths belong in private operator notes, not in this public stack.
+This repository is a distribution source for prompts, entrypoints, skills, and reusable workflow rules. It is not a runtime sync target.
+
+- Repo-to-machine is allowed: copy or adapt this stack into local agent config locations.
+- Machine-to-repo is not automatic: do not copy local inventories, credentials, prompts with private context, caches, histories, or operational notes back into this public repository.
+- Local private notes may include identifying details when useful, such as exact paths, available CLIs, account names, hostnames, and project-specific operating facts.
+- Only generalized, public-safe rules should be promoted back to this repository, and they should go through the normal PR review path.

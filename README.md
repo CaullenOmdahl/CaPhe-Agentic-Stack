@@ -1,8 +1,8 @@
 # CaPhe Agentic Stack
 
-CaPhe Agentic Stack is a public-safe, agent-agnostic development workflow kit for teams or solo developers using multiple coding agents in the same codebase.
+CaPhe Agentic Stack is a public-safe, agent-agnostic distribution bundle for teams or solo developers using multiple coding agents in the same codebase.
 
-It is not an app framework, prompt dump, or private machine backup. It is a small set of shared operating rules, agent entrypoints, reusable workflow skills, and review/safety documentation designed to keep Codex, Claude, Gemini / Antigravity, and adjacent tools aligned.
+It is not an app framework, prompt dump, private machine backup, or runtime state store. It is a small set of shared operating rules, agent entrypoints, reusable workflow skills, and install documentation designed to seed Codex, Claude, Gemini / Antigravity, and adjacent tools on a developer machine.
 
 ## What This Repository Does
 
@@ -14,10 +14,13 @@ This repository provides:
 - reusable skills for intended behavior, review, branch orientation, and UX-first planning;
 - a pull-request-centered review workflow;
 - CLI-first tool-selection rules that prefer the developer's existing environment over auth-dependent integrations;
+- an agent-facing install route for copying prompts, entrypoints, and skills into normal local config locations;
 - public-safety rules for keeping private machine and client details out of public docs;
 - a research index of outside public accounts and repositories worth monitoring.
 
 The main design goal is to prevent drift. Instead of maintaining unrelated `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md` files with subtly different rules, each tool gets a thin entrypoint that points back to the same canon.
+
+The intended direction is one-way: install from this repository onto a machine. Local agents may inventory tools, paths, accounts, repositories, and environment quirks in private local notes, but that runtime inventory does not flow back into this public repository.
 
 ## What This Is Not
 
@@ -48,6 +51,7 @@ If a workflow depends on private operational details, document the shape of the 
 │   ├── current-stack-inventory.md
 │   ├── external-account-research.md
 │   ├── external-workflow-integrations.md
+│   ├── install-for-agents.md
 │   ├── public-safety.md
 │   └── review-workflow.md
 └── skills/
@@ -140,6 +144,8 @@ The public-safety rule is conservative by design: if a workflow needs private de
 
 [`docs/current-stack-inventory.md`](docs/current-stack-inventory.md) describes the current public-safe shape of the stack: entrypoints, adapter roles, skill categories, review policy, worktree policy, and the boundary between reusable public workflow and private operational details.
 
+[`docs/install-for-agents.md`](docs/install-for-agents.md) gives agents the one-way installation procedure for copying this stack into normal local config locations.
+
 ## External Workflow Research
 
 The stack includes two research documents:
@@ -175,6 +181,7 @@ The checked-in entrypoints are repository templates and use repo-relative paths 
 4. Install only the skill directories, including any subdirectories, the machine needs into that tool's normal skill directories.
 5. Update installed skills so their canon reference points to the machine-level canon.
 6. Back up existing files before replacing them.
+7. Store machine inventory and private operational notes only in local files outside this repository.
 
 Typical target roles are:
 
@@ -187,7 +194,7 @@ Typical target roles are:
 - `~/.gemini/skills/<skill-name>/` for Gemini-readable reusable skills when supported;
 - `~/.agents/skills/<skill-name>/` as a shared compatibility location for tools that read common agent skills.
 
-Do not commit machine-global install scripts or paths here if they contain private hostnames, usernames, or local infrastructure details.
+Do not commit machine-global install outputs, private paths, hostnames, usernames, account names, or local infrastructure details here. Local install notes may contain those details when useful; they just belong outside this public repository.
 
 ## How To Change This Stack
 

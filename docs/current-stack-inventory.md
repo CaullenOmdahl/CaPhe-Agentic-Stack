@@ -1,6 +1,6 @@
 # Current Stack Inventory
 
-This is a public-safe inventory of the current setup shape. It intentionally avoids local usernames, hostnames, client names, credentials, cache paths, and private release procedures.
+This is a public-safe inventory of the repository's distribution shape. It intentionally avoids local usernames, hostnames, client names, credentials, cache paths, private release procedures, and live machine inventories.
 
 ## Agent Entrypoints
 
@@ -13,7 +13,7 @@ The current local setup uses one shared global canon with thin agent-specific ad
 
 The important pattern is single-source canon plus small adapters. Parallel full copies should be avoided because they drift. Tool-native filenames can coexist with consistent human-facing adapter filenames when a tool expects a specific entrypoint.
 
-Machine-global installs should use the agents' normal config locations rather than a runtime checkout of this repository. The repository files are source templates; installed copies should point at the machine-level canon and installed skills.
+Machine-global installs should use the agents' normal config locations rather than a runtime checkout of this repository. The repository files are source templates; installed copies should point at the machine-level canon and installed skills. Local install notes and machine inventories are allowed, but they live outside this public repo.
 
 ## Skill Categories
 
@@ -38,14 +38,14 @@ Only generic, reusable, public-safe skills should be promoted into this reposito
 
 ## Tooling Policy
 
-Agents should inspect the active machine for useful local CLIs before using auth-dependent integrations. Common high-value tools to check for include Git, GitHub CLI, ripgrep, JSON tooling, language runtimes, package managers, test runners, build tools, container CLIs, SSH, and rsync.
+Agents should inspect the active machine for useful local CLIs before using auth-dependent integrations. Common high-value tool categories to check for include version control, repository hosting CLIs, fast search, JSON tooling, language runtimes, package managers, test runners, build tools, container CLIs, SSH, and file sync tools.
 
 The reusable rule is CLI-first, auth-light tool selection:
 
 - Prefer the developer's existing CLI and repository scripts over MCP servers or hosted integrations.
 - Use `git` and `gh` for repository and GitHub work when they are authenticated and sufficient.
 - Use MCP or app integrations when they provide unique access, safer structured data, or the user explicitly asks for them.
-- Keep exact private paths, account names, hostnames, and tokens out of this public inventory.
+- Keep exact private paths, account names, hostnames, and tokens out of this public inventory. Store those details locally when they help the agent operate the developer's environment.
 
 ## Current Review Policy
 
