@@ -85,7 +85,7 @@ These files are intentionally short. They direct the agent to the relevant adapt
 The `adapters/` directory contains tool-specific instructions:
 
 - [`adapters/codex/CODEX.md`](adapters/codex/CODEX.md): Codex-specific notes around filesystem/network access, memory, and offload boundaries.
-- [`adapters/codex/AGENTS.md`](adapters/codex/AGENTS.md): Codex-native compatibility entrypoint.
+- [`adapters/codex/AGENTS.md`](adapters/codex/AGENTS.md): optional Codex-native compatibility entrypoint for cases where an adapter directory is copied or symlinked directly.
 - [`adapters/claude/CLAUDE.md`](adapters/claude/CLAUDE.md): Claude-specific skill and review reminders.
 - [`adapters/gemini/GEMINI.md`](adapters/gemini/GEMINI.md): Gemini / Antigravity-specific model-effort and offload reminders.
 
@@ -131,6 +131,10 @@ This repository is meant to be public. Before pushing, use the checks in [`docs/
 
 The public-safety rule is conservative by design: if a workflow needs private details, keep them outside this repository and document only the reusable structure here.
 
+## Stack Inventory
+
+[`docs/current-stack-inventory.md`](docs/current-stack-inventory.md) describes the current public-safe shape of the stack: entrypoints, adapter roles, skill categories, review policy, worktree policy, and the boundary between reusable public workflow and private operational details.
+
 ## External Workflow Research
 
 The stack includes two research documents:
@@ -150,7 +154,7 @@ For a repo that should follow this stack:
    - `AGENTS.md`
    - `CLAUDE.md`
    - `GEMINI.md`
-2. Keep `docs/canon.md` available to those entrypoints.
+2. Keep `docs/canon.md` and the corresponding `adapters/` files available at the relative paths referenced by those entrypoints, or adjust the paths after copying.
 3. Copy only the skills that are relevant to that repo.
 4. Keep private local overrides outside the public repository.
 
