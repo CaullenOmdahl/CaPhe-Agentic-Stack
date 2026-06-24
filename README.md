@@ -13,7 +13,7 @@ This repository provides:
 - thin agent-specific adapters for Codex, Claude, and Gemini / Antigravity;
 - reusable skills for intended behavior, review, branch orientation, and UX-first planning;
 - a pull-request-centered review workflow;
-- CLI-first tool-selection rules that prefer the developer's existing environment before auth-dependent integrations;
+- CLI-first tool-selection rules that prefer the developer's existing environment over auth-dependent integrations;
 - public-safety rules for keeping private machine and client details out of public docs;
 - a research index of outside public accounts and repositories worth monitoring.
 
@@ -209,7 +209,7 @@ The current stack includes:
 
 - shared canon and root entrypoints;
 - Codex, Claude, and Gemini / Antigravity adapters;
-- three workflow skills;
+- four workflow skills;
 - PR-review and public-safety documentation;
 - external workflow and account research notes.
 

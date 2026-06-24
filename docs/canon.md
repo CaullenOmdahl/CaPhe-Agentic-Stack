@@ -55,7 +55,7 @@ High-quality code starts with a non-code model of the work.
 - For UX or operator workflows, map current and desired flows before naming files.
 - For inherited branches, build branch context before editing.
 - For implementation choices, prefer small decision notes, flow maps, state contracts, or review findings over premature code changes.
-- Keep code human-readable: use domain names, clear boundaries, and comments that explain intent, invariants, or tradeoffs. Avoid comments that merely restate syntax.
+- Keep code human-readable: use domain concepts, clear boundaries, and comments that explain intent, invariants, or tradeoffs. Avoid comments that merely restate syntax.
 
 ## Build Process
 

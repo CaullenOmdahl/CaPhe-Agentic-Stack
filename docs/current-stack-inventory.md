@@ -38,11 +38,11 @@ Only generic, reusable, public-safe skills should be promoted into this reposito
 
 ## Tooling Policy
 
-The current environments have a strong local CLI baseline: Git, GitHub CLI, ripgrep, JSON tooling, Python, Node, Docker-class container tools, SSH, rsync, and language/build toolchains are available across the primary machines, with additional native build depth on the Linux workhorse.
+Agents should inspect the active machine for useful local CLIs before using auth-dependent integrations. Common high-value tools to check for include Git, GitHub CLI, ripgrep, JSON tooling, language runtimes, package managers, test runners, build tools, container CLIs, SSH, and rsync.
 
 The reusable rule is CLI-first, auth-light tool selection:
 
-- Prefer the developer's existing CLI and repository scripts before MCP servers or hosted integrations.
+- Prefer the developer's existing CLI and repository scripts over MCP servers or hosted integrations.
 - Use `git` and `gh` for repository and GitHub work when they are authenticated and sufficient.
 - Use MCP or app integrations when they provide unique access, safer structured reads, or the user explicitly asks for them.
 - Keep exact private paths, account names, hostnames, and tokens out of this public inventory.
