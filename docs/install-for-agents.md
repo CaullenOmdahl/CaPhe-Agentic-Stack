@@ -28,13 +28,15 @@ The repository is the distribution source. The local machine is the runtime envi
    - Identify their normal config and skill directories.
    - Prefer existing CLI tools for inspection.
 
-2. Back up existing target files.
-   - Back up entrypoints before replacing or merging them.
-   - Back up existing skill directories before overwriting public stack skills.
+2. Preserve existing target files only when the user asks for rollback artifacts.
+   - Do not leave persistent backup canons or copied stack trees by default.
+   - The normal final state is active installed files in agent config locations.
+   - If the user requests backups, put them where the user asks and remove temporary install staging once verification passes.
 
 3. Install the shared canon.
    - Copy `docs/canon.md` to the machine-level canon location, usually `~/AGENTS_GLOBAL.md`.
-   - If the local machine uses a different canon path, update the installed entrypoints and skills to reference that path.
+   - Expand the final path before writing references. For example, resolve `$HOME` first and write the resulting absolute canon path rather than relying on `~` expansion inside agent runtimes.
+   - If the local machine uses a different canon path, update the installed entrypoints and skills to reference that expanded path.
 
 4. Install tool entrypoints.
    - Codex: install an `AGENTS.md` in the Codex global config location, usually `~/.codex/AGENTS.md`.
@@ -65,7 +67,9 @@ The repository is the distribution source. The local machine is the runtime envi
 When taking stock of a machine, prefer local commands before integrations:
 
 ```bash
-command -v git gh rg jq python3 node npm yarn pnpm make docker ssh rsync
+for cmd in git gh rg jq python3 node npm yarn pnpm make docker ssh rsync; do
+  command -v "$cmd" || true
+done
 git --version
 gh auth status
 ```

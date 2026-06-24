@@ -180,7 +180,7 @@ The checked-in entrypoints are repository templates and use repo-relative paths 
 3. Rewrite repo-relative canon references so global entrypoints read the machine-level canon.
 4. Install only the skill directories, including any subdirectories, the machine needs into that tool's normal skill directories.
 5. Update installed skills so their canon reference points to the machine-level canon.
-6. Back up existing files before replacing them.
+6. Leave only the active installed files in normal config locations by default. Do not leave backup canons, runtime repo checkouts, or copied stack trees unless the user explicitly asks for rollback artifacts.
 7. Store machine inventory and private operational notes only in local files outside this repository.
 
 Typical target roles are:
