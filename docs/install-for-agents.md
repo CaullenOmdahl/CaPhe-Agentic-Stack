@@ -37,16 +37,16 @@ The repository is the distribution source. The local machine is the runtime envi
    - If the local machine uses a different canon path, update the installed entrypoints and skills to reference that path.
 
 4. Install tool entrypoints.
-   - Codex: install an `AGENTS.md` in the Codex global config location.
-   - Claude: install a `CLAUDE.md` in the Claude global config location.
-   - Gemini / Antigravity: install a `GEMINI.md` in the Gemini global config location.
+   - Codex: install an `AGENTS.md` in the Codex global config location, usually `~/.codex/AGENTS.md`.
+   - Claude: install a `CLAUDE.md` in the Claude global config location, usually `~/.claude/CLAUDE.md`.
+   - Gemini / Antigravity: install a `GEMINI.md` in the Gemini global config location, usually `~/.gemini/GEMINI.md`.
    - Merge or copy the relevant adapter instructions from `adapters/`.
    - Rewrite repo-relative references such as `docs/canon.md` or `../../docs/canon.md` so they point to the installed machine-level canon.
 
 5. Install skills.
    - Copy the entire skill directory for each selected skill, not only `SKILL.md`.
    - Preserve subdirectories such as `references/` because skills may link to them.
-   - Install only skills that are useful for that machine and agent.
+   - Install only skills that are useful for that machine and agent into their respective skill directories, such as `~/.codex/skills/`, `~/.claude/skills/`, `~/.gemini/skills/`, or `~/.agents/skills/`.
    - Rewrite installed skill canon references from `docs/canon.md` to the machine-level canon path.
 
 6. Create or update private local notes when useful.
@@ -65,7 +65,7 @@ The repository is the distribution source. The local machine is the runtime envi
 When taking stock of a machine, prefer local commands before integrations:
 
 ```bash
-command -v git gh rg jq python3 node npm docker ssh rsync
+command -v git gh rg jq python3 node npm yarn pnpm make docker ssh rsync
 git --version
 gh auth status
 ```
