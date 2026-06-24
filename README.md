@@ -168,8 +168,8 @@ Typical targets are:
 - `~/.gemini/GEMINI.md`
 - `~/.codex/skills/<skill-name>/`
 - `~/.claude/skills/<skill-name>/`
-- `~/.gemini/skills/<skill-name>/` when the local Gemini setup supports skills there
-- `~/.agents/skills/<skill-name>/` as a shared compatibility location for tools that read common agent skills
+- `~/.gemini/skills/<skill-name>/` when the local Gemini setup supports skills there;
+- `~/.agents/skills/<skill-name>/` as a shared compatibility location for tools that read common agent skills.
 
 Do not commit machine-global install scripts or paths here if they contain private hostnames, usernames, or local infrastructure details.
 
