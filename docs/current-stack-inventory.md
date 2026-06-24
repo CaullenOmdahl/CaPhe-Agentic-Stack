@@ -32,8 +32,20 @@ Only generic, reusable, public-safe skills should be promoted into this reposito
 ## Public Skills In This Repository
 
 - `skills/code-refactor-review`: local review lens for reuse, consistency, composition, and slop detection.
+- `skills/intended-behavior`: behavior-contract workflow for inferring product behavior, UI placement, recurrence, and ask-versus-infer thresholds before implementation.
 - `skills/prepare-branch-context`: read-only branch and PR orientation before follow-up work.
 - `skills/ux-flow-plan`: UX-first flow mapping before implementation planning.
+
+## Tooling Policy
+
+The current environments have a strong local CLI baseline: Git, GitHub CLI, ripgrep, JSON tooling, Python, Node, Docker-class container tools, SSH, rsync, and language/build toolchains are available across the primary machines, with additional native build depth on the Linux workhorse.
+
+The reusable rule is CLI-first, auth-light tool selection:
+
+- Prefer the developer's existing CLI and repository scripts before MCP servers or hosted integrations.
+- Use `git` and `gh` for repository and GitHub work when they are authenticated and sufficient.
+- Use MCP or app integrations when they provide unique access, safer structured reads, or the user explicitly asks for them.
+- Keep exact private paths, account names, hostnames, and tokens out of this public inventory.
 
 ## Current Review Policy
 

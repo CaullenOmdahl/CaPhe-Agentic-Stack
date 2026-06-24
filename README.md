@@ -11,8 +11,9 @@ This repository provides:
 - one shared canon for how coding agents should work;
 - root-level entrypoint files that common agent tools can auto-detect;
 - thin agent-specific adapters for Codex, Claude, and Gemini / Antigravity;
-- reusable skills for review, branch orientation, and UX-first planning;
+- reusable skills for intended behavior, review, branch orientation, and UX-first planning;
 - a pull-request-centered review workflow;
+- CLI-first tool-selection rules that prefer the developer's existing environment before auth-dependent integrations;
 - public-safety rules for keeping private machine and client details out of public docs;
 - a research index of outside public accounts and repositories worth monitoring.
 
@@ -51,6 +52,7 @@ If a workflow depends on private operational details, document the shape of the 
 │   └── review-workflow.md
 └── skills/
     ├── code-refactor-review/SKILL.md
+    ├── intended-behavior/SKILL.md
     ├── prepare-branch-context/SKILL.md
     └── ux-flow-plan/SKILL.md
 ```
@@ -64,6 +66,8 @@ If a workflow depends on private operational details, document the shape of the 
 - autonomy and when agents should keep going;
 - when to stop for a human;
 - how to handle non-trivial behavior changes;
+- how to choose local CLI tools before auth-dependent integrations;
+- how to use non-code analysis artifacts before code;
 - the expected build and verification discipline;
 - the pull-request review rule;
 - public/private environment boundaries.
@@ -96,6 +100,7 @@ Adapters should stay small. If a rule applies to every agent, put it in `docs/ca
 The `skills/` directory contains reusable public workflow skills:
 
 - [`skills/code-refactor-review`](skills/code-refactor-review/SKILL.md): review diffs for reuse, composition, codebase consistency, unnecessary indirection, React/frontend state slop, and avoidable churn.
+- [`skills/intended-behavior`](skills/intended-behavior/SKILL.md): infer product behavior, UI placement, recurrence, and ask-versus-infer thresholds before implementation.
 - [`skills/prepare-branch-context`](skills/prepare-branch-context/SKILL.md): build read-only context for a branch or PR before follow-up work.
 - [`skills/ux-flow-plan`](skills/ux-flow-plan/SKILL.md): map current and desired product flows before attaching implementation files.
 
@@ -162,7 +167,14 @@ For a repo that should follow this stack:
 
 For machine-global use, install the stack into each tool's normal config locations. Do not keep a runtime checkout of this repository on every machine just so agents can read it.
 
-The checked-in entrypoints are repository templates and use repo-relative paths such as `docs/canon.md` and `../../docs/canon.md`. For global installation, copy the canon to the machine-level canon location, usually `~/AGENTS_GLOBAL.md`; merge or copy the relevant adapter instructions into each tool's global entrypoint; update installed skills so their canon reference points to the machine-level canon; and copy only the entrypoints and skills the machine needs. Back up existing files before replacing them.
+The checked-in entrypoints are repository templates and use repo-relative paths such as `docs/canon.md` and `../../docs/canon.md`. For global installation:
+
+1. Copy the canon to the machine-level canon location, usually `~/AGENTS_GLOBAL.md`.
+2. Merge or copy the relevant adapter instructions into each tool's global entrypoint.
+3. Rewrite repo-relative canon references so global entrypoints read the machine-level canon.
+4. Install only the skills the machine needs into that tool's normal skill directories.
+5. Update installed skills so their canon reference points to the machine-level canon.
+6. Back up existing files before replacing them.
 
 Typical target roles are:
 
