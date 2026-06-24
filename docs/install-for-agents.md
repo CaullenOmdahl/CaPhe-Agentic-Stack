@@ -44,7 +44,7 @@ The repository is the distribution source. The local machine is the runtime envi
    - Gemini / Antigravity: install a `GEMINI.md` in the Gemini global config location, usually `~/.gemini/GEMINI.md`.
    - Merge or copy the relevant adapter instructions from `adapters/`.
    - Rewrite repo-relative references such as `docs/canon.md` or `../../docs/canon.md` so they point to the installed machine-level canon.
-   - Rewrite every other copied repo-relative support reference, such as `../../docs/review-workflow.md`, to an installed local path or remove the link if that support document is not installed.
+   - Rewrite every other copied repo-relative support reference, such as `../../docs/review-workflow.md`, to an installed local path, or convert the link to plain text or a public repository URL if that support document is not installed.
 
 5. Install skills.
    - Copy the entire skill directory for each selected skill, not only `SKILL.md`.
@@ -69,10 +69,10 @@ When taking stock of a machine, prefer local commands before integrations:
 
 ```bash
 for cmd in git gh rg jq python3 node npm yarn pnpm make docker ssh rsync; do
-  command -v "$cmd" || true
+  echo "$cmd: $(command -v "$cmd" || echo "not found")"
 done
-git --version
-gh auth status
+command -v git >/dev/null && git --version || true
+command -v gh >/dev/null && gh auth status || true
 ```
 
 Store detailed results in local private notes if they help future agents. Promote only generalized, public-safe rules back to this repository.
