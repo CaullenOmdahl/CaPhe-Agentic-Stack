@@ -178,10 +178,11 @@ The checked-in entrypoints are repository templates and use repo-relative paths 
 1. Copy the canon to the machine-level canon location, usually `~/AGENTS_GLOBAL.md`.
 2. Merge or copy the relevant adapter instructions into each tool's global entrypoint.
 3. Rewrite repo-relative canon references so global entrypoints read the machine-level canon.
-4. Install only the skill directories, including any subdirectories, the machine needs into that tool's normal skill directories.
-5. Update installed skills so their canon reference points to the machine-level canon.
-6. Leave only the active installed files in normal config locations by default. Do not leave backup canons, runtime repo checkouts, or copied stack trees unless the user explicitly asks for rollback artifacts.
-7. Store machine inventory and private operational notes only in local files outside this repository.
+4. Rewrite any other repo-relative support references in copied adapters, such as review workflow docs, or remove those links if the supporting docs are not installed.
+5. Install only the skill directories, including any subdirectories, the machine needs into that tool's normal skill directories.
+6. Update installed skills so their canon reference points to the machine-level canon.
+7. Leave only the active installed files in normal config locations by default. Do not leave backup canons, runtime repo checkouts, or copied stack trees unless the user explicitly asks for rollback artifacts.
+8. Store machine inventory and private operational notes only in local files outside this repository.
 
 Typical target roles are:
 

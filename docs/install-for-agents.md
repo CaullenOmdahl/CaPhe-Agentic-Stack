@@ -44,6 +44,7 @@ The repository is the distribution source. The local machine is the runtime envi
    - Gemini / Antigravity: install a `GEMINI.md` in the Gemini global config location, usually `~/.gemini/GEMINI.md`.
    - Merge or copy the relevant adapter instructions from `adapters/`.
    - Rewrite repo-relative references such as `docs/canon.md` or `../../docs/canon.md` so they point to the installed machine-level canon.
+   - Rewrite every other copied repo-relative support reference, such as `../../docs/review-workflow.md`, to an installed local path or remove the link if that support document is not installed.
 
 5. Install skills.
    - Copy the entire skill directory for each selected skill, not only `SKILL.md`.
