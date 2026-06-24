@@ -44,7 +44,7 @@ The reusable rule is CLI-first, auth-light tool selection:
 
 - Prefer the developer's existing CLI and repository scripts over MCP servers or hosted integrations.
 - Use `git` and `gh` for repository and GitHub work when they are authenticated and sufficient.
-- Use MCP or app integrations when they provide unique access, safer structured reads, or the user explicitly asks for them.
+- Use MCP or app integrations when they provide unique access, safer structured data, or the user explicitly asks for them.
 - Keep exact private paths, account names, hostnames, and tokens out of this public inventory.
 
 ## Current Review Policy

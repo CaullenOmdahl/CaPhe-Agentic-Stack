@@ -43,7 +43,7 @@ Use the developer's existing environment before reaching for auth-dependent inte
 
 - Prefer local CLI tools and repository-native commands when they are available: `git`, `gh`, `rg`, language package managers, test runners, build tools, shell scripts, device CLIs, and browser or platform CLIs.
 - Check what exists before choosing a tool. A quick `command -v`, version check, repo script inspection, or `git status` is usually better than assuming an MCP or hosted connector is needed.
-- Use MCP servers, hosted connectors, browser sessions, or app integrations when they provide unique access, safer structured data, or the user explicitly asks for them. Do not sign in, install, publish, or change external state through those surfaces without the normal human gates.
+- Use MCP servers, hosted connectors, browser sessions, or app integrations when they provide unique access, safer structured data, or the user explicitly asks for them. Do not sign in, install, publish, or change external state through those surfaces without explicit human approval.
 - Prefer `gh` for GitHub work when it is authenticated and sufficient. Use GitHub MCP or app integrations for data the CLI cannot fetch cleanly, or when the connector is the safer read path.
 - Record reusable tool-selection rules in this public canon. Keep private paths, account names, hostnames, tokens, and machine-specific inventories out of the public stack.
 
