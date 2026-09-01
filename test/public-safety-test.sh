@@ -4,6 +4,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+grep -qxF '.agent/.strict-mode' .gitignore || {
+  echo "public-safety: local strict-mode marker must be ignored" >&2
+  exit 1
+}
+
 failed=0
 while IFS= read -r -d '' file; do
   case "$file" in

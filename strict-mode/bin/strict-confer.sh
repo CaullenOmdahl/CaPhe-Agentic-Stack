@@ -11,8 +11,8 @@
 # Concurrency: every invocation gets a unique run ID, an ephemeral run root, and per-peer
 # working directories. Peer CLIs run in separate process sessions so timeouts kill their
 # child processes. Set STRICT_CONFER_KEEP_RUN_DIR=1 to preserve the run root for debugging.
-# Git snapshots contain tracked and non-ignored files only; ignored local state such as .env
-# files is not copied. Override pinned reviewer models with STRICT_CONFER_AGY_MODEL and
+# Git snapshots contain only tracked paths and staged additions; arbitrary untracked local
+# files are not copied. Override pinned reviewer models with STRICT_CONFER_AGY_MODEL and
 # STRICT_CONFER_CODEX_MODEL after verifying the requested models with the installed CLIs.
 set -uo pipefail
 
@@ -32,6 +32,11 @@ AGY_MODEL="${STRICT_CONFER_AGY_MODEL:-gemini-3.7-flash-high}"
 CODEX_MODEL="${STRICT_CONFER_CODEX_MODEL:-gpt-5.4}"
 RUN_ID="${STRICT_CONFER_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$$-$RANDOM}"
 SOURCE_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+if [ "${STRICT_CONFER_NO_SNAPSHOT:-0}" != "1" ] &&
+   ! git -C "$SOURCE_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "strict-confer snapshot mode requires a Git worktree" >&2
+  exit 2
+fi
 RUN_ROOT_CREATED=0
 if [ -n "${STRICT_CONFER_RUN_ROOT:-}" ]; then
   RUN_ROOT="$STRICT_CONFER_RUN_ROOT"
@@ -69,27 +74,13 @@ run_isolated() {
     if git -C "$SOURCE_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       local file_list
       file_list="$peer_dir/files.txt"
-      git -C "$SOURCE_ROOT" ls-files --cached --others --exclude-standard -z |
+      git -C "$SOURCE_ROOT" ls-files --cached -z |
         while IFS= read -r -d '' tracked_path; do
           if [ -e "$SOURCE_ROOT/$tracked_path" ] || [ -L "$SOURCE_ROOT/$tracked_path" ]; then
             printf '%s\0' "$tracked_path"
           fi
         done > "$file_list" || return 1
       rsync -a --from0 --files-from="$file_list" "$SOURCE_ROOT"/ "$peer_cwd"/ || return 1
-    else
-      rsync -a --delete \
-        --exclude='.env' \
-        --exclude='.env.*' \
-        --exclude='.git/' \
-        --exclude='.agent/reviews/' \
-        --exclude='.dart_tool/' \
-        --exclude='.next/' \
-        --exclude='.svelte-kit/' \
-        --exclude='build/' \
-        --exclude='coverage/' \
-        --exclude='dist/' \
-        --exclude='node_modules/' \
-        "$SOURCE_ROOT"/ "$peer_cwd"/ || return 1
     fi
   fi
   STRICT_CONFER_PEER="$peer" \
@@ -154,7 +145,7 @@ PY
 run_claude() { command -v claude >/dev/null 2>&1 || return 1; mkdir -p "$RUN_ROOT/claude" || return 1; local o; o=$(run_isolated claude claude --safe-mode -p --no-session-persistence "$1" 2>"$RUN_ROOT/claude/stderr.txt") || return 1; [ -n "$o" ] && printf '%s\n' "$o" || return 1; }
 run_codex()  { command -v codex  >/dev/null 2>&1 || return 1; mkdir -p "$RUN_ROOT/codex" || return 1; local o; o=$(run_isolated codex codex exec -m "$CODEX_MODEL" --ephemeral --skip-git-repo-check --sandbox read-only "$1" 2>"$RUN_ROOT/codex/stderr.txt") || return 1; [ -n "$o" ] && printf '%s\n' "$o" || return 1; }
 # agy headless mode cannot prompt for repository-mandated reads. Auto-approval is bounded by
-# both plan mode and the sandboxed, secret-filtered snapshot above.
+# both plan mode and the bounded tracked-file snapshot above.
 run_agy()    { command -v agy    >/dev/null 2>&1 || return 1; mkdir -p "$RUN_ROOT/agy" || return 1; local o; o=$(run_isolated agy agy --sandbox --mode plan --dangerously-skip-permissions --model "$AGY_MODEL" --effort high --print="$1" 2>"$RUN_ROOT/agy/stderr.txt") || return 1; [ -n "$o" ] && printf '%s\n' "$o" || return 1; }
 
 case "$HOST" in

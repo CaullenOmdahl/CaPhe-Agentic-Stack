@@ -25,6 +25,9 @@ fi
 if [ -f .env ]; then
   echo "$name secret snapshot: \$(cat .env)"
 fi
+if [ -f untracked-sensitive.txt ]; then
+  echo "$name untracked snapshot: \$(cat untracked-sensitive.txt)"
+fi
 printf '%s\\n' "$name:\${STRICT_CONFER_RUN_ID:-}:\${STRICT_CONFER_RUN_ROOT:-}:\${STRICT_CONFER_PEER:-}:\$(pwd)" >> "\$STRICT_CONFER_TEST_LOG"
 MOCK
   chmod +x "$path"
@@ -46,8 +49,13 @@ test_parallel_runs_are_ephemeral_and_unique() {
   local log="$TMP/peer.log"
   mkdir -p "$project" "$mockbin"
   git -C "$project" init -q
+  git -C "$project" config user.name strict-confer-test
+  git -C "$project" config user.email strict-confer-test@example.invalid
   printf '%s\n' ".env" > "$project/.gitignore"
-  printf '%s\n' "dirty workspace is visible" > "$project/review-target.txt"
+  printf '%s\n' "tracked workspace is visible" > "$project/review-target.txt"
+  git -C "$project" add .gitignore review-target.txt
+  git -C "$project" commit -qm initial
+  printf '%s\n' "must stay local" > "$project/untracked-sensitive.txt"
   printf '%s\n' "must stay private" > "$project/.env"
   make_mock_peer "$mockbin/claude" "claude"
   make_mock_peer "$mockbin/agy" "agy"
@@ -83,8 +91,10 @@ test_parallel_runs_are_ephemeral_and_unique() {
   [ "$root_count" -eq 2 ] || fail "expected 2 unique run roots, got $root_count"
   [ "$cwd_count" -eq 4 ] || fail "expected 4 isolated peer working directories, got $cwd_count"
   [ "$evidence_count" -eq 2 ] || fail "expected 2 non-clobbered evidence files, got $evidence_count"
-  grep -q "snapshot: dirty workspace is visible" "$TMP/out-1" || fail "first run peer could not read workspace snapshot"
-  grep -q "snapshot: dirty workspace is visible" "$TMP/out-2" || fail "second run peer could not read workspace snapshot"
+  grep -q "snapshot: tracked workspace is visible" "$TMP/out-1" || fail "first run peer could not read tracked snapshot"
+  grep -q "snapshot: tracked workspace is visible" "$TMP/out-2" || fail "second run peer could not read tracked snapshot"
+  ! grep -q "must stay local" "$TMP/out-1" || fail "first run copied an untracked local file"
+  ! grep -q "must stay local" "$TMP/out-2" || fail "second run copied an untracked local file"
   ! grep -q "must stay private" "$TMP/out-1" || fail "first run copied an ignored secret-bearing file"
   ! grep -q "must stay private" "$TMP/out-2" || fail "second run copied an ignored secret-bearing file"
 

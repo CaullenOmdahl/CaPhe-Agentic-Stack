@@ -56,8 +56,8 @@ explicitly recorded fallback when PR review is genuinely unavailable. Reviewing 
 implementation. At most two revise-and-re-review rounds are allowed before human tie-break.
 
 The packaged `strict-confer` peers are Claude Code, agy (Gemini-family), and Codex; direct Gemini CLI is
-not assumed equivalent. Reviewer-model overrides require client verification. Confer snapshots omit
-ignored state such as `.env`, include tracked/non-ignored generated assets, and may be slow in large roots.
+not assumed equivalent. Reviewer-model overrides require client verification. Confer snapshots include
+tracked paths and staged additions only, omit arbitrary untracked state, and refuse non-Git roots.
 
 ## Artifact verification
 

@@ -120,6 +120,20 @@ HOOK=$(git -C "$WORKTREE_CHILD" rev-parse --git-path hooks/pre-commit)
 [ -x "$WORKTREE_CHILD/$HOOK" ] || [ -x "$HOOK" ]
 grep -q 'strict-green-gate' "$WORKTREE_CHILD/$HOOK" 2>/dev/null || grep -q 'strict-green-gate' "$HOOK"
 (cd "$WORKTREE_CHILD" && HOME="$HOME_ROOT" "$HOOK" >/dev/null)
+git -C "$WORKTREE_CHILD" check-ignore -q .agent/.strict-mode
+
+MARKER_REPO="$TEST_ROOT/marker-repo"
+mkdir -p "$MARKER_REPO/.agent"
+git -C "$MARKER_REPO" init -q
+printf '%s\n' offline > "$MARKER_REPO/.agent/.strict-mode"
+MARKER_OUTPUT=$(cd "$MARKER_REPO" && "$ROOT/bin/strict-green-gate.sh" --mode plan 2>&1 || true)
+! printf '%s\n' "$MARKER_OUTPUT" | grep -q 'STRICT MODE: OFF'
+printf '%s\n' off > "$MARKER_REPO/.agent/.strict-mode"
+MARKER_OUTPUT=$(cd "$MARKER_REPO" && "$ROOT/bin/strict-green-gate.sh" --mode plan 2>&1 || true)
+printf '%s\n' "$MARKER_OUTPUT" | grep -q 'STRICT MODE: OFF'
+git -C "$MARKER_REPO" add -f .agent/.strict-mode
+MARKER_OUTPUT=$(cd "$MARKER_REPO" && "$ROOT/bin/strict-green-gate.sh" --mode plan 2>&1 || true)
+! printf '%s\n' "$MARKER_OUTPUT" | grep -q 'STRICT MODE: OFF'
 
 CUSTOM_HOOK_REPO="$TEST_ROOT/custom-hook-repo"
 mkdir -p "$CUSTOM_HOOK_REPO"

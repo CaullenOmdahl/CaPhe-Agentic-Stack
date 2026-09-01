@@ -4,9 +4,19 @@ set -euo pipefail
 
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-if [ -f "$ROOT/.agent/.strict-mode" ] && head -1 "$ROOT/.agent/.strict-mode" | grep -q '^off'; then
+MARKER_REL=.agent/.strict-mode
+MARKER="$ROOT/$MARKER_REL"
+MARKER_TRACKED=0
+if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 &&
+   git -C "$ROOT" ls-files --error-unmatch -- "$MARKER_REL" >/dev/null 2>&1; then
+  MARKER_TRACKED=1
+fi
+if [ -f "$MARKER" ] && [ "$MARKER_TRACKED" -eq 0 ] && head -1 "$MARKER" | grep -qx 'off'; then
   echo "STRICT MODE: OFF (user-disabled)"
   exit 0
+fi
+if [ -f "$MARKER" ] && [ "$MARKER_TRACKED" -eq 1 ] && head -1 "$MARKER" | grep -qx 'off'; then
+  echo "STRICT MODE: ignoring tracked disable marker; remove $MARKER_REL from the Git index" >&2
 fi
 
 MODE=affected

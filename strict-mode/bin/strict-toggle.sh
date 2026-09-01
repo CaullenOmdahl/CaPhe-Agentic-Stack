@@ -14,13 +14,28 @@ ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd); cd "$ROOT" || exit 1
 mkdir -p .agent
 MARK=.agent/.strict-mode
 
-is_off() { [ -f "$MARK" ] && head -1 "$MARK" 2>/dev/null | grep -q '^off'; }
+marker_tracked() { git ls-files --error-unmatch -- "$MARK" >/dev/null 2>&1; }
+is_off() { [ -f "$MARK" ] && ! marker_tracked && head -1 "$MARK" 2>/dev/null | grep -qx 'off'; }
+ensure_local_exclude() {
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+  local exclude
+  exclude=$(git rev-parse --git-path info/exclude) || return 1
+  case "$exclude" in /*) ;; *) exclude="$ROOT/$exclude" ;; esac
+  mkdir -p "$(dirname "$exclude")" || return 1
+  touch "$exclude" || return 1
+  grep -qxF "$MARK" "$exclude" 2>/dev/null || printf '%s\n' "$MARK" >> "$exclude"
+}
+ensure_local_exclude || exit 1
 
 case "${1:-status}" in
   on|enable)
     printf 'on\n# re-enabled %s\n' "$(date)" > "$MARK"
     echo "STRICT MODE: ON (enforced) — $ROOT" ;;
   off|disable)
+    if marker_tracked; then
+      echo "REFUSED: $MARK is tracked; remove it from the Git index before using a local override." >&2
+      exit 5
+    fi
     if [ ! -t 0 ] || [ ! -t 1 ]; then
       echo "REFUSED: disabling strict mode is USER-ONLY and needs an interactive terminal." >&2
       echo "Agents must not disable strict mode — ask the user to run: strict-toggle.sh off" >&2
