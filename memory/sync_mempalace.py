@@ -37,9 +37,25 @@ Runner = Callable[..., object]
 
 
 def _private_local_env() -> dict[str, str]:
-    env = dict(os.environ)
-    for name in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "MEMPALACE_LLM_API_KEY"):
-        env.pop(name, None)
+    allowed_names = {
+        "HOME",
+        "PATH",
+        "TMPDIR",
+        "TMP",
+        "TEMP",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "REQUESTS_CA_BUNDLE",
+        "CURL_CA_BUNDLE",
+        "UV_CACHE_DIR",
+        "XDG_CACHE_HOME",
+        "HF_HOME",
+        "TRANSFORMERS_CACHE",
+    }
+    env = {name: value for name, value in os.environ.items() if name in allowed_names}
     env["MEMPALACE_EMBEDDING_MODEL"] = "minilm"
     return env
 

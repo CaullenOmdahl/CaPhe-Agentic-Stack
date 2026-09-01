@@ -44,7 +44,7 @@ class PublicSafetyTests(unittest.TestCase):
             self._repo_with_scanner(root)
             credential = "sk-" + "proj-" + "AbCdEf0123456789_-" * 3
             config = root / "config.txt"
-            config.write_text("credential " + credential + "\n")
+            config.write_text("credential " + credential + "\n" + ("x" * 5_000_000))
             subprocess.run(
                 ["git", "add", "config.txt", "test/public-safety-test.sh"],
                 cwd=root,

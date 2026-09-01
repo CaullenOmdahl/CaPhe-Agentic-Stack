@@ -27,13 +27,15 @@ Generated manifests preserve each Python test root's declared runner: explicit p
 dependency, including standardized top-level dependency groups, selects `python -m pytest`, while
 undeclared roots retain unittest discovery. Explicitly configured pytest project roots are scheduled even
 without a literal `tests/` directory, and pytest receives no hard-coded path, allowing its complete
-`testpaths` contract to select the suite.
+`testpaths` contract to select the suite. Plain unittest projects with root-level `test*.py` modules are
+also discovery roots; they start discovery at the project root when no `tests/` directory exists.
 
 Local `strict-confer` fallback reviews use a default-deny host filesystem boundary, an index-only project
-snapshot, an ephemeral shadow home seeded with only minimum peer CLI identity/authentication state, selected
-system/runtime paths, and a rebuilt allowlisted environment. Linux uses a selective Bubblewrap namespace;
-macOS uses a default-deny Sandbox profile. A peer that cannot run within that boundary is unavailable rather
-than silently receiving broader host access.
+snapshot, an ephemeral shadow home seeded with only non-secret CLI preferences, selected system/runtime
+paths, and a rebuilt allowlisted environment. Host authentication files and token caches are never copied
+into model-readable storage. Linux uses a selective Bubblewrap namespace; macOS uses a default-deny Sandbox
+profile. A peer that cannot run or authenticate within that boundary is unavailable rather than silently
+receiving broader host or credential access.
 
 Implementation remains Bash plus Python 3. Python is selected for safe marker replacement, JSON schema
 handling, deterministic planning, hashing, concurrency, and portable tests; Bash remains the stable CLI
@@ -73,6 +75,10 @@ The final integration review found that passing `tests` still masked additional 
 pytest without positional paths closes the remaining coverage gap.
 The subsequent exact-head review found dependency-declared pytest projects with only root-level tests;
 dependency declarations now make their project directory a discovery root as well.
+The next exact-head review found that a plain unittest project containing only root-level test modules was
+not scheduled. Root-level `test*.py` discovery now creates a unittest project and uses the project root as
+its start directory. The same review found authentication files copied into peer homes; local fallback
+review now carries no host credentials and fails closed when a peer cannot authenticate independently.
 
 ## Consequences
 
@@ -80,8 +86,8 @@ Local commits become faster and diagnostics improve. Full CI remains authoritati
 otherwise the uncached local full matrix is authoritative. Repository manifests require maintenance,
 so unknown paths, detected missing edges, or manifest edits trigger the full matrix.
 The source distribution must add tests for initialization, planning, caching, and evidence generation.
-Peer CLI compatibility is now bounded by the explicit runtime/auth allowlist; failures remain loud and do
-not weaken the isolation policy.
+Peer CLI compatibility is now bounded by the explicit runtime allowlist and credential-free shadow home;
+failures remain loud and do not weaken the isolation policy.
 
 ## Alternatives considered
 

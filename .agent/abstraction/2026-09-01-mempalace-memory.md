@@ -66,6 +66,9 @@ immutable source records and loading only the evidence relevant to the current t
   matching so superficial output formatting cannot bypass the injection gate.
 - `intended` Indexing is idempotent, resume-safe, incremental, and bounded by per-palace quotas. Large
   tool outputs, binary/base64 content, and generated build logs are excluded by default.
+- `intended` Export and mining subprocesses receive an explicit allowlist of runtime, locale, certificate,
+  cache, and local-model-path environment variables. Unrelated host credentials and service tokens are
+  not inherited.
 - `intended` A bounded ingestion pass counts only sources whose bytes, generation, mapping, or processing
   state require work. Owner-only derived state lets repeated bounded passes advance through the backlog;
   unchanged, quarantined, and previously invalid sources do not permanently consume the front of every batch.

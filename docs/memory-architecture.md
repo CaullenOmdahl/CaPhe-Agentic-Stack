@@ -17,6 +17,9 @@ The local pilot pins MemPalace 3.9.0 and forbids remote embeddings. Sanitizer v8
 generation and redacts standalone OpenAI API keys, fine-grained GitHub tokens, and explicitly named
 credentials even when their unquoted values are short. Adoption requires the privacy,
 isolation, injection, citation, correctness, recall, latency, storage, and token benchmarks in ADR-0002.
+MemPalace subprocesses run with an explicit allowlist of runtime, temporary-directory, locale, certificate,
+cache, and local-model-path variables. They do not inherit unrelated host credential or service-token
+variables.
 
 MemPalace may create backend files with group/world-readable defaults. After every `init`, `mine`,
 `repair`, or migration, run the adapter's `harden_owner_only_tree`, require

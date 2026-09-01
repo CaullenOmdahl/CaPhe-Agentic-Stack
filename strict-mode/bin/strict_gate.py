@@ -529,6 +529,36 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
         for tests in root.rglob("tests")
         if tests.is_dir() and not any(part in excluded_python_parts for part in tests.parts)
     }
+    python_project_roots = {root}
+    for pattern in (
+        "pyproject.toml",
+        "setup.py",
+        "setup.cfg",
+        "tox.ini",
+        "requirements*.txt",
+    ):
+        python_project_roots.update(
+            config.parent
+            for config in root.rglob(pattern)
+            if not any(part in excluded_python_parts for part in config.parts)
+        )
+
+    def owning_python_project(test_module: Path) -> Path:
+        candidates = [
+            project_root
+            for project_root in python_project_roots
+            if project_root == test_module.parent or project_root in test_module.parents
+        ]
+        return max(candidates, key=lambda path: len(path.parts))
+
+    root_level_test_roots = {
+        owning_python_project(test_module)
+        for test_module in root.rglob("test*.py")
+        if test_module.is_file()
+        and not any(part in excluded_python_parts for part in test_module.parts)
+        and "tests" not in test_module.relative_to(root).parts[:-1]
+    }
+    python_test_roots.update(root_level_test_roots)
     pytest_project_roots = {
         config.parent
         for pattern in (
@@ -559,7 +589,15 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
             if runner == "pytest"
             else {
                 "name": f"python-unittest{suffix}",
-                "run": ["python3", "-m", "unittest", "discover", "-s", "tests", "-v"],
+                "run": [
+                    "python3",
+                    "-m",
+                    "unittest",
+                    "discover",
+                    "-s",
+                    "tests" if (python_root / "tests").is_dir() else ".",
+                    "-v",
+                ],
             }
         )
         if cwd != ".":

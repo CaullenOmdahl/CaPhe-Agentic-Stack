@@ -33,7 +33,8 @@ benchmarks separate search from answering: the harness validates search coordina
 export generation, resolves bounded canonical event slices, frames the slices itself, supplies and measures
 that exact context, and requires the answer phase to echo those same citations. Sanitizer behavior changes
 create a new generation; sanitizer v8 explicitly covers standalone OpenAI API keys, fine-grained GitHub
-tokens, and short explicitly named credentials.
+tokens, and short explicitly named credentials. Export and mining subprocesses are launched with an
+explicit runtime allowlist rather than inheriting unrelated host credentials or service tokens.
 
 Platform scoring:
 
@@ -83,6 +84,9 @@ for fail-closed validation, and the public scan rejects the same standalone Open
 The next exact-head review found that partial domain deletions still missed older generations and short
 unquoted named credentials survived sanitization. Every initialized retained generation now reconciles
 against every current export set, and named assignments redact non-empty values regardless of length.
+The subsequent exact-head review found the MemPalace subprocess inherited the complete host environment.
+The adapter now constructs a minimal runtime, locale, certificate, cache, and local-model-path allowlist;
+unrelated credential variables do not cross the process boundary.
 
 ## Consequences
 

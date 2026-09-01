@@ -250,6 +250,64 @@ class StrictGatePlanTests(unittest.TestCase):
             [{"name": "python-pytest", "run": ["python3", "-m", "pytest"]}],
         )
 
+    def test_default_manifest_schedules_root_level_unittest_module(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "test_failure.py").write_text(
+                "import unittest\n\n"
+                "class FailureTest(unittest.TestCase):\n"
+                "    def test_failure(self):\n"
+                "        self.fail('expected')\n"
+            )
+            (root / "pyproject.toml").write_text(
+                "[project]\nname='unittest-project'\nversion='0.1.0'\n"
+            )
+            data = strict_gate.discover_default_manifest(root)
+        python_commands = [
+            command
+            for command in data["components"][0]["commands"]
+            if command["name"].startswith("python-")
+        ]
+        self.assertEqual(
+            python_commands,
+            [
+                {
+                    "name": "python-unittest",
+                    "run": ["python3", "-m", "unittest", "discover", "-s", ".", "-v"],
+                }
+            ],
+        )
+
+    def test_root_project_owns_nested_unittest_modules(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "pyproject.toml").write_text(
+                "[project]\nname='unittest-project'\nversion='0.1.0'\n"
+            )
+            package = root / "package"
+            package.mkdir()
+            (package / "test_nested.py").write_text(
+                "import unittest\n\n"
+                "class NestedTest(unittest.TestCase):\n"
+                "    def test_nested(self):\n"
+                "        self.assertTrue(True)\n"
+            )
+            data = strict_gate.discover_default_manifest(root)
+        python_commands = [
+            command
+            for command in data["components"][0]["commands"]
+            if command["name"].startswith("python-")
+        ]
+        self.assertEqual(
+            python_commands,
+            [
+                {
+                    "name": "python-unittest",
+                    "run": ["python3", "-m", "unittest", "discover", "-s", ".", "-v"],
+                }
+            ],
+        )
+
     def test_default_manifest_discovers_independent_cargo_and_go_roots(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

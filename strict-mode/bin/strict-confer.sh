@@ -103,20 +103,15 @@ EOF
   shift
   set -- "$peer_executable" "$@"
 
-  # Give each peer a throwaway home. Only minimum authentication/identity state is copied;
-  # histories, memories, plugins, arbitrary config, and unrelated credentials remain outside.
+  # Give each peer a throwaway home. Authentication files are never copied into the
+  # model-readable boundary; a CLI that cannot authenticate without them is unavailable.
+  # Only non-secret onboarding identity state may be seeded.
   case "$peer" in
     codex)
       mkdir -p "$peer_home/.codex" || return 1
-      if [ -f "$ORIGINAL_HOME/.codex/auth.json" ] && [ ! -L "$ORIGINAL_HOME/.codex/auth.json" ]; then
-        install -m 600 "$ORIGINAL_HOME/.codex/auth.json" "$peer_home/.codex/auth.json" || return 1
-      fi
       ;;
     claude)
       mkdir -p "$peer_home/.claude" || return 1
-      if [ -f "$ORIGINAL_HOME/.claude/.credentials.json" ] && [ ! -L "$ORIGINAL_HOME/.claude/.credentials.json" ]; then
-        install -m 600 "$ORIGINAL_HOME/.claude/.credentials.json" "$peer_home/.claude/.credentials.json" || return 1
-      fi
       if [ -f "$ORIGINAL_HOME/.claude.json" ] && [ ! -L "$ORIGINAL_HOME/.claude.json" ]; then
         python3 - "$ORIGINAL_HOME/.claude.json" "$peer_home/.claude.json" <<'PY' || return 1
 import json
@@ -128,7 +123,7 @@ with open(source, encoding="utf-8") as handle:
     value = json.load(handle)
 allowed = {
     key: value[key]
-    for key in ("hasCompletedOnboarding", "installMethod", "oauthAccount", "userID")
+    for key in ("hasCompletedOnboarding", "installMethod")
     if key in value
 }
 with open(destination, "w", encoding="utf-8") as handle:
@@ -140,10 +135,6 @@ PY
       ;;
     agy)
       mkdir -p "$peer_home/.gemini/antigravity-cli" || return 1
-      agy_token="$ORIGINAL_HOME/.gemini/antigravity-cli/antigravity-oauth-token"
-      if [ -f "$agy_token" ] && [ ! -L "$agy_token" ]; then
-        install -m 600 "$agy_token" "$peer_home/.gemini/antigravity-cli/antigravity-oauth-token" || return 1
-      fi
       ;;
   esac
   chmod -R go-rwx "$peer_home" || return 1

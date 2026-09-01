@@ -1,15 +1,39 @@
 import importlib.util
 import json
+import os
 from pathlib import Path
 import tempfile
 import subprocess
 import unittest
+from unittest import mock
 
 
 MODULE_PATH = Path(__file__).parents[1] / "memory" / "sync_mempalace.py"
 
 
 class MemorySyncTests(unittest.TestCase):
+    def test_mempalace_environment_is_allowlisted(self):
+        spec = importlib.util.spec_from_file_location("sync_mempalace_env", MODULE_PATH)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        with mock.patch.dict(
+            os.environ,
+            {
+                "PATH": "/usr/bin:/bin",
+                "HOME": "/safe/home",
+                "GITHUB_TOKEN": "unrelated-github-secret",
+                "AWS_SECRET_ACCESS_KEY": "unrelated-aws-secret",
+            },
+            clear=True,
+        ):
+            env = module._private_local_env()
+        self.assertEqual(env["PATH"], "/usr/bin:/bin")
+        self.assertEqual(env["HOME"], "/safe/home")
+        self.assertEqual(env["MEMPALACE_EMBEDDING_MODEL"], "minilm")
+        self.assertNotIn("GITHUB_TOKEN", env)
+        self.assertNotIn("AWS_SECRET_ACCESS_KEY", env)
+
     def test_cli_preserves_source_root_symlink_for_validation(self):
         spec = importlib.util.spec_from_file_location("sync_mempalace_cli_root", MODULE_PATH)
         module = importlib.util.module_from_spec(spec)

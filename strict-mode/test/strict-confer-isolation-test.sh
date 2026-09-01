@@ -94,6 +94,15 @@ fi
 if [ -n "\${STRICT_CONFER_ENV_CANARY:-}" ]; then
   echo "$name env snapshot: \$STRICT_CONFER_ENV_CANARY"
 fi
+for auth_path in \
+  "\$HOME/.codex/auth.json" \
+  "\$HOME/.claude/.credentials.json" \
+  "\$HOME/.gemini/antigravity-cli/antigravity-oauth-token"
+do
+  if [ -f "\$auth_path" ]; then
+    echo "$name auth snapshot: \$auth_path"
+  fi
+done
 printf '%s\\n' "$name:\${STRICT_CONFER_RUN_ID:-}:\${STRICT_CONFER_RUN_ROOT:-}:\${STRICT_CONFER_PEER:-}:\$(pwd)" >> "\$STRICT_CONFER_TEST_LOG"
 MOCK
   chmod +x "$path"
@@ -260,6 +269,38 @@ test_current_peer_cli_invocations() {
     fail "codex model override was not honored"
 }
 
+test_peer_credentials_are_not_copied() {
+  local project="$TMP/auth-project"
+  local mockbin="$TMP/auth-bin"
+  local auth_home="$TMP/auth-home"
+  mkdir -p "$project" "$mockbin" \
+    "$auth_home/.codex" "$auth_home/.claude" \
+    "$auth_home/.gemini/antigravity-cli"
+  git -C "$project" init -q
+  printf '%s\n' fake > "$auth_home/.codex/auth.json"
+  printf '%s\n' fake > "$auth_home/.claude/.credentials.json"
+  printf '%s\n' fake > "$auth_home/.gemini/antigravity-cli/antigravity-oauth-token"
+  make_mock_peer "$mockbin/claude" "claude"
+  make_mock_peer "$mockbin/agy" "agy"
+  make_mock_peer "$mockbin/codex" "codex"
+
+  (
+    cd "$project"
+    HOME="$auth_home" PATH="$mockbin:$PATH" STRICT_CONFER_TEST_LOG="$TMP/auth-peer.log" \
+      "$ROOT/bin/strict-confer.sh" codex "review without copied auth" \
+      > "$TMP/auth-out-codex-host" 2> "$TMP/auth-err-codex-host"
+  )
+  (
+    cd "$project"
+    HOME="$auth_home" PATH="$mockbin:$PATH" STRICT_CONFER_TEST_LOG="$TMP/auth-peer.log" \
+      "$ROOT/bin/strict-confer.sh" claude "review without copied auth" \
+      > "$TMP/auth-out-claude-host" 2> "$TMP/auth-err-claude-host"
+  )
+
+  ! grep -q 'auth snapshot' "$TMP/auth-out-codex-host" || fail "peer could read copied credentials"
+  ! grep -q 'auth snapshot' "$TMP/auth-out-claude-host" || fail "Codex peer could read copied credentials"
+}
+
 test_snapshot_tolerates_tracked_deletions() {
   local project="$TMP/deletion-project"
   local mockbin="$TMP/deletion-bin"
@@ -365,6 +406,7 @@ MOCK
 test_parallel_runs_are_ephemeral_and_unique
 test_real_boundary_hides_unrelated_host_files
 test_current_peer_cli_invocations
+test_peer_credentials_are_not_copied
 test_snapshot_tolerates_tracked_deletions
 test_live_workspace_bypass_is_refused
 test_non_git_snapshot_is_refused

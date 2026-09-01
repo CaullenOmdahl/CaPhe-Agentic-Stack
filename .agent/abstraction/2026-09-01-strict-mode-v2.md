@@ -32,7 +32,8 @@ observable evidence required to accept a change.
 - Caching is disabled by default. A repository may opt in per command only when it declares all content,
   environment, configuration, and toolchain identity inputs.
 - Local peer review runs from an index-only snapshot behind an OS boundary. Each peer receives an
-  ephemeral home containing only the minimum CLI identity/authentication state needed to run.
+  ephemeral home containing only non-secret CLI preferences needed to run; host authentication files
+  are never copied into model-readable storage.
 
 ## Rules
 
@@ -60,13 +61,17 @@ observable evidence required to accept a change.
   its configured `testpaths` does not include a directory literally named `tests`. Pytest runs from that
   project root without a hard-coded path so every configured root is honored. A project that declares a
   pytest dependency is also scheduled, including conventional root-level `test_*.py` modules; plain test
-  trees retain unittest discovery so default gates do not silently skip authoritative tests.
+  trees and projects with root-level `test*.py` modules retain unittest discovery so default gates do not
+  silently skip authoritative tests. Unittest starts at `tests/` when present and otherwise at the project
+  root.
 - `intended` Failure output is preserved and displayed.
 - `intended` Initialization fails atomically on malformed markers and deduplicates symlink aliases.
 - `intended` Peer review denies host filesystem access by default. It exposes only the staged snapshot,
   the peer's ephemeral run directory, selected operating-system/runtime paths, the exact peer executable,
   and network access needed for the review service. The child environment is rebuilt from an allowlist;
   unrelated repositories, notes, credentials, environment variables, and host temporary files stay hidden.
+  Authentication caches and token files are not imported. A peer that cannot authenticate without such a
+  file is unavailable and must not weaken the boundary.
 - `legacy` Re-running all auto-detected stacks at every commit is replaced by explicit impact scope.
 - `legacy` A single ever-growing traceability table is replaced by per-change evidence records.
 

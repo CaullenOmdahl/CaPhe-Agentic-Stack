@@ -36,7 +36,7 @@ while IFS= read -r -d '' entry; do
   esac
   excluded_file "$file" && continue
   check_filename "$file"
-  if git cat-file blob "$object_id" | grep -qE "$content_pattern"; then
+  if git cat-file blob "$object_id" | grep -E "$content_pattern" >/dev/null; then
     echo "public-safety staged content finding: $file" >&2
     failed=1
   fi
