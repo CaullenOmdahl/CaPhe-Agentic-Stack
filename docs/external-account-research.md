@@ -11,6 +11,25 @@ The filter for this repository is strict:
 
 ## Highest Priority
 
+### MemPalace
+
+Source:
+
+- [MemPalace/mempalace](https://github.com/MemPalace/mempalace)
+
+Why it matters:
+
+- Local-first semantic and lexical retrieval over source text with structured scopes and pluggable backends.
+- Reproducible retrieval benchmarks and explicit reporting where lossy compression underperforms raw text.
+- Useful upstream implementation for source-preserving memory rather than another summary-only store.
+
+Integrated direction:
+
+- Keep protected transcripts and explicit notes canonical.
+- Use MemPalace only as a pinned, rebuildable, sanitized derived index.
+- Physically isolate security domains and quarantine ambiguous session scope.
+- Require private safety, citation, correctness, recall, latency, and token benchmarks before auto-ingestion.
+
 ### vercel-labs
 
 Sources:

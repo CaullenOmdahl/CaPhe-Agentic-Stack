@@ -1,0 +1,16 @@
+{
+  "approval": "Caullen Omdahl, 2026-09-01",
+  "decision": "ADR-0001; ADR-0002",
+  "id": "strict-memory-efficiency-v2",
+  "lane": "full-risk",
+  "review": "pending-pr",
+  "status": "implemented-local",
+  "tests": [
+    "python3 -m unittest discover -s tests -v",
+    "bash strict-mode/test/shell-syntax-test.sh",
+    "bash strict-mode/test/strict-confer-isolation-test.sh",
+    "bash test/public-safety-test.sh",
+    "bash strict-mode/bin/strict-green-gate.sh --mode completion",
+    "private five-case memory benchmark and three-domain artifact gate"
+  ]
+}

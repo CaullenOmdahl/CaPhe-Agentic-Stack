@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/strict-confer-test.XXXXXX")"
+cleanup() {
+  rm -rf "$TMP"
+}
+trap cleanup EXIT
+
+fail() {
+  echo "FAIL: $*" >&2
+  exit 1
+}
+
+make_mock_peer() {
+  local path="$1" name="$2"
+  cat > "$path" <<MOCK
+#!/usr/bin/env bash
+set -euo pipefail
+echo "$name review: run=\${STRICT_CONFER_RUN_ID:-} peer=\${STRICT_CONFER_PEER:-} cwd=\$(pwd)"
+if [ -f review-target.txt ]; then
+  echo "$name snapshot: \$(cat review-target.txt)"
+fi
+if [ -f .env ]; then
+  echo "$name secret snapshot: \$(cat .env)"
+fi
+printf '%s\\n' "$name:\${STRICT_CONFER_RUN_ID:-}:\${STRICT_CONFER_RUN_ROOT:-}:\${STRICT_CONFER_PEER:-}:\$(pwd)" >> "\$STRICT_CONFER_TEST_LOG"
+MOCK
+  chmod +x "$path"
+}
+
+make_arg_logging_peer() {
+  local path="$1" name="$2"
+  cat > "$path" <<MOCK
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$name args: \$*"
+MOCK
+  chmod +x "$path"
+}
+
+test_parallel_runs_are_ephemeral_and_unique() {
+  local project="$TMP/project"
+  local mockbin="$TMP/bin"
+  local log="$TMP/peer.log"
+  mkdir -p "$project" "$mockbin"
+  git -C "$project" init -q
+  printf '%s\n' ".env" > "$project/.gitignore"
+  printf '%s\n' "dirty workspace is visible" > "$project/review-target.txt"
+  printf '%s\n' "must stay private" > "$project/.env"
+  make_mock_peer "$mockbin/claude" "claude"
+  make_mock_peer "$mockbin/agy" "agy"
+  make_mock_peer "$mockbin/codex" "codex"
+
+  (
+    cd "$project"
+    PATH="$mockbin:$PATH" STRICT_CONFER_TEST_LOG="$log" \
+      "$ROOT/bin/strict-confer.sh" codex --save same-label "first prompt" \
+      > "$TMP/out-1" 2> "$TMP/err-1"
+  ) &
+  local p1=$!
+  (
+    cd "$project"
+    PATH="$mockbin:$PATH" STRICT_CONFER_TEST_LOG="$log" \
+      "$ROOT/bin/strict-confer.sh" codex --save same-label "second prompt" \
+      > "$TMP/out-2" 2> "$TMP/err-2"
+  ) &
+  local p2=$!
+
+  wait "$p1"
+  wait "$p2"
+
+  [ -s "$log" ] || fail "mock peers did not record any invocations"
+
+  local run_count root_count cwd_count evidence_count
+  run_count="$(awk -F: '{print $2}' "$log" | sort -u | sed '/^$/d' | wc -l | tr -d ' ')"
+  root_count="$(awk -F: '{print $3}' "$log" | sort -u | sed '/^$/d' | wc -l | tr -d ' ')"
+  cwd_count="$(awk -F: '{print $5}' "$log" | sort -u | sed '/^$/d' | wc -l | tr -d ' ')"
+  evidence_count="$(find "$project/.agent/reviews" -type f -name '*same-label.md' | wc -l | tr -d ' ')"
+
+  [ "$run_count" -eq 2 ] || fail "expected 2 unique run IDs, got $run_count"
+  [ "$root_count" -eq 2 ] || fail "expected 2 unique run roots, got $root_count"
+  [ "$cwd_count" -eq 4 ] || fail "expected 4 isolated peer working directories, got $cwd_count"
+  [ "$evidence_count" -eq 2 ] || fail "expected 2 non-clobbered evidence files, got $evidence_count"
+  grep -q "snapshot: dirty workspace is visible" "$TMP/out-1" || fail "first run peer could not read workspace snapshot"
+  grep -q "snapshot: dirty workspace is visible" "$TMP/out-2" || fail "second run peer could not read workspace snapshot"
+  ! grep -q "must stay private" "$TMP/out-1" || fail "first run copied an ignored secret-bearing file"
+  ! grep -q "must stay private" "$TMP/out-2" || fail "second run copied an ignored secret-bearing file"
+
+  while IFS= read -r root; do
+    [ -n "$root" ] || continue
+    [ ! -e "$root" ] || fail "ephemeral run root was not cleaned: $root"
+  done < <(awk -F: '{print $3}' "$log" | sort -u)
+}
+
+test_current_peer_cli_invocations() {
+  local project="$TMP/args-project"
+  local mockbin="$TMP/args-bin"
+  mkdir -p "$project" "$mockbin"
+  git -C "$project" init -q
+  make_arg_logging_peer "$mockbin/claude" "claude"
+  make_arg_logging_peer "$mockbin/agy" "agy"
+  make_arg_logging_peer "$mockbin/codex" "codex"
+
+  (
+    cd "$project"
+    PATH="$mockbin:$PATH" \
+    STRICT_CONFER_AGY_MODEL="test-gemini" \
+    STRICT_CONFER_CODEX_MODEL="test-codex" \
+      "$ROOT/bin/strict-confer.sh" claude "review prompt" \
+      > "$TMP/args-out" 2> "$TMP/args-err"
+  )
+
+  grep -q -- "agy args: --sandbox --mode plan --dangerously-skip-permissions --model test-gemini --effort high --print=review prompt" "$TMP/args-out" || \
+    fail "agy was not invoked with the verified headless read-only command"
+  grep -q -- "codex args: exec -m test-codex --ephemeral --skip-git-repo-check --sandbox read-only review prompt" "$TMP/args-out" || \
+    fail "codex model override was not honored"
+}
+
+test_timeout_kills_peer_child_process_group() {
+  local project="$TMP/timeout-project"
+  local mockbin="$TMP/timeout-bin"
+  local child_pid_file="$TMP/child.pid"
+  mkdir -p "$project" "$mockbin"
+  git -C "$project" init -q
+
+  cat > "$mockbin/claude" <<'MOCK'
+#!/usr/bin/env bash
+set -euo pipefail
+(sleep 30) &
+echo "$!" > "$STRICT_CONFER_CHILD_PID_FILE"
+wait "$!"
+MOCK
+  chmod +x "$mockbin/claude"
+  make_mock_peer "$mockbin/agy" "agy"
+  make_mock_peer "$mockbin/codex" "codex"
+
+  set +e
+  (
+    cd "$project"
+    PATH="$mockbin:$PATH" \
+    STRICT_CONFER_TEST_LOG="$TMP/timeout-peer.log" \
+    STRICT_CONFER_CHILD_PID_FILE="$child_pid_file" \
+    STRICT_CONFER_TIMEOUT_SECONDS=1 \
+      "$ROOT/bin/strict-confer.sh" codex "timeout prompt" \
+      > "$TMP/timeout-out" 2> "$TMP/timeout-err"
+  )
+  local status=$?
+  set -e
+
+  [ "$status" -eq 3 ] || fail "expected unavailable-peer exit 3 after timeout, got $status"
+  [ -s "$child_pid_file" ] || fail "hanging mock peer did not record child pid"
+
+  local child_pid
+  child_pid="$(cat "$child_pid_file")"
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if ! kill -0 "$child_pid" 2>/dev/null; then
+      return 0
+    fi
+    sleep 0.2
+  done
+  fail "timed-out peer child process is still alive: $child_pid"
+}
+
+test_parallel_runs_are_ephemeral_and_unique
+test_current_peer_cli_invocations
+test_timeout_kills_peer_child_process_group
+echo "strict-confer isolation tests passed"

@@ -13,6 +13,8 @@ This repository provides:
 - thin agent-specific adapters for Codex, Claude, and Gemini / Antigravity;
 - reusable skills for intended behavior, review, branch orientation, and UX-first planning;
 - a pull-request-centered review workflow;
+- evidence-preserving Strict Mode v2 with focused feedback and full completion gates;
+- a local MemPalace-derived memory adapter that preserves source citations and security-domain isolation;
 - CLI-first tool-selection rules that prefer the developer's existing environment over auth-dependent integrations;
 - an agent-facing install route for copying prompts, entrypoints, and skills into normal local config locations;
 - public-safety rules for keeping private machine and client details out of public docs;
@@ -54,10 +56,22 @@ If a workflow depends on private operational details, document the shape of the 
 │   ├── install-for-agents.md
 │   ├── public-safety.md
 │   └── review-workflow.md
+├── memory/
+│   ├── benchmark_memory.py
+│   ├── export_codex_memory.py
+│   ├── mempalace_adapter.py
+│   └── sync_mempalace.py
+├── strict-mode/
+│   ├── bin/
+│   ├── templates/
+│   └── test/
 └── skills/
     ├── code-refactor-review/SKILL.md
+    ├── gh-review-certify-loop/SKILL.md
     ├── intended-behavior/SKILL.md
     ├── prepare-branch-context/SKILL.md
+    ├── memory-palace-recall/SKILL.md
+    ├── strict-mode/SKILL.md
     └── ux-flow-plan/SKILL.md
 ```
 
@@ -104,8 +118,11 @@ Adapters should stay small. If a rule applies to every agent, put it in `docs/ca
 The `skills/` directory contains reusable public workflow skills:
 
 - [`skills/code-refactor-review`](skills/code-refactor-review/SKILL.md): review diffs for reuse, composition, codebase consistency, unnecessary indirection, React/frontend state slop, and avoidable churn.
+- [`skills/gh-review-certify-loop`](skills/gh-review-certify-loop/SKILL.md): discover currently active GitHub reviewers and drive thread-aware PR review without waiting on retired integrations.
 - [`skills/intended-behavior`](skills/intended-behavior/SKILL.md): infer product behavior, UI placement, recurrence, and ask-versus-infer thresholds before implementation.
+- [`skills/memory-palace-recall`](skills/memory-palace-recall/SKILL.md): retrieve scoped prior context through sanitized, source-linked local evidence.
 - [`skills/prepare-branch-context`](skills/prepare-branch-context/SKILL.md): build read-only context for a branch or PR before follow-up work.
+- [`skills/strict-mode`](skills/strict-mode/SKILL.md): apply evidence-preserving work lanes, human gates, PR review, and full completion checks.
 - [`skills/ux-flow-plan`](skills/ux-flow-plan/SKILL.md): map current and desired product flows before attaching implementation files.
 
 These skills are local workflow aids. They do not replace tests, artifact verification, or independent PR review.
@@ -217,7 +234,9 @@ The current stack includes:
 
 - shared canon and root entrypoints;
 - Codex, Claude, and Gemini / Antigravity adapters;
-- four workflow skills;
+- seven workflow skills, including active-review discovery, strict-mode governance, and scoped memory recall;
+- Strict Mode v2 source, templates, tests, and completion tooling;
+- a pinned, local-only MemPalace export/sync/benchmark adapter;
 - PR-review and public-safety documentation;
 - external workflow and account research notes.
 

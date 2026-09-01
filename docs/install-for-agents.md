@@ -53,16 +53,36 @@ The repository is the distribution source. The local machine is the runtime envi
    - Install only skills that are useful for that machine and agent into their respective skill directories, such as `~/.codex/skills/`, `~/.claude/skills/`, `~/.gemini/skills/`, or `~/.agents/skills/`.
    - Rewrite installed skill canon references from `docs/canon.md` to the machine-level canon path.
 
-6. Create or update private local notes when useful.
+6. Install strict-mode source when selected.
+   - Copy the checked-in `strict-mode/` tree to the machine's deployed strict-mode location.
+   - Preserve executable modes under `strict-mode/bin/` and `strict-mode/test/`.
+   - Run `strict-init.sh` only for repositories whose scaffold is absent or on an older
+     `.agent/.strict-version`; ordinary skill invocation should not refresh files repeatedly.
+   - Treat `FAST GREEN` as focused feedback. Completion requires `--mode completion`.
+
+7. Configure local memory retrieval only when requested.
+   - Keep private domain mappings, sanitized exports, physical palaces, and benchmark fixtures outside
+     this public repository with owner-only permissions.
+   - Use separate physical palaces for separate security domains.
+   - Pin the reviewed MemPalace version and keep embeddings local unless a separate human-gated decision
+     authorizes a remote backend.
+   - Do not enable automatic ingestion until the private adoption benchmark passes.
+   - After a domain passes, use `memory/sync_mempalace.py` for bounded local-only updates. If recurring
+     sync is useful, schedule that deterministic command at the OS layer instead of waking a model.
+   - Re-run owner-only hardening and the tree permission audit after every index write.
+
+8. Create or update private local notes when useful.
    - Local notes may include exact paths, available CLIs, account names, hostnames, project names, and operating facts.
    - Keep those notes outside this repository.
    - Do not commit them to the public stack.
 
-7. Verify the install.
+9. Verify the install.
    - Confirm the machine-level canon is readable.
    - Confirm each installed entrypoint points to the machine-level canon.
    - Confirm each installed skill has its supporting files.
    - Confirm no runtime checkout of this repository is required for normal agent use.
+   - Confirm strict-mode source tests and the completion gate pass.
+   - Confirm memory indexes are outside Git trees, owner-only, and citation-resolvable.
 
 ## Tool Inventory Guidance
 

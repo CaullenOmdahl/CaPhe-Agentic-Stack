@@ -4,6 +4,22 @@ This document records public workflow ideas considered for the stack and how the
 
 ## Integrated
 
+### MemPalace-derived local recall
+
+Source: `https://github.com/MemPalace/mempalace`
+
+Integrated as `memory/mempalace_adapter.py`, `memory/export_codex_memory.py`,
+`docs/memory-architecture.md`, and `skills/memory-palace-recall/SKILL.md`.
+
+Adaptation:
+
+- source transcripts remain authoritative;
+- sanitizer-approved excerpts are indexed and sanitized again on source resolution;
+- separate physical palaces enforce project/client security domains;
+- missing or mixed trusted workspace metadata quarantines rather than guesses;
+- remote embeddings and automatic ingestion remain gated;
+- a deterministic private benchmark, not an LLM verdict, decides adoption.
+
 ### Code refactor review
 
 Source idea: `https://gist.github.com/jnsahaj/22806282b18a5c5136e0805d892dee39`

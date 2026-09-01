@@ -20,6 +20,7 @@ Machine-global installs should use the agents' normal config locations rather th
 Current skills fall into these public-safe categories:
 
 - process discipline: intended behavior, strict-mode variants, verification, second opinion;
+- local memory: sanitized source-linked recall over physically isolated derived indexes;
 - review and PR support: code review, GitHub publishing, review follow-up, CI debugging;
 - UI and product planning: frontend design, UX flow, product context;
 - document and data utilities: spreadsheets, documents, PDF handling;
@@ -32,8 +33,11 @@ Only generic, reusable, public-safe skills should be promoted into this reposito
 ## Public Skills In This Repository
 
 - `skills/code-refactor-review`: local review lens for reuse, consistency, composition, and slop detection.
+- `skills/gh-review-certify-loop`: active-reviewer discovery plus thread-aware pull-request certification.
 - `skills/intended-behavior`: behavior-contract workflow for inferring product behavior, UI placement, recurrence, and ask-versus-infer thresholds before implementation.
 - `skills/prepare-branch-context`: read-only branch and PR orientation before follow-up work.
+- `skills/strict-mode`: evidence-preserving work lanes, named gates, PR review, and full completion checks.
+- `skills/memory-palace-recall`: scoped local recall with sanitized exact-source evidence.
 - `skills/ux-flow-plan`: UX-first flow mapping before implementation planning.
 
 ## Tooling Policy
@@ -50,6 +54,9 @@ The reusable rule is CLI-first, auth-light tool selection:
 ## Current Review Policy
 
 Implementation review should happen through pull requests. Local peer review can supplement design work or act as an emergency fallback, but it should not block opening a PR or be represented as completed implementation review.
+
+Focused pre-commit checks provide fast feedback. Completion remains an uncached full declared matrix in
+authoritative CI or locally when CI is missing or incomplete.
 
 ## Current Worktree Policy
 
