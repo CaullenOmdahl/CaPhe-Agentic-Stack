@@ -250,6 +250,36 @@ class StrictGatePlanTests(unittest.TestCase):
             [{"name": "python-pytest", "run": ["python3", "-m", "pytest"]}],
         )
 
+    def test_default_manifest_detects_poetry_dependency_group_pytest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "tests").mkdir()
+            (root / "tests" / "test_mixed.py").write_text(
+                "import unittest\n\n"
+                "class PassingTest(unittest.TestCase):\n"
+                "    def test_passing(self):\n"
+                "        self.assertTrue(True)\n\n"
+                "def test_pytest_failure():\n"
+                "    assert False\n"
+            )
+            (root / "pyproject.toml").write_text(
+                "[tool.poetry]\n"
+                "name='poetry-project'\n"
+                "version='0.1.0'\n\n"
+                "[tool.poetry.group.dev.dependencies]\n"
+                "pytest='^8.0'\n"
+            )
+            data = strict_gate.discover_default_manifest(root)
+        python_commands = [
+            command
+            for command in data["components"][0]["commands"]
+            if command["name"].startswith("python-")
+        ]
+        self.assertEqual(
+            python_commands,
+            [{"name": "python-pytest", "run": ["python3", "-m", "pytest"]}],
+        )
+
     def test_default_manifest_schedules_root_level_unittest_module(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -344,6 +374,47 @@ class StrictGatePlanTests(unittest.TestCase):
                     "name": "python-unittest",
                     "run": ["python3", "-m", "unittest", "discover", "-s", ".", "-v"],
                 }
+            ],
+        )
+
+    def test_parent_pytest_ignores_nested_pytest_project(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "pyproject.toml").write_text(
+                "[project]\n"
+                "name='parent'\n"
+                "version='0.1.0'\n"
+                "dependencies=['pytest']\n"
+            )
+            (root / "tests").mkdir()
+            (root / "tests" / "test_parent.py").write_text("def test_parent():\n    assert True\n")
+            child = root / "package"
+            (child / "tests").mkdir(parents=True)
+            (child / "pyproject.toml").write_text(
+                "[project]\n"
+                "name='child'\n"
+                "version='0.1.0'\n"
+                "dependencies=['pytest']\n"
+            )
+            (child / "tests" / "test_child.py").write_text("def test_child():\n    assert True\n")
+            data = strict_gate.discover_default_manifest(root)
+        python_commands = [
+            command
+            for command in data["components"][0]["commands"]
+            if command["name"].startswith("python-")
+        ]
+        self.assertEqual(
+            python_commands,
+            [
+                {
+                    "name": "python-pytest",
+                    "run": ["python3", "-m", "pytest", "--ignore=package"],
+                },
+                {
+                    "name": "python-pytest-package",
+                    "run": ["python3", "-m", "pytest"],
+                    "cwd": "package",
+                },
             ],
         )
 

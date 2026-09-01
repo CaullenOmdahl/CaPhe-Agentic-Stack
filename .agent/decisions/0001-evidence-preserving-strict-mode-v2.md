@@ -24,10 +24,11 @@ verifier; otherwise it runs full. Manifest edits force full verification. Cachin
 input/toolchain declarations plus atomic per-key locking. Store evidence per change and generate the
 aggregate index. Keep all existing named human gates and PR implementation review.
 Generated manifests preserve each Python test root's declared runner: explicit pytest configuration or
-dependency, including standardized top-level dependency groups, selects `python -m pytest`, while
+dependency, including standardized top-level and Poetry dependency groups, selects `python -m pytest`, while
 undeclared roots retain unittest discovery. Explicitly configured pytest project roots are scheduled even
 without a literal `tests/` directory, and pytest receives no hard-coded path, allowing its complete
-`testpaths` contract to select the suite. Plain unittest projects with root-level `test*.py` modules are
+`testpaths` contract to select the suite. Ancestor pytest commands explicitly ignore nested Python project
+roots, which are scheduled by their own runner. Plain unittest projects with root-level `test*.py` modules are
 also discovery roots; they start discovery at the project root when no `tests/` directory exists.
 
 Local `strict-confer` fallback reviews use a default-deny host filesystem boundary, an index-only project
@@ -82,6 +83,9 @@ review now carries no host credentials and fails closed when a peer cannot authe
 The following exact-head review found nested `tests/` directories and modules could schedule the same
 unittest project twice. Both discovery signals now resolve to the nearest declared Python project before
 deduplication.
+The next review reproduced duplicate parent/child pytest collection and a Poetry dev-group suite silently
+classified as unittest. Ancestor pytest runs now ignore nested project roots, and Poetry main, legacy dev,
+and named-group dependency tables participate in runner selection.
 
 ## Consequences
 

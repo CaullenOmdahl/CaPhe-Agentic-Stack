@@ -388,6 +388,27 @@ def _declares_pytest(project_root: Path) -> bool:
         ):
             return True
 
+        tool = data.get("tool", {}) if isinstance(data, dict) else {}
+        poetry = tool.get("poetry", {}) if isinstance(tool, dict) else {}
+        poetry_dependencies: list[Any] = []
+        if isinstance(poetry, dict):
+            poetry_dependencies.extend(
+                (poetry.get("dependencies", {}), poetry.get("dev-dependencies", {}))
+            )
+            poetry_groups = poetry.get("group", {})
+            if isinstance(poetry_groups, dict):
+                poetry_dependencies.extend(
+                    group.get("dependencies", {})
+                    for group in poetry_groups.values()
+                    if isinstance(group, dict)
+                )
+        if any(
+            isinstance(dependencies, dict)
+            and any(name.lower().replace("_", "-") == "pytest" for name in dependencies)
+            for dependencies in poetry_dependencies
+        ):
+            return True
+
     for requirements in project_root.glob("requirements*.txt"):
         if requirements.is_file() and re.search(
             r"(?im)^\s*pytest(?:\s|$|[<>=!~;\[])",
@@ -577,6 +598,11 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
         cwd = "." if python_root == root else python_root.relative_to(root).as_posix()
         suffix = "" if cwd == "." else f"-{cwd.replace('/', '-')}"
         runner = _python_test_runner(root, python_root)
+        nested_roots = sorted(
+            candidate
+            for candidate in python_test_roots
+            if candidate != python_root and python_root in candidate.parents
+        )
         command = (
             {
                 "name": f"python-pytest{suffix}",
@@ -584,6 +610,10 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
                     "python3",
                     "-m",
                     "pytest",
+                    *[
+                        f"--ignore={candidate.relative_to(python_root).as_posix()}"
+                        for candidate in nested_roots
+                    ],
                 ],
             }
             if runner == "pytest"
