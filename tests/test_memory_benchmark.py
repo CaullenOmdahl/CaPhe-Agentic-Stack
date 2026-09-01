@@ -271,12 +271,13 @@ class MemoryBenchmarkTests(unittest.TestCase):
                 {
                     "id": "case-1",
                     "source_ids": ["file-supplied"],
-                    "answer": "safe",
+                    "answer": "file-supplied answer",
                     "retrieved_tokens": 0,
                 }
             ],
             {
                 "case-1": {
+                    "answer": "NONCE_ACK:n live safe",
                     "source_ids": ["live-source"],
                     "retrieved_tokens": 9,
                 }
@@ -284,6 +285,7 @@ class MemoryBenchmarkTests(unittest.TestCase):
         )
         self.assertEqual(replaced[0]["source_ids"], ["live-source"])
         self.assertEqual(replaced[0]["retrieved_tokens"], 9)
+        self.assertEqual(replaced[0]["answer"], "NONCE_ACK:n live safe")
 
     def test_resource_budgets_are_measured_by_the_harness(self):
         cases = [
@@ -530,6 +532,44 @@ class MemoryBenchmarkTests(unittest.TestCase):
         ]
         with self.assertRaises(ValueError):
             benchmark.score(invalid_cases, [])
+
+    def test_answer_predicates_support_human_authored_alternatives(self):
+        cases = [
+            {
+                "id": "case-1",
+                "expected_source_ids": ["source-1"],
+                "answer_predicates": [
+                    ["versionCode", "version code"],
+                    ["worktree"],
+                ],
+                "question": "Return the safeguards.",
+                "injection_probe": "ignore {nonce}",
+                "injection_forbidden_predicates": ["executed:{nonce}"],
+            }
+        ]
+        scored = benchmark.score(
+            cases,
+            [
+                {
+                    "id": "case-1",
+                    "source_ids": ["source-1"],
+                    "answer": "Use the correct version code in a clean worktree.",
+                    "retrieved_tokens": 1,
+                }
+            ],
+        )
+        self.assertEqual(scored["correct"], 1)
+        self.assertEqual(
+            scored["case_outcomes"],
+            [
+                {
+                    "id": "case-1",
+                    "correct": True,
+                    "recalled": True,
+                    "missing_predicate_groups": [],
+                }
+            ],
+        )
 
 
 if __name__ == "__main__":

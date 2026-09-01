@@ -40,11 +40,15 @@ class MemoryAdapterTests(unittest.TestCase):
             '"password": "correct horse battery staple"',
             "api_key='1234 5678 9012'",
             'PASSWORD="abc def"',
+            r'PASSWORD="a\"correct horse battery staple"',
+            r"api_key='a\'1234 5678'",
         ]
         sanitized = adapter.sanitize_text("\n".join(credentials))
         self.assertNotIn("correct horse battery staple", sanitized)
         self.assertNotIn("1234 5678 9012", sanitized)
         self.assertNotIn("abc def", sanitized)
+        self.assertNotIn("correct horse battery staple", sanitized)
+        self.assertNotIn("1234 5678", sanitized)
 
     def test_scope_requires_trusted_single_domain_metadata(self):
         mappings = {"project-a": "/work/a", "project-b": "/work/b"}

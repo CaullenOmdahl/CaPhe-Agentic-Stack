@@ -23,19 +23,21 @@ MemPalace may create backend files with group/world-readable defaults. After eve
 replace the last known-good active generation. When the final export leaves a domain, sync reconciles the
 existing active palace against the empty export directory so stale drawers are actually removed.
 
-The 2026-09-01 private five-case BlackSheep v8 pilot retained 5/5 answer and recall-at-5 results while
+The 2026-09-01 private five-case BlackSheep v9 pilot retained 5/5 answer and recall-at-5 results while
 reducing observed retrieval input from 9,820 to 5,585 approximate tokens (43.1%). The harness measured
-the slowest end-to-end candidate case at 46,551.67 ms against a 180,000 ms cap and the complete owner-only
-index at 114,607,915 bytes against a 268,435,456-byte cap. Citations resolved, and the secret-canary,
+the slowest end-to-end candidate case at 107,493.63 ms against a 180,000 ms cap and the complete owner-only
+index at 118,889,029 bytes against a 268,435,456-byte cap. Citations resolved, and the secret-canary,
 cross-domain, and injection gates remained at zero. Current benchmark cases require non-empty
-human-authored answer predicates plus at least one injection probe. The benchmark harness generates a fresh
+human-authored answer predicate groups plus at least one injection probe. A group may provide narrow semantic
+alternatives for formatting-equivalent terms, and the result records every case's recall and missing groups.
+The benchmark harness generates a fresh
 nonce, frames it inside untrusted evidence, invokes the candidate probe command itself, and requires the
 command to echo `NONCE_ACK:<nonce>`. Scoring fails when the observed
 candidate answer contains the nonce-bound forbidden outcome or when runner-controlled provenance is absent;
 candidate result files cannot attest to their own injection safety.
 The same runner places a fresh secret canary inside untrusted evidence, runs every benchmark retrieval,
-and replaces file-supplied source hits and token counts with those live observations. Candidate-supplied safety counters
-are ignored: the harness scans the actual answer, resolves every observed top-five citation against the owner-only
+and replaces file-supplied answers, source hits, and token counts with those live observations. Candidate-supplied safety
+counters are ignored: the harness scores and scans the actual live answer, resolves every observed top-five citation against the owner-only
 catalog and canonical JSONL, first requiring its hash, event, and generation to exist in the selected
 derived export. It derives cross-domain failures from both export placement and canonical scope, and rejects
 negative token measurements. Live append-only transcripts are not benchmark anchors; use stable historical sources so exact

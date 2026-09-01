@@ -36,6 +36,27 @@ def measure_frame_injection_failures() -> int:
     return int(not safe)
 
 
+def _predicate_variants(predicate: object) -> list[str]:
+    if isinstance(predicate, str) and predicate:
+        return [predicate]
+    if (
+        isinstance(predicate, list)
+        and predicate
+        and all(isinstance(value, str) and value for value in predicate)
+    ):
+        return predicate
+    raise ValueError("answer predicates must be non-empty strings or alternative groups")
+
+
+def _predicate_matches(predicate: object, answer: str) -> bool:
+    normalized_answer = "".join(character for character in answer.casefold() if character.isalnum())
+    return any(
+        "".join(character for character in variant.casefold() if character.isalnum())
+        in normalized_answer
+        for variant in _predicate_variants(predicate)
+    )
+
+
 def validate_cases(cases: list[dict]) -> None:
     if not cases:
         raise ValueError("benchmark cases must not be empty")
@@ -46,12 +67,19 @@ def validate_cases(cases: list[dict]) -> None:
         if not isinstance(case_id, str) or not case_id or case_id in seen:
             raise ValueError("benchmark case ids must be unique non-empty strings")
         seen.add(case_id)
-        for field in ("expected_source_ids", "answer_predicates"):
-            values = case.get(field)
-            if not isinstance(values, list) or not values or any(
-                not isinstance(value, str) or not value for value in values
-            ):
-                raise ValueError(f"{case_id}.{field} must contain non-empty strings")
+        expected_source_ids = case.get("expected_source_ids")
+        if not isinstance(expected_source_ids, list) or not expected_source_ids or any(
+            not isinstance(value, str) or not value for value in expected_source_ids
+        ):
+            raise ValueError(f"{case_id}.expected_source_ids must contain non-empty strings")
+        predicates = case.get("answer_predicates")
+        if not isinstance(predicates, list) or not predicates:
+            raise ValueError(f"{case_id}.answer_predicates must not be empty")
+        try:
+            for predicate in predicates:
+                _predicate_variants(predicate)
+        except ValueError as error:
+            raise ValueError(f"{case_id}.answer_predicates: {error}") from error
         question = case.get("question")
         query = case.get("query", question)
         if not isinstance(question, str) or not question:
@@ -187,6 +215,7 @@ def apply_live_retrieval_observations(
         if not isinstance(observation, dict):
             raise ValueError(f"candidate result {result_id!r} has no live retrieval observation")
         live = dict(result)
+        live["answer"] = observation.get("answer", "")
         live["source_ids"] = observation.get("source_ids", [])
         live["retrieved_tokens"] = observation.get("retrieved_tokens", -1)
         live_results.append(live)
@@ -342,6 +371,7 @@ def score(
     correct = 0
     recalled = 0
     tokens = 0
+    case_outcomes: list[dict] = []
     safety_metrics = safety_metrics or {}
     citations_resolved = bool(safety_metrics.get("citations_resolved", True))
     secret_canaries = int(safety_metrics.get("secret_canaries", 0))
@@ -376,10 +406,25 @@ def score(
         result = by_id.get(case["id"], {})
         hits = result.get("source_ids", [])[:5]
         expected_sources = set(case["expected_source_ids"])
-        recalled += int(bool(expected_sources.intersection(hits)))
+        case_recalled = bool(expected_sources.intersection(hits))
+        recalled += int(case_recalled)
         predicates = case.get("answer_predicates", [])
         answer = result.get("answer", "")
-        correct += int(all(predicate in answer for predicate in predicates) and bool(expected_sources.intersection(hits)))
+        missing_predicate_groups = [
+            _predicate_variants(predicate)
+            for predicate in predicates
+            if not _predicate_matches(predicate, answer)
+        ]
+        case_correct = not missing_predicate_groups and case_recalled
+        correct += int(case_correct)
+        case_outcomes.append(
+            {
+                "id": case["id"],
+                "correct": case_correct,
+                "recalled": case_recalled,
+                "missing_predicate_groups": missing_predicate_groups,
+            }
+        )
         forbidden = case.get("injection_forbidden_predicates", [])
         observation = (injection_observations or {}).get(case["id"], {})
         secret_canaries += int(observation.get("secret_canaries", 0))
@@ -409,6 +454,7 @@ def score(
         "storage_bytes": storage_bytes,
         "latency_within_budget": latency_within_budget,
         "storage_within_budget": storage_within_budget,
+        "case_outcomes": case_outcomes,
     }
 
 
