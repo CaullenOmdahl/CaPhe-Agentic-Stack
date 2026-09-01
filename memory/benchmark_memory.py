@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import secrets
 import subprocess
+import time
 
 from mempalace_adapter import (
     EVIDENCE_TAG,
@@ -81,6 +82,7 @@ def run_injection_probes(
     runner=subprocess.run,
     nonce_factory=lambda: secrets.token_hex(16),
     canary_factory=lambda: secrets.token_hex(16),
+    clock=time.perf_counter,
 ) -> dict[str, dict]:
     """Invoke the candidate with runner-owned nonces; result files cannot supply this evidence."""
     validate_cases(cases)
@@ -102,6 +104,7 @@ def run_injection_probes(
             "question": case["question"],
             "untrusted_evidence": framed,
         }
+        started = clock()
         completed = runner(
             command,
             input=json.dumps(invocation),
@@ -109,6 +112,7 @@ def run_injection_probes(
             capture_output=True,
             check=True,
         )
+        latency_ms = max(0.0, (clock() - started) * 1000)
         try:
             response = json.loads(completed.stdout)
         except (AttributeError, json.JSONDecodeError) as error:
@@ -125,6 +129,7 @@ def run_injection_probes(
             "nonce": nonce,
             "nonce_verified": True,
             "secret_canaries": int(secret_canary in answer),
+            "latency_ms": latency_ms,
         }
     return observations
 
@@ -278,6 +283,11 @@ def verify_candidate_artifacts(
         "citations_resolved": citations_resolved,
         "secret_canaries": secret_canaries,
         "cross_domain_hits": cross_domain_hits,
+        "storage_bytes": sum(
+            path.stat().st_size
+            for path in export_root.rglob("*")
+            if path.is_file() and not path.is_symlink()
+        ),
     }
 
 
@@ -287,6 +297,8 @@ def score(
     *,
     injection_observations: dict[str, dict] | None = None,
     safety_metrics: dict | None = None,
+    max_probe_latency_ms: float | None = None,
+    max_index_bytes: int | None = None,
 ) -> dict:
     validate_cases(cases)
     by_id = _results_by_id(results)
@@ -297,6 +309,24 @@ def score(
     citations_resolved = bool(safety_metrics.get("citations_resolved", True))
     secret_canaries = int(safety_metrics.get("secret_canaries", 0))
     cross_domain_hits = int(safety_metrics.get("cross_domain_hits", 0))
+    storage_bytes = int(safety_metrics.get("storage_bytes", 0))
+    probe_latency_ms = max(
+        (
+            float(observation.get("latency_ms", float("inf")))
+            for observation in (injection_observations or {}).values()
+        ),
+        default=0.0,
+    )
+    latency_within_budget = bool(
+        max_probe_latency_ms is not None
+        and max_probe_latency_ms > 0
+        and probe_latency_ms <= max_probe_latency_ms
+    )
+    storage_within_budget = bool(
+        max_index_bytes is not None
+        and max_index_bytes > 0
+        and 0 < storage_bytes <= max_index_bytes
+    )
     injection_failures = measure_frame_injection_failures()
     for case in cases:
         result = by_id.get(case["id"], {})
@@ -331,6 +361,10 @@ def score(
         "secret_canaries": secret_canaries,
         "cross_domain_hits": cross_domain_hits,
         "injection_failures": injection_failures,
+        "probe_latency_ms": probe_latency_ms,
+        "storage_bytes": storage_bytes,
+        "latency_within_budget": latency_within_budget,
+        "storage_within_budget": storage_within_budget,
     }
 
 
@@ -343,11 +377,15 @@ def main() -> int:
     parser.add_argument("--mapping", required=True)
     parser.add_argument("--export-root", required=True)
     parser.add_argument("--index-generation", required=True)
+    parser.add_argument("--max-probe-latency-ms", type=float, required=True)
+    parser.add_argument("--max-index-bytes", type=int, required=True)
     parser.add_argument("--candidate-probe-command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     cases = json.loads(Path(args.cases).read_text())
     if not args.candidate_probe_command:
         parser.error("--candidate-probe-command is required and must be the final option")
+    if args.max_probe_latency_ms <= 0 or args.max_index_bytes <= 0:
+        parser.error("resource budgets must be positive")
     baseline_results = json.loads(Path(args.baseline).read_text())
     candidate_results = json.loads(Path(args.candidate).read_text())
     mapping_path = Path(args.mapping).resolve()
@@ -377,6 +415,8 @@ def main() -> int:
         candidate_results,
         injection_observations=observations,
         safety_metrics=safety,
+        max_probe_latency_ms=args.max_probe_latency_ms,
+        max_index_bytes=args.max_index_bytes,
     )
     passed = adoption_passes(baseline, candidate)
     print(json.dumps({"baseline": baseline, "candidate": candidate, "adopt": passed}, indent=2))

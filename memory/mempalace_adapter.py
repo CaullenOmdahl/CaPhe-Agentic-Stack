@@ -13,7 +13,7 @@ import stat
 from typing import Any, Iterable, NamedTuple
 
 
-SANITIZER_VERSION = "sanitize-v2"
+SANITIZER_VERSION = "sanitize-v3"
 CHUNKER_VERSION = "chunk-v2"
 EVIDENCE_TAG = "UNTRUSTED_MEMORY_EVIDENCE"
 
@@ -61,6 +61,20 @@ SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("SLACK_TOKEN", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
     ("NPM_TOKEN", re.compile(r"\bnpm_[A-Za-z0-9]{20,}\b")),
     ("AUTH_BEARER", re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{16,}")),
+    (
+        "QUOTED_CREDENTIAL",
+        re.compile(
+            r'''(?ix)
+            (?:
+                \b[A-Z][A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|API_KEY|ACCESS_KEY)[A-Z0-9_]*\b
+                |
+                ["']?(?:api[_-]?key|token|secret|password)["']?
+            )
+            \s*[:=]\s*
+            (?:"[^"\r\n]{8,}"|'[^'\r\n]{8,}')
+            '''
+        ),
+    ),
     (
         "NAMED_CREDENTIAL",
         re.compile(
@@ -333,7 +347,18 @@ def index_generation_id(
 def adoption_passes(baseline: dict[str, Any], candidate: dict[str, Any]) -> bool:
     if not candidate.get("citations_resolved", False):
         return False
+    if not candidate.get("latency_within_budget", False):
+        return False
+    if not candidate.get("storage_within_budget", False):
+        return False
     if any(candidate.get(field, 0) != 0 for field in ("secret_canaries", "cross_domain_hits", "injection_failures")):
+        return False
+    if (
+        baseline.get("total", 0) <= 0
+        or candidate.get("total", 0) <= 0
+        or baseline.get("tokens", 0) <= 0
+        or candidate.get("tokens", -1) < 0
+    ):
         return False
     baseline_accuracy = baseline["correct"] / baseline["total"]
     candidate_accuracy = candidate["correct"] / candidate["total"]

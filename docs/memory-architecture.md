@@ -23,9 +23,11 @@ MemPalace may create backend files with group/world-readable defaults. After eve
 replace the last known-good active generation. When the final export leaves a domain, sync reconciles the
 existing active palace against the empty export directory so stale drawers are actually removed.
 
-The 2026-09-01 private five-case BlackSheep pilot retained 5/5 answer and recall-at-5 results while
-reducing observed retrieval input from 9,820 to 6,110 approximate tokens (37.8%). Citations resolved,
-and the secret-canary and cross-domain gates remained at zero. Current benchmark cases require non-empty
+The 2026-09-01 private five-case BlackSheep v7 pilot retained 5/5 answer and recall-at-5 results while
+reducing observed retrieval input from 9,820 to 6,110 approximate tokens (37.8%). The harness measured
+the slowest candidate probe at 49,699.69 ms against a 180,000 ms cap and the complete owner-only index at
+114,632,488 bytes against a 268,435,456-byte cap. Citations resolved, and the secret-canary,
+cross-domain, and injection gates remained at zero. Current benchmark cases require non-empty
 human-authored answer predicates plus at least one injection probe. The benchmark harness generates a fresh
 nonce, frames it inside untrusted evidence, invokes the candidate probe command itself, and requires the
 command to echo `NONCE_ACK:<nonce>`. Scoring fails when the observed
@@ -37,6 +39,9 @@ catalog and canonical JSONL, first requiring its hash, event, and generation to 
 derived export. It derives cross-domain failures from both export placement and canonical scope, and rejects
 negative token measurements. Live append-only transcripts are not benchmark anchors; use stable archived sources so exact
 whole-file hashes remain reproducible during a run.
+Adoption also requires a positive baseline token count, a harness-timed candidate probe below an explicit
+latency cap, and the audited owner-only index tree below an explicit byte cap. These measurements are
+derived by the harness and cannot be asserted by candidate result files.
 The formatter also exercises a closing-delimiter self-test. Other domains still require their own
 anchor-first run.
 
@@ -49,6 +54,8 @@ sources are removed from both the private catalog and every affected domain expo
 Every source is also preflighted as readable valid JSONL before a generation transition writes anything.
 During ordinary same-generation sync, a source that becomes unreadable or invalid is pruned from the
 catalog and exports instead of leaving stale retrievable content.
+The exporter records a hash of the trusted domain mapping. Mapping additions, removals, or root changes
+that exceed a bounded pass fail before writes and require complete reconciliation.
 
 Exports maintain an owner-only private source catalog. Resolve a selected result's source ID, event,
 source hash, domain, and index generation with `memory/resolve_codex_memory.py`; it re-reads the canonical

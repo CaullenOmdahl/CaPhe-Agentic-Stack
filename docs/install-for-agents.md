@@ -74,6 +74,8 @@ The repository is the distribution source. The local machine is the runtime envi
      useful, schedule that deterministic command at the OS layer instead of waking a model.
    - A new index generation must rebuild every current export. Use `--limit 0` for that unlimited pass;
      bounded generation transitions fail before changing export state.
+   - Mapping changes also require complete reconciliation when they exceed the configured limit; do not
+     delete or hand-edit the owner-only mapping-state marker to bypass this gate.
    - Re-run owner-only hardening and the tree permission audit after every index write.
 
 8. Create or update private local notes when useful.

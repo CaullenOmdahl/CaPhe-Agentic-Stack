@@ -280,6 +280,45 @@ class MemoryExportTests(unittest.TestCase):
             self.assertFalse(any((output / "project" / "export").glob("*.md")))
             self.assertEqual(json.loads((output / "source-catalog.json").read_text()), {})
 
+    def test_mapping_change_requires_complete_reconciliation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "sessions"
+            output = root / "pilot"
+            source.mkdir()
+            output.mkdir(mode=0o700)
+            for name in ("one", "two"):
+                events = [
+                    {"type": "turn_context", "payload": {"cwd": "/workspace/project"}},
+                    {"type": "response_item", "payload": {"type": "message", "role": "user", "content": name}},
+                    {"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": "answer"}},
+                ]
+                (source / f"{name}.jsonl").write_text(
+                    "".join(json.dumps(event) + "\n" for event in events)
+                )
+            exporter.export_sources(
+                [source], {"old-domain": "/workspace/project"}, output, "g"
+            )
+            old_exports = {
+                path.name: path.read_text()
+                for path in (output / "old-domain" / "export").glob("*.md")
+            }
+            with self.assertRaises(ValueError):
+                exporter.export_sources(
+                    [source],
+                    {"new-domain": "/workspace/project"},
+                    output,
+                    "g",
+                    limit=1,
+                )
+            self.assertEqual(
+                {
+                    path.name: path.read_text()
+                    for path in (output / "old-domain" / "export").glob("*.md")
+                },
+                old_exports,
+            )
+
     def test_large_session_is_partitioned_before_mining(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

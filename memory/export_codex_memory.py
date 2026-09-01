@@ -125,13 +125,29 @@ def export_sources(
     if not isinstance(catalog, dict):
         catalog = {}
     existing_generations: set[str] = set()
+    has_existing_exports = False
     for domain_root in all_domain_roots.values():
         export_dir = _validated_export_dir(domain_root)
         for export_path in export_dir.glob("*.md"):
+            has_existing_exports = True
             for line in export_path.read_text(errors="replace").splitlines()[:8]:
                 if line.startswith("index_generation: "):
                     existing_generations.add(line.removeprefix("index_generation: ").strip())
                     break
+    mapping_state_path = output_root / "mapping-state"
+    mapping_hash = hashlib.sha256(
+        json.dumps(mappings, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    try:
+        previous_mapping_hash = mapping_state_path.read_text().strip()
+    except OSError:
+        previous_mapping_hash = ""
+    mapping_transition = bool(
+        has_existing_exports
+        and (not previous_mapping_hash or previous_mapping_hash != mapping_hash)
+    )
+    if mapping_transition and limit is not None and len(candidates) > limit:
+        raise ValueError("mapping changes require a complete export reconciliation")
     generation_transition = bool(
         existing_generations and existing_generations != {generation}
     )
@@ -240,6 +256,7 @@ def export_sources(
                     stale_path.unlink()
             stats["records"] += len(domain_records)
     atomic_write(catalog_path, json.dumps(catalog, indent=2, sort_keys=True) + "\n")
+    atomic_write(mapping_state_path, mapping_hash + "\n")
     return stats
 
 

@@ -34,6 +34,16 @@ class MemoryAdapterTests(unittest.TestCase):
         for credential in credentials:
             self.assertNotIn(credential.split("=", 1)[-1], sanitized)
 
+    def test_quoted_credentials_with_whitespace_are_redacted(self):
+        credentials = [
+            'PASSWORD="correct horse battery staple"',
+            '"password": "correct horse battery staple"',
+            "api_key='1234 5678 9012'",
+        ]
+        sanitized = adapter.sanitize_text("\n".join(credentials))
+        self.assertNotIn("correct horse battery staple", sanitized)
+        self.assertNotIn("1234 5678 9012", sanitized)
+
     def test_scope_requires_trusted_single_domain_metadata(self):
         mappings = {"project-a": "/work/a", "project-b": "/work/b"}
         self.assertEqual(adapter.resolve_scope("/work/a/src", "/work/a", mappings), "project-a")
@@ -192,12 +202,19 @@ class MemoryAdapterTests(unittest.TestCase):
         baseline = {"correct": 9, "total": 10, "recall_at_5": 0.8, "tokens": 1000}
         equal_but_leaner = {"correct": 9, "total": 10, "recall_at_5": 0.8, "tokens": 690,
                             "citations_resolved": True, "secret_canaries": 0,
-                            "cross_domain_hits": 0, "injection_failures": 0}
+                            "cross_domain_hits": 0, "injection_failures": 0,
+                            "latency_within_budget": True, "storage_within_budget": True}
         self.assertTrue(adapter.adoption_passes(baseline, equal_but_leaner))
         equal_and_not_leaner = dict(equal_but_leaner, tokens=800)
         self.assertFalse(adapter.adoption_passes(baseline, equal_and_not_leaner))
         unsafe = dict(equal_but_leaner, secret_canaries=1)
         self.assertFalse(adapter.adoption_passes(baseline, unsafe))
+        self.assertFalse(adapter.adoption_passes(dict(baseline, tokens=0), equal_but_leaner))
+        self.assertFalse(
+            adapter.adoption_passes(
+                baseline, dict(equal_but_leaner, latency_within_budget=False)
+            )
+        )
 
 
 if __name__ == "__main__":
