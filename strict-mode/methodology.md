@@ -59,6 +59,9 @@ The packaged `strict-confer` peers are Claude Code, agy (Gemini-family), and Cod
 not assumed equivalent. Reviewer-model overrides require client verification. Confer snapshots include
 stage-0 regular blobs from the Git index only; they omit unstaged worktree bytes, symlinks, gitlinks,
 arbitrary untracked state, and the live source-root environment, and refuse non-Git or unmerged roots.
+The peer process also runs behind a fail-closed OS filesystem boundary: macOS uses `sandbox-exec`, Linux
+uses Bubblewrap with a private PID namespace and the source root hidden. If the platform boundary is
+unavailable, the review does not run.
 
 ## Artifact verification
 

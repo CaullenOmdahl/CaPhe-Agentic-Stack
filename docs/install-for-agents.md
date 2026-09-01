@@ -72,6 +72,8 @@ The repository is the distribution source. The local machine is the runtime envi
    - After a domain passes, use `memory/sync_mempalace.py` for bounded local-only updates. It advances
      `active-generation` only after the new generation completes successfully. If recurring sync is
      useful, schedule that deterministic command at the OS layer instead of waking a model.
+   - A new index generation must rebuild every current export. Use `--limit 0` for that unlimited pass;
+     bounded generation transitions fail before changing export state.
    - Re-run owner-only hardening and the tree permission audit after every index write.
 
 8. Create or update private local notes when useful.

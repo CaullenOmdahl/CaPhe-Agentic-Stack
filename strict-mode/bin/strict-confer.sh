@@ -12,7 +12,8 @@
 # working directories. Peer CLIs run in separate process sessions so timeouts kill their
 # child processes. Set STRICT_CONFER_KEEP_RUN_DIR=1 to preserve the run root for debugging.
 # Git snapshots materialize only stage-0 regular blobs from the index; unstaged worktree bytes,
-# symlinks, gitlinks, and arbitrary untracked files are not copied. Override reviewer models with
+# symlinks, gitlinks, and arbitrary untracked files are not copied. The peer additionally runs behind
+# a fail-closed OS filesystem boundary that hides the source worktree. Override reviewer models with
 # STRICT_CONFER_CODEX_MODEL after verifying the requested models with the installed CLIs.
 set -uo pipefail
 
@@ -88,13 +89,40 @@ EOF
       git -C "$SOURCE_ROOT" cat-file blob "$object_id" > "$destination" || exit 1
       case "$index_mode" in 100755) chmod 755 "$destination" ;; *) chmod 644 "$destination" ;; esac
     done || return 1
+  local -a boundary_command
+  case "$(uname -s)" in
+    Darwin)
+      command -v sandbox-exec >/dev/null 2>&1 || {
+        echo "strict-confer requires sandbox-exec on macOS" >&2; return 1;
+      }
+      local sandbox_profile escaped_source
+      sandbox_profile="$peer_dir/source-boundary.sb"
+      escaped_source=$(python3 -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$SOURCE_ROOT") || return 1
+      {
+        printf '%s\n' '(version 1)' '(allow default)'
+        printf '(deny file-read* (subpath %s))\n' "$escaped_source"
+        printf '(deny file-write* (subpath %s))\n' "$escaped_source"
+      } > "$sandbox_profile" || return 1
+      boundary_command=(sandbox-exec -f "$sandbox_profile")
+      ;;
+    Linux)
+      command -v bwrap >/dev/null 2>&1 || {
+        echo "strict-confer requires bubblewrap on Linux" >&2; return 1;
+      }
+      boundary_command=(
+        bwrap --die-with-parent --unshare-pid --ro-bind / / --tmpfs "$SOURCE_ROOT"
+        --bind "$peer_dir" "$peer_dir" --proc /proc --dev /dev --chdir "$peer_cwd" --
+      )
+      ;;
+    *) echo "strict-confer has no filesystem boundary for $(uname -s)" >&2; return 1 ;;
+  esac
   STRICT_CONFER_PEER="$peer" \
   STRICT_CONFER_RUN_ID="$RUN_ID" \
   STRICT_CONFER_RUN_ROOT="$RUN_ROOT" \
   STRICT_CONFER_CWD="$peer_cwd" \
   STRICT_CONFER_TIMEOUT_SECONDS="$PEER_TIMEOUT_SECONDS" \
   TMPDIR="$peer_dir/tmp" \
-    python3 - "$@" <<'PY'
+    python3 - "${boundary_command[@]}" "$@" <<'PY'
 import os
 import signal
 import subprocess

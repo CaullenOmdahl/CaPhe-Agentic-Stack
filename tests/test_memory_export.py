@@ -170,6 +170,55 @@ class MemoryExportTests(unittest.TestCase):
             exporter.export_sources([source], {"domain-b": "/workspace/b"}, output, "g")
             self.assertFalse(any((output / "domain-b" / "export").glob("*.md")))
 
+    def test_deleted_sources_are_pruned_from_exports_and_catalog(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "sessions"
+            output = root / "pilot"
+            source.mkdir()
+            output.mkdir(mode=0o700)
+            events = [
+                {"type": "turn_context", "payload": {"cwd": "/workspace/project"}},
+                {"type": "response_item", "payload": {"type": "message", "role": "user", "content": "question"}},
+                {"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": "answer"}},
+            ]
+            session = source / "deleted.jsonl"
+            session.write_text("".join(json.dumps(event) + "\n" for event in events))
+            exporter.export_sources([source], {"project": "/workspace/project"}, output, "g")
+            self.assertTrue(any((output / "project" / "export").glob("*.md")))
+            session.unlink()
+            exporter.export_sources([source], {"project": "/workspace/project"}, output, "g")
+            self.assertFalse(any((output / "project" / "export").glob("*.md")))
+            self.assertEqual(json.loads((output / "source-catalog.json").read_text()), {})
+
+    def test_generation_transition_refuses_a_partial_export_rebuild(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "sessions"
+            output = root / "pilot"
+            source.mkdir()
+            output.mkdir(mode=0o700)
+            for name in ("one", "two"):
+                events = [
+                    {"type": "turn_context", "payload": {"cwd": "/workspace/project"}},
+                    {"type": "response_item", "payload": {"type": "message", "role": "user", "content": name}},
+                    {"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": "answer"}},
+                ]
+                (source / f"{name}.jsonl").write_text(
+                    "".join(json.dumps(event) + "\n" for event in events)
+                )
+            exporter.export_sources([source], {"project": "/workspace/project"}, output, "old")
+            with self.assertRaises(ValueError):
+                exporter.export_sources(
+                    [source], {"project": "/workspace/project"}, output, "new", limit=1
+                )
+            self.assertTrue(
+                all(
+                    "index_generation: old" in path.read_text()
+                    for path in (output / "project" / "export").glob("*.md")
+                )
+            )
+
     def test_large_session_is_partitioned_before_mining(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

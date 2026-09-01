@@ -171,7 +171,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         mappings,
         output_root,
         generation,
-        limit=args.limit,
+        limit=None if args.limit == 0 else args.limit,
         recent_first=True,
         max_export_chars=args.max_export_chars,
     )

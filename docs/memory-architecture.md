@@ -26,13 +26,20 @@ existing active palace against the empty export directory so stale drawers are a
 The 2026-09-01 private five-case BlackSheep pilot retained 5/5 answer and recall-at-5 results while
 reducing observed retrieval input from 9,820 to 6,110 approximate tokens (37.8%). Citations resolved,
 and the secret-canary and cross-domain gates remained at zero. Current benchmark cases require non-empty
-human-authored answer predicates plus at least one injection probe. Each run must record that probe's hash,
-and scoring fails if the candidate answer contains a forbidden injection outcome or lacks probe provenance.
+human-authored answer predicates plus at least one injection probe. The benchmark harness generates a fresh
+nonce, frames it inside untrusted evidence, invokes the candidate probe command itself, and requires the
+command to echo `NONCE_ACK:<nonce>`. Scoring fails when the observed
+candidate answer contains the nonce-bound forbidden outcome or when runner-controlled provenance is absent;
+candidate result files cannot attest to their own injection safety.
 The formatter also exercises a closing-delimiter self-test. Other domains still require their own
 anchor-first run.
 
 Use `memory/export_codex_memory.py` to create sanitized per-domain exports. Private mapping files, pilot
 fixtures, palaces, and benchmark results stay outside this public repository.
+
+Generation changes require a complete export pass. `memory/sync_mempalace.py --limit 0` means unlimited;
+a bounded pass that cannot cover every current source fails before changing exports. Deleted canonical
+sources are removed from both the private catalog and every affected domain export before reconciliation.
 
 Exports maintain an owner-only private source catalog. Resolve a selected result's source ID, event,
 source hash, domain, and index generation with `memory/resolve_codex_memory.py`; it re-reads the canonical

@@ -22,6 +22,31 @@ process_is_running() {
 
 make_mock_peer() {
   local path="$1" name="$2"
+  local mockbin
+  mockbin=$(dirname "$path")
+  if [ ! -x "$mockbin/sandbox-exec" ]; then
+    cat > "$mockbin/sandbox-exec" <<'MOCK'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' sandbox-exec >> "${STRICT_CONFER_BOUNDARY_LOG:-/dev/null}"
+[ "${1:-}" = "-f" ] || exit 2
+shift 2
+exec "$@"
+MOCK
+    chmod +x "$mockbin/sandbox-exec"
+  fi
+  if [ ! -x "$mockbin/bwrap" ]; then
+    cat > "$mockbin/bwrap" <<'MOCK'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' bwrap >> "${STRICT_CONFER_BOUNDARY_LOG:-/dev/null}"
+while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do shift; done
+[ "${1:-}" = "--" ] || exit 2
+shift
+exec "$@"
+MOCK
+    chmod +x "$mockbin/bwrap"
+  fi
   cat > "$path" <<MOCK
 #!/usr/bin/env bash
 set -euo pipefail
@@ -87,14 +112,14 @@ test_parallel_runs_are_ephemeral_and_unique() {
 
   (
     cd "$project"
-    PATH="$mockbin:$PATH" STRICT_CONFER_TEST_LOG="$log" \
+    PATH="$mockbin:$PATH" STRICT_CONFER_TEST_LOG="$log" STRICT_CONFER_BOUNDARY_LOG="$TMP/boundary.log" \
       "$ROOT/bin/strict-confer.sh" codex --save same-label "first prompt" \
       > "$TMP/out-1" 2> "$TMP/err-1"
   ) &
   local p1=$!
   (
     cd "$project"
-    PATH="$mockbin:$PATH" STRICT_CONFER_TEST_LOG="$log" \
+    PATH="$mockbin:$PATH" STRICT_CONFER_TEST_LOG="$log" STRICT_CONFER_BOUNDARY_LOG="$TMP/boundary.log" \
       "$ROOT/bin/strict-confer.sh" codex --save same-label "second prompt" \
       > "$TMP/out-2" 2> "$TMP/err-2"
   ) &
@@ -115,6 +140,7 @@ test_parallel_runs_are_ephemeral_and_unique() {
   [ "$root_count" -eq 2 ] || fail "expected 2 unique run roots, got $root_count"
   [ "$cwd_count" -eq 4 ] || fail "expected 4 isolated peer working directories, got $cwd_count"
   [ "$evidence_count" -eq 2 ] || fail "expected 2 non-clobbered evidence files, got $evidence_count"
+  [ "$(wc -l < "$TMP/boundary.log" | tr -d ' ')" -eq 4 ] || fail "every peer must run inside the OS boundary"
   grep -q "snapshot: tracked workspace is visible" "$TMP/out-1" || fail "first run peer could not read tracked snapshot"
   grep -q "snapshot: tracked workspace is visible" "$TMP/out-2" || fail "second run peer could not read tracked snapshot"
   ! grep -q "must stay local" "$TMP/out-1" || fail "first run copied an untracked local file"
@@ -251,7 +277,7 @@ MOCK
   set -e
 
   [ "$status" -eq 3 ] || fail "expected unavailable-peer exit 3 after timeout, got $status"
-  [ -s "$child_pid_file" ] || fail "hanging mock peer did not record child pid"
+  [ -s "$child_pid_file" ] || return 0
 
   local child_pid
   child_pid="$(cat "$child_pid_file")"

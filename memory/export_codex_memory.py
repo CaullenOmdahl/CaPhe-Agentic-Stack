@@ -101,6 +101,7 @@ def export_sources(
         raise ValueError("max_export_chars must be positive")
     stats = {"sessions": 0, "records": 0, "export_files": 0, "quarantined": 0, "invalid": 0}
     candidates = [(source_root, path) for source_root in source_roots for path in source_root.rglob("*.jsonl")]
+    current_source_ids = {safe_source_id(source_root, path) for source_root, path in candidates}
     if recent_first:
         candidates.sort(key=lambda item: item[1].stat().st_mtime, reverse=True)
     else:
@@ -112,6 +113,44 @@ def export_sources(
         catalog = {}
     if not isinstance(catalog, dict):
         catalog = {}
+    existing_generations: set[str] = set()
+    for domain_root in all_domain_roots.values():
+        export_dir = _validated_export_dir(domain_root)
+        for export_path in export_dir.glob("*.md"):
+            for line in export_path.read_text(errors="replace").splitlines()[:8]:
+                if line.startswith("index_generation: "):
+                    existing_generations.add(line.removeprefix("index_generation: ").strip())
+                    break
+    if (
+        existing_generations
+        and existing_generations != {generation}
+        and limit is not None
+        and len(candidates) > limit
+    ):
+        raise ValueError("generation changes require a complete export rebuild; remove or raise --limit")
+
+    resolved_source_roots = [root.resolve() for root in source_roots]
+    stale_source_ids: set[str] = set()
+    for source_id, source_path_text in catalog.items():
+        try:
+            source_path = Path(source_path_text).resolve()
+            belongs_to_current_roots = any(
+                source_path.is_relative_to(source_root) for source_root in resolved_source_roots
+            )
+        except (OSError, TypeError):
+            belongs_to_current_roots = False
+        if belongs_to_current_roots and source_id not in current_source_ids:
+            stale_source_ids.add(source_id)
+    for source_id in stale_source_ids:
+        for domain_root in all_domain_roots.values():
+            export_dir = _validated_export_dir(domain_root)
+            for stale_path in {
+                export_dir / f"{source_id}.md",
+                *export_dir.glob(f"{source_id}-p*.md"),
+            }:
+                if stale_path.exists():
+                    stale_path.unlink()
+        catalog.pop(source_id, None)
     for source_root, path in candidates:
         if limit is not None and stats["sessions"] >= limit:
             break
