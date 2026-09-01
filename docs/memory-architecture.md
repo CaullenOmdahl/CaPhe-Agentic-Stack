@@ -8,8 +8,8 @@ The stack uses protected source records plus rebuildable local retrieval indexes
   index generation.
 - **Scope:** trusted per-turn working-directory metadata mapped to an explicit repository root; ambiguous
   records quarantine rather than guess.
-- **Retrieval:** semantic/lexical search selects candidates; exact resolution sanitizes again and frames
-  results as untrusted evidence.
+- **Retrieval:** semantic/lexical search selects candidates; exact resolution sanitizes again, escapes
+  structural delimiters, and frames results as untrusted evidence.
 - **Lifecycle:** explicit corrections supersede; default search masks invalid facts. Index generation records
   MemPalace, backend, embedder/dimension, sanitizer, and chunker identity.
 
@@ -24,8 +24,10 @@ replace the last known-good active generation.
 
 The 2026-09-01 private five-case BlackSheep pilot retained 5/5 answer and recall-at-5 results while
 reducing observed retrieval input from 9,820 to 6,110 approximate tokens (37.8%). Citations resolved,
-and the secret-canary, cross-domain, and injection artifact gates remained at zero. This passes the
-ADR's Pareto adoption floor for that domain; other domains still require their own anchor-first run.
+and the secret-canary and cross-domain gates remained at zero. The injection gate now exercises the
+real evidence formatter with a closing-delimiter attack instead of accepting a result-supplied counter;
+the formatter escapes that delimiter before framing. This passes the ADR's Pareto adoption floor for
+that domain; other domains still require their own anchor-first run.
 
 Use `memory/export_codex_memory.py` to create sanitized per-domain exports. Private mapping files, pilot
 fixtures, palaces, and benchmark results stay outside this public repository.

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import os
 from pathlib import Path
@@ -12,8 +13,9 @@ import stat
 from typing import Any, Iterable, NamedTuple
 
 
-SANITIZER_VERSION = "sanitize-v1"
+SANITIZER_VERSION = "sanitize-v2"
 CHUNKER_VERSION = "chunk-v2"
+EVIDENCE_TAG = "UNTRUSTED_MEMORY_EVIDENCE"
 
 
 class IsolationError(ValueError):
@@ -85,6 +87,15 @@ def sanitize_and_chunk(text: str, *, chunk_chars: int = 4000) -> list[Chunk]:
         Chunk(sanitized[start : start + chunk_chars], start, min(start + chunk_chars, len(sanitized)))
         for start in range(0, len(sanitized), chunk_chars)
     ] or [Chunk("", 0, 0)]
+
+
+def frame_untrusted_evidence(text: str, **attributes: object) -> str:
+    """Wrap sanitized evidence without allowing its content to close the trust boundary."""
+    encoded_attributes = " ".join(
+        f'{name}="{html.escape(str(value), quote=True)}"' for name, value in attributes.items()
+    )
+    encoded_text = html.escape(text, quote=False)
+    return f"<{EVIDENCE_TAG} {encoded_attributes}>\n{encoded_text}\n</{EVIDENCE_TAG}>"
 
 
 def _domain_for_cwd(cwd: str | None, mappings: dict[str, str]) -> str | None:
@@ -182,9 +193,12 @@ def resolve_excerpt(
     content_hash = hashlib.sha256(source.encode()).hexdigest()
     if content_hash != expected_sha256:
         raise IsolationError("source changed after indexing; refresh before resolving")
-    framed = (
-        f'<UNTRUSTED_MEMORY_EVIDENCE source_id="{source_id}" start="{start}" end="{end}" '
-        f'sha256="{content_hash}">\n{excerpt}\n</UNTRUSTED_MEMORY_EVIDENCE>'
+    framed = frame_untrusted_evidence(
+        excerpt,
+        source_id=source_id,
+        start=start,
+        end=end,
+        sha256=content_hash,
     )
     return ResolvedExcerpt(excerpt, framed, source_id, start, end, content_hash)
 
@@ -231,10 +245,13 @@ def resolve_catalog_event(
         raise IsolationError("source event is missing, ambiguous, or outside the requested scope")
     record = matches[0]
     text = sanitize_text(record.text)
-    framed = (
-        f'<UNTRUSTED_MEMORY_EVIDENCE source_id="{source_id}" source_event="{source_event}" '
-        f'role="{record.role}" sha256="{content_hash}" index_generation="{index_generation}">\n'
-        f"{text}\n</UNTRUSTED_MEMORY_EVIDENCE>"
+    framed = frame_untrusted_evidence(
+        text,
+        source_id=source_id,
+        source_event=source_event,
+        role=record.role,
+        sha256=content_hash,
+        index_generation=index_generation,
     )
     return ResolvedEvent(text, framed, source_id, source_event, record.role, content_hash)
 
