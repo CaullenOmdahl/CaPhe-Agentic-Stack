@@ -13,9 +13,9 @@ The stack uses protected source records plus rebuildable local retrieval indexes
 - **Lifecycle:** explicit corrections supersede; default search masks invalid facts. Index generation records
   MemPalace, backend, embedder/dimension, sanitizer, and chunker identity.
 
-The local pilot pins MemPalace 3.9.0 and forbids remote embeddings. Sanitizer v7 starts a fresh index
-generation and redacts standalone OpenAI API keys and fine-grained GitHub tokens in addition to the
-existing vendor and assignment patterns. Adoption requires the privacy,
+The local pilot pins MemPalace 3.9.0 and forbids remote embeddings. Sanitizer v8 starts a fresh index
+generation and redacts standalone OpenAI API keys, fine-grained GitHub tokens, and explicitly named
+credentials even when their unquoted values are short. Adoption requires the privacy,
 isolation, injection, citation, correctness, recall, latency, storage, and token benchmarks in ADR-0002.
 
 MemPalace may create backend files with group/world-readable defaults. After every `init`, `mine`,
@@ -25,11 +25,13 @@ MemPalace may create backend files with group/world-readable defaults. After eve
 replace the last known-good active generation. When the final export leaves a domain, sync reconciles every
 initialized retained palace generation against the empty export directory—even if a failed first sync did
 not create an active pointer—so stale drawers are removed from historical and partial derived indexes.
+When a domain remains non-empty after a partial deletion or reassignment, every initialized retained
+generation is also reconciled against the surviving export set.
 
-The 2026-09-02 private five-case BlackSheep v11 pilot retained 5/5 answer and recall-at-5 results while
-reducing observed retrieval input from 9,820 to 3,838 approximate tokens (60.9%). The harness measured
-the slowest end-to-end candidate case at 116,262.45 ms against a 180,000 ms cap and the benchmarked
-owner-only palace at 105,789,010 bytes against a 268,435,456-byte cap. The full local v11 generation
+The 2026-09-02 private five-case BlackSheep v12 pilot retained 5/5 answer and recall-at-5 results while
+reducing observed retrieval input from 9,820 to 3,775 approximate tokens (61.6%). The harness measured
+the slowest end-to-end candidate case at 66,165.74 ms against a 180,000 ms cap and the benchmarked
+owner-only palace at 105,904,659 bytes against a 268,435,456-byte cap. The full local v12 generation
 contains 904 canonical sources across 18 physically isolated mapped domains. Citations resolved, and the secret-canary,
 cross-domain, and injection gates remained at zero. Current benchmark cases require non-empty
 human-authored answer predicate groups plus at least one injection probe. A group may provide narrow semantic

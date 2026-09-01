@@ -57,6 +57,12 @@ class MemoryAdapterTests(unittest.TestCase):
         self.assertNotIn("correct horse battery staple", sanitized)
         self.assertNotIn("1234 5678", sanitized)
 
+    def test_short_unquoted_named_credentials_are_redacted(self):
+        credentials = ["PASSWORD=abc123", "token=short"]
+        sanitized = adapter.sanitize_text("\n".join(credentials))
+        self.assertNotIn("abc123", sanitized)
+        self.assertNotIn("short", sanitized)
+
     def test_scope_requires_trusted_single_domain_metadata(self):
         mappings = {"project-a": "/work/a", "project-b": "/work/b"}
         self.assertEqual(adapter.resolve_scope("/work/a/src", "/work/a", mappings), "project-a")

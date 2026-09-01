@@ -74,6 +74,7 @@ immutable source records and loading only the evidence relevant to the current t
   palace generation and complete reindex. Each sync's complete source-root list is authoritative; sources
   under retired roots are removed from derived state. Initialized partial generations without an active
   pointer and orphan export files without catalog/state entries remain part of deletion reconciliation.
+  Every retained generation is reconciled after partial deletions even while the domain remains non-empty.
 - `intended` Failure of the derived index falls back to existing source/registry lookup.
 - `legacy` Loading broad manually maintained summaries into every task is reduced to a small identity
   layer plus scoped query-time retrieval.

@@ -529,14 +529,20 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
         for tests in root.rglob("tests")
         if tests.is_dir() and not any(part in excluded_python_parts for part in tests.parts)
     }
-    pytest_config_roots = {
+    pytest_project_roots = {
         config.parent
-        for pattern in ("pyproject.toml", "pytest.ini", "setup.cfg", "tox.ini")
+        for pattern in (
+            "pyproject.toml",
+            "pytest.ini",
+            "setup.cfg",
+            "tox.ini",
+            "requirements*.txt",
+        )
         for config in root.rglob(pattern)
         if not any(part in excluded_python_parts for part in config.parts)
-        and _has_pytest_configuration(config.parent)
+        and _declares_pytest(config.parent)
     }
-    python_test_roots.update(pytest_config_roots)
+    python_test_roots.update(pytest_project_roots)
     for python_root in sorted(python_test_roots):
         cwd = "." if python_root == root else python_root.relative_to(root).as_posix()
         suffix = "" if cwd == "." else f"-{cwd.replace('/', '-')}"

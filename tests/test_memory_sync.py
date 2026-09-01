@@ -203,6 +203,38 @@ class MemorySyncTests(unittest.TestCase):
                 calls[0][calls[0].index("--palace") + 1], str(palace.resolve())
             )
 
+    def test_nonempty_export_reconciles_every_retained_generation(self):
+        spec = importlib.util.spec_from_file_location("sync_mempalace_partial_delete", MODULE_PATH)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as tmp:
+            domain = Path(tmp) / "project-12345678"
+            export = domain / "export"
+            export.mkdir(parents=True, mode=0o700)
+            (export / "remaining.md").write_text("remaining source")
+            palaces = []
+            for generation in ("generation-1", "generation-2"):
+                palace = domain / "palaces" / generation
+                palace.mkdir(parents=True, mode=0o700)
+                (palace / ".initialized").write_text(generation + "\n")
+                palaces.append(palace.resolve())
+            (domain / "active-generation").write_text("generation-2\n")
+            calls = []
+
+            def fake_run(command, **kwargs):
+                calls.append(command)
+
+            module.sync_domain(domain, generation="generation-2", runner=fake_run)
+            sync_calls = [command for command in calls if "sync" in command]
+            self.assertEqual(
+                {
+                    Path(command[command.index("--palace") + 1])
+                    for command in sync_calls
+                },
+                set(palaces),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -32,8 +32,8 @@ candidate IDs must each exactly match the declared case set before any adoption 
 benchmarks separate search from answering: the harness validates search coordinates against the selected
 export generation, resolves bounded canonical event slices, frames the slices itself, supplies and measures
 that exact context, and requires the answer phase to echo those same citations. Sanitizer behavior changes
-create a new generation; sanitizer v7 explicitly covers standalone OpenAI API keys and fine-grained GitHub
-tokens.
+create a new generation; sanitizer v8 explicitly covers standalone OpenAI API keys, fine-grained GitHub
+tokens, and short explicitly named credentials.
 
 Platform scoring:
 
@@ -80,6 +80,9 @@ their non-symlink root, derives orphan IDs from export filenames, and advances t
 The final integration review also found that the CLI resolved source-root aliases before validation and
 that the public-repository scan lagged the v7 sanitizer. Both CLI entrypoints now preserve unresolved roots
 for fail-closed validation, and the public scan rejects the same standalone OpenAI key family.
+The next exact-head review found that partial domain deletions still missed older generations and short
+unquoted named credentials survived sanitization. Every initialized retained generation now reconciles
+against every current export set, and named assignments redact non-empty values regardless of length.
 
 ## Consequences
 

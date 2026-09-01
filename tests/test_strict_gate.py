@@ -231,6 +231,25 @@ class StrictGatePlanTests(unittest.TestCase):
         ]
         self.assertEqual(python_commands[0]["name"], "python-pytest")
 
+    def test_default_manifest_schedules_dependency_declared_pytest_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "test_failure.py").write_text("def test_failure():\n    assert False\n")
+            (root / "pyproject.toml").write_text(
+                "[project]\nname='pytest-project'\nversion='0.1.0'\n"
+                "[dependency-groups]\ndev=['pytest>=8']\n"
+            )
+            data = strict_gate.discover_default_manifest(root)
+        python_commands = [
+            command
+            for command in data["components"][0]["commands"]
+            if command["name"].startswith("python-")
+        ]
+        self.assertEqual(
+            python_commands,
+            [{"name": "python-pytest", "run": ["python3", "-m", "pytest"]}],
+        )
+
     def test_default_manifest_discovers_independent_cargo_and_go_roots(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

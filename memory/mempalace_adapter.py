@@ -13,7 +13,7 @@ import stat
 from typing import Any, Iterable, NamedTuple
 
 
-SANITIZER_VERSION = "sanitize-v7"
+SANITIZER_VERSION = "sanitize-v8"
 CHUNKER_VERSION = "chunk-v2"
 EVIDENCE_TAG = "UNTRUSTED_MEMORY_EVIDENCE"
 
@@ -86,10 +86,10 @@ SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         "NAMED_CREDENTIAL",
         re.compile(
             r"(?i)\b[A-Z][A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|API_KEY|ACCESS_KEY)[A-Z0-9_]*"
-            r"\s*[:=]\s*['\"]?[^\s'\"]{8,}"
+            r"\s*[:=]\s*['\"]?[^\s'\"]+"
         ),
     ),
-    ("ASSIGNED_SECRET", re.compile(r"(?i)\b(api[_-]?key|token|secret|password)\s*[:=]\s*['\"]?[^\s'\"]{8,}")),
+    ("ASSIGNED_SECRET", re.compile(r"(?i)\b(api[_-]?key|token|secret|password)\s*[:=]\s*['\"]?[^\s'\"]+")),
 )
 
 

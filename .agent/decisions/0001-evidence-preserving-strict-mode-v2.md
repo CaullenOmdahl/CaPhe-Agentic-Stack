@@ -71,6 +71,8 @@ A later exact-head review reproduced a second coverage gap when pytest configure
 configured pytest project roots are now discovery entrypoints independent of directory naming.
 The final integration review found that passing `tests` still masked additional configured roots; invoking
 pytest without positional paths closes the remaining coverage gap.
+The subsequent exact-head review found dependency-declared pytest projects with only root-level tests;
+dependency declarations now make their project directory a discovery root as well.
 
 ## Consequences
 

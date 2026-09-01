@@ -58,8 +58,9 @@ observable evidence required to accept a change.
 - `intended` Generated manifests inspect each Python test root's nearest project declaration and invoke
   pytest when it is declared. A project with explicit pytest configuration is itself a test root even when
   its configured `testpaths` does not include a directory literally named `tests`. Pytest runs from that
-  project root without a hard-coded path so every configured root is honored; plain test trees retain
-  unittest discovery so default gates do not silently skip a repository's authoritative tests.
+  project root without a hard-coded path so every configured root is honored. A project that declares a
+  pytest dependency is also scheduled, including conventional root-level `test_*.py` modules; plain test
+  trees retain unittest discovery so default gates do not silently skip authoritative tests.
 - `intended` Failure output is preserved and displayed.
 - `intended` Initialization fails atomically on malformed markers and deduplicates symlink aliases.
 - `intended` Peer review denies host filesystem access by default. It exposes only the staged snapshot,
