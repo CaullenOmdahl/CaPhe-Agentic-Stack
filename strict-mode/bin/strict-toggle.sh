@@ -5,9 +5,9 @@
 #   strict-toggle.sh on          # (re)enable enforcement
 #   strict-toggle.sh off         # DISABLE — USER-ONLY (interactive confirmation required)
 #
-# DISABLING IS A USER-ONLY ACTION. Agents must NEVER disable strict mode: `off` refuses to
-# run without an interactive terminal + a typed confirmation, so a headless agent cannot
-# flip it. If an agent thinks the gate should be relaxed, it must STOP and ask the user.
+# DISABLING IS A USER-ONLY ACTION. Agents must NEVER disable strict mode: this script's `off`
+# command refuses headless use and requires typed confirmation. The local marker cannot prove
+# who wrote it, so the agent prohibition remains a binding policy, not an identity control.
 # (For a one-off throwaway spike, use STRICT_MODE=prototype on a single command instead.)
 set -uo pipefail
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd); cd "$ROOT" || exit 1

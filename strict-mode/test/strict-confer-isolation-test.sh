@@ -28,6 +28,9 @@ fi
 if [ -f untracked-sensitive.txt ]; then
   echo "$name untracked snapshot: \$(cat untracked-sensitive.txt)"
 fi
+if [ -e review-link ]; then
+  echo "$name symlink snapshot: \$(cat review-link)"
+fi
 printf '%s\\n' "$name:\${STRICT_CONFER_RUN_ID:-}:\${STRICT_CONFER_RUN_ROOT:-}:\${STRICT_CONFER_PEER:-}:\$(pwd)" >> "\$STRICT_CONFER_TEST_LOG"
 MOCK
   chmod +x "$path"
@@ -53,7 +56,9 @@ test_parallel_runs_are_ephemeral_and_unique() {
   git -C "$project" config user.email strict-confer-test@example.invalid
   printf '%s\n' ".env" > "$project/.gitignore"
   printf '%s\n' "tracked workspace is visible" > "$project/review-target.txt"
-  git -C "$project" add .gitignore review-target.txt
+  printf '%s\n' "must not escape through symlink" > "$TMP/external-sensitive.txt"
+  ln -s "$TMP/external-sensitive.txt" "$project/review-link"
+  git -C "$project" add .gitignore review-target.txt review-link
   git -C "$project" commit -qm initial
   printf '%s\n' "must stay local" > "$project/untracked-sensitive.txt"
   printf '%s\n' "must stay private" > "$project/.env"
@@ -95,6 +100,8 @@ test_parallel_runs_are_ephemeral_and_unique() {
   grep -q "snapshot: tracked workspace is visible" "$TMP/out-2" || fail "second run peer could not read tracked snapshot"
   ! grep -q "must stay local" "$TMP/out-1" || fail "first run copied an untracked local file"
   ! grep -q "must stay local" "$TMP/out-2" || fail "second run copied an untracked local file"
+  ! grep -q "must not escape through symlink" "$TMP/out-1" || fail "first run preserved an escaping tracked symlink"
+  ! grep -q "must not escape through symlink" "$TMP/out-2" || fail "second run preserved an escaping tracked symlink"
   ! grep -q "must stay private" "$TMP/out-1" || fail "first run copied an ignored secret-bearing file"
   ! grep -q "must stay private" "$TMP/out-2" || fail "second run copied an ignored secret-bearing file"
 

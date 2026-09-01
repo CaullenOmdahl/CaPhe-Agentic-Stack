@@ -11,8 +11,8 @@
 # Concurrency: every invocation gets a unique run ID, an ephemeral run root, and per-peer
 # working directories. Peer CLIs run in separate process sessions so timeouts kill their
 # child processes. Set STRICT_CONFER_KEEP_RUN_DIR=1 to preserve the run root for debugging.
-# Git snapshots contain only tracked paths and staged additions; arbitrary untracked local
-# files are not copied. Override pinned reviewer models with STRICT_CONFER_AGY_MODEL and
+# Git snapshots contain only tracked regular files and staged regular additions; symlinks,
+# gitlinks, and arbitrary untracked local files are not copied. Override reviewer models with
 # STRICT_CONFER_CODEX_MODEL after verifying the requested models with the installed CLIs.
 set -uo pipefail
 
@@ -75,7 +75,7 @@ run_isolated() {
   file_list="$peer_dir/files.txt"
   git -C "$SOURCE_ROOT" ls-files --cached -z |
     while IFS= read -r -d '' tracked_path; do
-      if [ -e "$SOURCE_ROOT/$tracked_path" ] || [ -L "$SOURCE_ROOT/$tracked_path" ]; then
+      if [ ! -L "$SOURCE_ROOT/$tracked_path" ] && [ -f "$SOURCE_ROOT/$tracked_path" ]; then
         printf '%s\0' "$tracked_path"
       fi
     done > "$file_list" || return 1

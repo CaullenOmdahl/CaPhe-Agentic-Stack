@@ -57,7 +57,8 @@ implementation. At most two revise-and-re-review rounds are allowed before human
 
 The packaged `strict-confer` peers are Claude Code, agy (Gemini-family), and Codex; direct Gemini CLI is
 not assumed equivalent. Reviewer-model overrides require client verification. Confer snapshots include
-tracked paths and staged additions only, omit arbitrary untracked state, and refuse non-Git roots.
+tracked regular files and staged regular additions only; they omit symlinks, gitlinks, and arbitrary
+untracked state, and refuse non-Git roots.
 
 ## Artifact verification
 

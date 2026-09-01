@@ -20,6 +20,6 @@ unavailable; it is not normal implementation-review evidence. Its local peer set
 (Gemini-family), and Codex. A direct Gemini CLI install is not automatically equivalent to agy. The
 wrapper pins reviewer models that may be overridden only after the installed clients verify them.
 
-Confer snapshots include tracked paths at their current working-tree state plus staged additions. They
-exclude every arbitrary untracked file, even when it is not ignored; stage a deliberate new review input
-before invoking confer. Snapshot mode refuses to run outside a Git worktree.
+Confer snapshots include tracked regular files at their current working-tree state plus staged regular
+additions. They omit symlinks, gitlinks, and every arbitrary untracked file, even when it is not ignored;
+stage a deliberate new review input before invoking confer. Snapshot mode refuses non-Git worktrees.
