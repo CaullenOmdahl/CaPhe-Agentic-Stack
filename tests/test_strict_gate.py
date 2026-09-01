@@ -308,6 +308,45 @@ class StrictGatePlanTests(unittest.TestCase):
             ],
         )
 
+    def test_root_project_deduplicates_nested_module_and_tests_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "pyproject.toml").write_text(
+                "[project]\nname='unittest-project'\nversion='0.1.0'\n"
+            )
+            package = root / "package"
+            tests = package / "tests"
+            tests.mkdir(parents=True)
+            (package / "__init__.py").write_text("")
+            (tests / "__init__.py").write_text("")
+            (package / "test_module.py").write_text(
+                "import unittest\n\n"
+                "class ModuleTest(unittest.TestCase):\n"
+                "    def test_module(self):\n"
+                "        self.assertTrue(True)\n"
+            )
+            (tests / "test_nested.py").write_text(
+                "import unittest\n\n"
+                "class NestedTest(unittest.TestCase):\n"
+                "    def test_nested(self):\n"
+                "        self.assertTrue(True)\n"
+            )
+            data = strict_gate.discover_default_manifest(root)
+        python_commands = [
+            command
+            for command in data["components"][0]["commands"]
+            if command["name"].startswith("python-")
+        ]
+        self.assertEqual(
+            python_commands,
+            [
+                {
+                    "name": "python-unittest",
+                    "run": ["python3", "-m", "unittest", "discover", "-s", ".", "-v"],
+                }
+            ],
+        )
+
     def test_default_manifest_discovers_independent_cargo_and_go_roots(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

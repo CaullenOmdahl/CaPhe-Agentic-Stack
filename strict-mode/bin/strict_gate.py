@@ -524,11 +524,6 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
         "node_modules",
         "venv",
     }
-    python_test_roots = {
-        tests.parent
-        for tests in root.rglob("tests")
-        if tests.is_dir() and not any(part in excluded_python_parts for part in tests.parts)
-    }
     python_project_roots = {root}
     for pattern in (
         "pyproject.toml",
@@ -551,6 +546,11 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
         ]
         return max(candidates, key=lambda path: len(path.parts))
 
+    python_test_roots = {
+        owning_python_project(tests)
+        for tests in root.rglob("tests")
+        if tests.is_dir() and not any(part in excluded_python_parts for part in tests.parts)
+    }
     root_level_test_roots = {
         owning_python_project(test_module)
         for test_module in root.rglob("test*.py")

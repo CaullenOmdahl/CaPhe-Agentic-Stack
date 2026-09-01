@@ -63,7 +63,8 @@ observable evidence required to accept a change.
   pytest dependency is also scheduled, including conventional root-level `test_*.py` modules; plain test
   trees and projects with root-level `test*.py` modules retain unittest discovery so default gates do not
   silently skip authoritative tests. Unittest starts at `tests/` when present and otherwise at the project
-  root.
+  root. Nested test directories and modules are assigned to their nearest declared Python project so one
+  suite is not scheduled concurrently through multiple discovery roots.
 - `intended` Failure output is preserved and displayed.
 - `intended` Initialization fails atomically on malformed markers and deduplicates symlink aliases.
 - `intended` Peer review denies host filesystem access by default. It exposes only the staged snapshot,

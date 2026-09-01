@@ -79,6 +79,9 @@ The next exact-head review found that a plain unittest project containing only r
 not scheduled. Root-level `test*.py` discovery now creates a unittest project and uses the project root as
 its start directory. The same review found authentication files copied into peer homes; local fallback
 review now carries no host credentials and fails closed when a peer cannot authenticate independently.
+The following exact-head review found nested `tests/` directories and modules could schedule the same
+unittest project twice. Both discovery signals now resolve to the nearest declared Python project before
+deduplication.
 
 ## Consequences
 
