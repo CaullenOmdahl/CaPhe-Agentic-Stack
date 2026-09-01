@@ -20,10 +20,8 @@ process_is_running() {
   case "$state" in Z*|"") return 1 ;; *) return 0 ;; esac
 }
 
-make_mock_peer() {
-  local path="$1" name="$2"
-  local mockbin
-  mockbin=$(dirname "$path")
+make_mock_boundaries() {
+  local mockbin="$1"
   if [ ! -x "$mockbin/sandbox-exec" ]; then
     cat > "$mockbin/sandbox-exec" <<'MOCK'
 #!/usr/bin/env bash
@@ -47,6 +45,13 @@ exec "$@"
 MOCK
     chmod +x "$mockbin/bwrap"
   fi
+}
+
+make_mock_peer() {
+  local path="$1" name="$2"
+  local mockbin
+  mockbin=$(dirname "$path")
+  make_mock_boundaries "$mockbin"
   cat > "$path" <<MOCK
 #!/usr/bin/env bash
 set -euo pipefail
@@ -172,6 +177,7 @@ test_current_peer_cli_invocations() {
   make_arg_logging_peer "$mockbin/claude" "claude"
   make_arg_logging_peer "$mockbin/agy" "agy"
   make_arg_logging_peer "$mockbin/codex" "codex"
+  make_mock_boundaries "$mockbin"
 
   (
     cd "$project"
