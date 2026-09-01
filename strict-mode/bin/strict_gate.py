@@ -423,8 +423,30 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
         cwd = _relative_cwd(root, go_mod)
         suffix = cwd.replace("/", "-")
         commands.append({"name": f"go-test-{suffix}", "run": ["go", "test", "./..."], "cwd": cwd})
-    if (root / "tests").is_dir():
-        commands.append({"name": "python-unittest", "run": ["python3", "-m", "unittest", "discover", "-s", "tests", "-v"]})
+    excluded_python_parts = {
+        ".git",
+        ".tox",
+        ".venv",
+        "build",
+        "dist",
+        "node_modules",
+        "venv",
+    }
+    python_test_roots = {
+        tests.parent
+        for tests in root.rglob("tests")
+        if tests.is_dir() and not any(part in excluded_python_parts for part in tests.parts)
+    }
+    for python_root in sorted(python_test_roots):
+        cwd = "." if python_root == root else python_root.relative_to(root).as_posix()
+        suffix = "" if cwd == "." else f"-{cwd.replace('/', '-')}"
+        command = {
+            "name": f"python-unittest{suffix}",
+            "run": ["python3", "-m", "unittest", "discover", "-s", "tests", "-v"],
+        }
+        if cwd != ".":
+            command["cwd"] = cwd
+        commands.append(command)
 
     return {
         "version": 1,

@@ -48,6 +48,8 @@ absence or incomplete CI falls back to the complete local matrix.
 
 Manifest coverage is fail-closed. Uncovered paths block; unproven dependency completeness escalates local
 feedback to full. Cache is default-off and never participates in completion.
+Generated default manifests discover every nested Python `tests/` root independently, alongside Dart,
+Node, Cargo, and Go roots; a root-level project cannot hide a nested test suite.
 
 ## Review
 

@@ -14,6 +14,8 @@ strict-mode/bin/strict-confer.sh codex --adversarial --save design-v1 "Review th
 ```
 
 The affected gate optimizes feedback. The completion gate and independent PR review remain authoritative.
+Default manifests include independent nested Python test roots as well as discovered Dart, Node, Cargo,
+and Go roots.
 
 `strict-confer` is for design/ADR review or an explicitly recorded fallback when PR review is genuinely
 unavailable; it is not normal implementation-review evidence. Its local peer set is Claude Code, agy

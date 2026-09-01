@@ -219,6 +219,67 @@ class MemoryExportTests(unittest.TestCase):
                 )
             )
 
+    def test_generation_transition_refuses_an_invalid_source_before_writing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "sessions"
+            output = root / "pilot"
+            source.mkdir()
+            output.mkdir(mode=0o700)
+            valid = source / "valid.jsonl"
+            invalid = source / "invalid.jsonl"
+
+            def events(label):
+                return [
+                    {"type": "turn_context", "payload": {"cwd": "/workspace/project"}},
+                    {"type": "response_item", "payload": {"type": "message", "role": "user", "content": label}},
+                    {"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": "answer"}},
+                ]
+
+            valid.write_text("".join(json.dumps(event) + "\n" for event in events("valid")))
+            invalid.write_text("".join(json.dumps(event) + "\n" for event in events("invalid")))
+            exporter.export_sources([source], {"project": "/workspace/project"}, output, "old")
+            old_exports = {
+                path.name: path.read_text()
+                for path in (output / "project" / "export").glob("*.md")
+            }
+            invalid.write_text("{malformed\n")
+            with self.assertRaises(ValueError):
+                exporter.export_sources(
+                    [source], {"project": "/workspace/project"}, output, "new"
+                )
+            self.assertEqual(
+                {
+                    path.name: path.read_text()
+                    for path in (output / "project" / "export").glob("*.md")
+                },
+                old_exports,
+            )
+
+    def test_invalid_source_is_pruned_during_same_generation_sync(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "sessions"
+            output = root / "pilot"
+            source.mkdir()
+            output.mkdir(mode=0o700)
+            session = source / "invalidated.jsonl"
+            events = [
+                {"type": "turn_context", "payload": {"cwd": "/workspace/project"}},
+                {"type": "response_item", "payload": {"type": "message", "role": "user", "content": "question"}},
+                {"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": "answer"}},
+            ]
+            session.write_text("".join(json.dumps(event) + "\n" for event in events))
+            exporter.export_sources([source], {"project": "/workspace/project"}, output, "g")
+            self.assertTrue(any((output / "project" / "export").glob("*.md")))
+            session.write_text("{malformed\n")
+            stats = exporter.export_sources(
+                [source], {"project": "/workspace/project"}, output, "g"
+            )
+            self.assertEqual(stats["invalid"], 1)
+            self.assertFalse(any((output / "project" / "export").glob("*.md")))
+            self.assertEqual(json.loads((output / "source-catalog.json").read_text()), {})
+
     def test_large_session_is_partitioned_before_mining(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

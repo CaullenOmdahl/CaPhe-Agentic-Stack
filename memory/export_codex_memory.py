@@ -72,6 +72,17 @@ def _validated_export_dir(domain_root: Path, *, create: bool = False) -> Path:
     return export_dir
 
 
+def _remove_source_exports(source_id: str, domain_roots: dict[str, Path]) -> None:
+    for domain_root in domain_roots.values():
+        export_dir = _validated_export_dir(domain_root)
+        for stale_path in {
+            export_dir / f"{source_id}.md",
+            *export_dir.glob(f"{source_id}-p*.md"),
+        }:
+            if stale_path.exists():
+                stale_path.unlink()
+
+
 def atomic_write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False, encoding="utf-8") as handle:
@@ -121,13 +132,19 @@ def export_sources(
                 if line.startswith("index_generation: "):
                     existing_generations.add(line.removeprefix("index_generation: ").strip())
                     break
-    if (
-        existing_generations
-        and existing_generations != {generation}
-        and limit is not None
-        and len(candidates) > limit
-    ):
+    generation_transition = bool(
+        existing_generations and existing_generations != {generation}
+    )
+    if generation_transition and limit is not None and len(candidates) > limit:
         raise ValueError("generation changes require a complete export rebuild; remove or raise --limit")
+    if generation_transition:
+        for _, path in candidates:
+            try:
+                parse_events(path.read_bytes(), path)
+            except (OSError, ValueError) as error:
+                raise ValueError(
+                    f"generation rebuild requires every source to be readable and valid: {path}"
+                ) from error
 
     resolved_source_roots = [root.resolve() for root in source_roots]
     stale_source_ids: set[str] = set()
@@ -142,24 +159,20 @@ def export_sources(
         if belongs_to_current_roots and source_id not in current_source_ids:
             stale_source_ids.add(source_id)
     for source_id in stale_source_ids:
-        for domain_root in all_domain_roots.values():
-            export_dir = _validated_export_dir(domain_root)
-            for stale_path in {
-                export_dir / f"{source_id}.md",
-                *export_dir.glob(f"{source_id}-p*.md"),
-            }:
-                if stale_path.exists():
-                    stale_path.unlink()
+        _remove_source_exports(source_id, all_domain_roots)
         catalog.pop(source_id, None)
     for source_root, path in candidates:
         if limit is not None and stats["sessions"] >= limit:
             break
         stats["sessions"] += 1
+        source_id = safe_source_id(source_root, path)
         try:
             raw_source = path.read_bytes()
             events = parse_events(raw_source, path)
         except (OSError, ValueError):
             stats["invalid"] += 1
+            _remove_source_exports(source_id, all_domain_roots)
+            catalog.pop(source_id, None)
             continue
         records, quarantined = extract_records(events, mappings)
         if quarantined:
@@ -167,7 +180,6 @@ def export_sources(
         grouped: dict[str, list[Any]] = {}
         for record in records:
             grouped.setdefault(record.scope, []).append(record)
-        source_id = safe_source_id(source_root, path)
         source_hash = hashlib.sha256(raw_source).hexdigest()
         catalog[source_id] = str(path.resolve())
         current_domains = set(grouped)

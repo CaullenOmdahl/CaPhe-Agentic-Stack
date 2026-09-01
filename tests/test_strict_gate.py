@@ -143,6 +143,29 @@ class StrictGatePlanTests(unittest.TestCase):
         self.assertIn("dart-test-.", names)
         self.assertIn("python-unittest", names)
 
+    def test_default_manifest_discovers_nested_python_test_roots(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            backend = root / "backend"
+            (backend / "tests").mkdir(parents=True)
+            (backend / "pyproject.toml").write_text("[project]\nname='backend'\nversion='0.1.0'\n")
+            data = strict_gate.discover_default_manifest(root)
+        python_commands = [
+            command
+            for command in data["components"][0]["commands"]
+            if command["name"].startswith("python-unittest")
+        ]
+        self.assertEqual(
+            python_commands,
+            [
+                {
+                    "name": "python-unittest-backend",
+                    "run": ["python3", "-m", "unittest", "discover", "-s", "tests", "-v"],
+                    "cwd": "backend",
+                }
+            ],
+        )
+
     def test_default_manifest_discovers_independent_cargo_and_go_roots(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
