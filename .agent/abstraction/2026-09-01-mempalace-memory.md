@@ -19,8 +19,8 @@ immutable source records and loading only the evidence relevant to the current t
 - Sanitize and index eligible source records into physically isolated palaces, wings, halls, rooms,
   and drawers; quarantine ambiguous scope rather than guessing.
 - Search with semantic, lexical, structured-scope, temporal, and relationship signals.
-- Resolve selected results to stable source coordinates and a sanitizer-verified excerpt before answering;
-  raw source text is never returned directly to an agent retrieval context.
+- Resolve live search results to stable source, event, hash, and excerpt coordinates before answering;
+  the harness supplies only the sanitizer-verified canonical slices and independently measures them.
 - Mark facts superseded or invalid without silently destroying history.
 - Rebuild the derived index from source records.
 
@@ -58,6 +58,9 @@ immutable source records and loading only the evidence relevant to the current t
   masks superseded facts; historical queries may request the timeline. An LLM cannot silently invalidate.
 - `intended` Retrieved memory is framed as untrusted quoted evidence with source and trust metadata.
   Tool output and fetched third-party content are excluded from startup context and ingestion by default.
+- `intended` Benchmark probes are two-phase. Search returns coordinates only; the harness resolves those
+  coordinates from the selected generation, supplies the exact slices to the answer phase, requires the
+  answer to echo the live citations, and derives token volume from the supplied text rather than probe claims.
 - `intended` Indexing is idempotent, resume-safe, incremental, and bounded by per-palace quotas. Large
   tool outputs, binary/base64 content, and generated build logs are excluded by default.
 - `intended` A bounded ingestion pass counts only sources whose bytes, generation, mapping, or processing

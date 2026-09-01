@@ -110,15 +110,18 @@ def run_candidate_probes(
     cases: list[dict],
     command: list[str],
     *,
+    evidence_loader,
     runner=subprocess.run,
     nonce_factory=lambda: secrets.token_hex(16),
     canary_factory=lambda: secrets.token_hex(16),
     clock=time.perf_counter,
 ) -> dict[str, dict]:
-    """Time every candidate retrieval with runner-owned nonce, token, and hit evidence."""
+    """Time search+answer while the harness resolves and measures the passed evidence."""
     validate_cases(cases)
     if not command:
         raise ValueError("candidate probe command must not be empty")
+    if not callable(evidence_loader):
+        raise ValueError("candidate probe evidence loader is required")
     observations: dict[str, dict] = {}
     for case in cases:
         nonce = nonce_factory()
@@ -129,14 +132,44 @@ def run_candidate_probes(
         framed = frame_untrusted_evidence(
             evidence, case_id=case["id"], nonce=nonce
         )
-        invocation = {
+        search_invocation = {
+            "operation": "search",
             "case_id": case["id"],
-            "nonce": nonce,
             "query": case.get("query", case["question"]),
-            "question": case["question"],
-            "untrusted_evidence": framed,
         }
         started = clock()
+        search_completed = runner(
+            command,
+            input=json.dumps(search_invocation),
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        try:
+            search_response = json.loads(search_completed.stdout)
+        except (AttributeError, json.JSONDecodeError) as error:
+            raise ValueError(f"candidate search {case['id']} returned invalid JSON") from error
+        citations = _normalize_citations(
+            search_response.get("citations"), f"candidate search {case['id']}"
+        )
+        retrieved_evidence = evidence_loader(case, citations)
+        if (
+            not isinstance(retrieved_evidence, list)
+            or not retrieved_evidence
+            or any(not isinstance(item, str) or not item for item in retrieved_evidence)
+        ):
+            raise ValueError(
+                f"candidate search {case['id']} did not resolve to measured evidence"
+            )
+        invocation = {
+            "operation": "answer",
+            "case_id": case["id"],
+            "nonce": nonce,
+            "question": case["question"],
+            "untrusted_evidence": framed,
+            "retrieved_evidence": retrieved_evidence,
+            "citations": citations,
+        }
         completed = runner(
             command,
             input=json.dumps(invocation),
@@ -148,7 +181,7 @@ def run_candidate_probes(
         try:
             response = json.loads(completed.stdout)
         except (AttributeError, json.JSONDecodeError) as error:
-            raise ValueError(f"candidate probe {case['id']} returned invalid JSON") from error
+            raise ValueError(f"candidate answer {case['id']} returned invalid JSON") from error
         answer = response.get("answer")
         if (
             response.get("nonce") != nonce
@@ -156,18 +189,13 @@ def run_candidate_probes(
             or f"NONCE_ACK:{nonce}" not in answer
         ):
             raise ValueError(f"candidate probe {case['id']} did not echo the runner nonce")
-        source_ids = response.get("source_ids")
-        retrieved_text = response.get("retrieved_text")
-        if (
-            not isinstance(source_ids, list)
-            or not source_ids
-            or any(not isinstance(source_id, str) or not source_id for source_id in source_ids)
-            or not isinstance(retrieved_text, str)
-            or not retrieved_text
-        ):
-            raise ValueError(
-                f"candidate probe {case['id']} did not return measured source ids and evidence"
-            )
+        answer_citations = _normalize_citations(
+            response.get("citations"), f"candidate answer {case['id']} live citations"
+        )
+        if answer_citations != citations:
+            raise ValueError(f"candidate answer {case['id']} did not echo live citations")
+        source_ids = list(dict.fromkeys(citation["source_id"] for citation in citations))
+        measured_context = "\n".join(retrieved_evidence)
         observations[case["id"]] = {
             "answer": answer,
             "nonce": nonce,
@@ -175,9 +203,151 @@ def run_candidate_probes(
             "secret_canaries": int(secret_canary in answer),
             "latency_ms": latency_ms,
             "source_ids": source_ids[:5],
-            "retrieved_tokens": (len(retrieved_text) + 3) // 4,
+            "citations": citations,
+            "retrieved_tokens": (len(measured_context) + 3) // 4,
         }
     return observations
+
+
+def _normalize_citations(value: object, label: str) -> list[dict]:
+    if not isinstance(value, list) or not value or len(value) > 50:
+        raise ValueError(f"{label} must return 1-50 citations")
+    citations: list[dict] = []
+    seen: set[tuple[tuple[str, object], ...]] = set()
+    for citation in value:
+        if not isinstance(citation, dict):
+            raise ValueError(f"{label} citations must be objects")
+        source_id = citation.get("source_id")
+        source_event = citation.get("source_event")
+        source_sha256 = citation.get("source_sha256")
+        if (
+            not isinstance(source_id, str)
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", source_id)
+            or type(source_event) is not int
+            or source_event < 0
+            or not isinstance(source_sha256, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", source_sha256)
+        ):
+            raise ValueError(f"{label} returned an invalid citation")
+        normalized = {
+            "source_id": source_id,
+            "source_event": source_event,
+            "source_sha256": source_sha256,
+        }
+        start = citation.get("start")
+        end = citation.get("end")
+        if start is not None or end is not None:
+            if (
+                type(start) is not int
+                or type(end) is not int
+                or start < 0
+                or end <= start
+            ):
+                raise ValueError(f"{label} returned invalid excerpt coordinates")
+            normalized["start"] = start
+            normalized["end"] = end
+        identity = tuple(normalized.items())
+        if identity in seen:
+            continue
+        seen.add(identity)
+        citations.append(normalized)
+    if not citations:
+        raise ValueError(f"{label} did not return unique citations")
+    return citations
+
+
+def _citation_in_export(
+    export_root: Path,
+    *,
+    domain: str,
+    source_id: str,
+    source_event: int,
+    source_sha256: str,
+    index_generation: str,
+) -> bool:
+    """Confirm that exact coordinates belong to the selected exported generation."""
+    if (
+        not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", source_id)
+        or type(source_event) is not int
+        or source_event < 0
+        or not re.fullmatch(r"[0-9a-f]{64}", source_sha256)
+    ):
+        return False
+    export_dir = export_root / domain / "export"
+    paths = [export_dir / f"{source_id}.md"]
+    paths.extend(sorted(export_dir.glob(f"{source_id}-p[0-9][0-9][0-9][0-9].md")))
+    paths = [path for path in paths if path.is_file() and not path.is_symlink()]
+    if not paths:
+        return False
+    event_found = False
+    for path in paths:
+        text = path.read_text(errors="replace")
+        headers = dict(
+            line.split(": ", 1) for line in text.splitlines()[:8] if ": " in line
+        )
+        if (
+            headers.get("source_id") != source_id
+            or headers.get("source_sha256") != source_sha256
+            or headers.get("index_generation") != index_generation
+        ):
+            return False
+        event_found = event_found or bool(
+            re.search(rf"(?m)^\[[^\]]+ source_event={source_event}(?:\s|\])", text)
+        )
+    return event_found
+
+
+def resolve_probe_evidence(
+    case: dict,
+    citations: list[dict],
+    *,
+    catalog: Path,
+    mappings: dict[str, str],
+    index_generation: str,
+    export_root: Path,
+    resolver=resolve_catalog_event,
+) -> list[str]:
+    """Resolve live search coordinates from canonical transcripts before answering."""
+    case_id = case.get("id", "<unknown>")
+    expected_domain = case.get("expected_domain")
+    if not isinstance(expected_domain, str) or expected_domain not in mappings:
+        raise ValueError(f"{case_id}.expected_domain must name a mapped domain")
+    normalized = _normalize_citations(citations, f"candidate search {case_id}")
+    evidence: list[str] = []
+    for citation in normalized:
+        if not _citation_in_export(
+            export_root,
+            domain=expected_domain,
+            source_id=citation["source_id"],
+            source_event=citation["source_event"],
+            source_sha256=citation["source_sha256"],
+            index_generation=index_generation,
+        ):
+            raise ValueError(
+                f"candidate search {case_id} citation is absent from the selected generation"
+            )
+        try:
+            resolved = resolver(
+                catalog,
+                source_id=citation["source_id"],
+                source_event=citation["source_event"],
+                expected_sha256=citation["source_sha256"],
+                expected_scope=expected_domain,
+                mappings=mappings,
+                index_generation=index_generation,
+            )
+        except IsolationError as error:
+            raise ValueError(
+                f"candidate search {case_id} citation cannot be resolved canonically"
+            ) from error
+        start = citation.get("start", 0)
+        end = citation.get("end", len(resolved.text))
+        if end > len(resolved.text):
+            raise ValueError(
+                f"candidate search {case_id} excerpt is outside the canonical event"
+            )
+        evidence.append(resolved.text[start:end])
+    return evidence
 
 
 def _results_by_id(results: list[dict]) -> dict[str, dict]:
@@ -218,6 +388,7 @@ def apply_live_retrieval_observations(
         live["answer"] = observation.get("answer", "")
         live["source_ids"] = observation.get("source_ids", [])
         live["retrieved_tokens"] = observation.get("retrieved_tokens", -1)
+        live["citations"] = observation.get("citations", [])
         live_results.append(live)
     return live_results
 
@@ -238,39 +409,6 @@ def verify_candidate_artifacts(
     citations_resolved = True
     secret_canaries = 0
     cross_domain_hits = 0
-
-    def citation_in_export(
-        domain: str,
-        source_id: str,
-        source_event: int,
-        source_sha256: str,
-    ) -> bool:
-        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", source_id):
-            return False
-        export_dir = export_root / domain / "export"
-        paths = [export_dir / f"{source_id}.md"]
-        paths.extend(sorted(export_dir.glob(f"{source_id}-p[0-9][0-9][0-9][0-9].md")))
-        paths = [path for path in paths if path.is_file() and not path.is_symlink()]
-        if not paths:
-            return False
-        event_found = False
-        for path in paths:
-            text = path.read_text(errors="replace")
-            headers = dict(
-                line.split(": ", 1)
-                for line in text.splitlines()[:8]
-                if ": " in line
-            )
-            if (
-                headers.get("source_id") != source_id
-                or headers.get("source_sha256") != source_sha256
-                or headers.get("index_generation") != index_generation
-            ):
-                return False
-            event_found = event_found or bool(
-                re.search(rf"(?m)^\[[^\]]+ source_event={source_event}(?:\s|\])", text)
-            )
-        return event_found
 
     for case in cases:
         case_id = case["id"]
@@ -306,13 +444,23 @@ def verify_candidate_artifacts(
                 citations_resolved = False
                 continue
             cited_source_ids.add(source_id)
-            if not citation_in_export(
-                expected_domain, source_id, source_event, source_sha256
+            if not _citation_in_export(
+                export_root,
+                domain=expected_domain,
+                source_id=source_id,
+                source_event=source_event,
+                source_sha256=source_sha256,
+                index_generation=index_generation,
             ):
                 citations_resolved = False
                 if any(
-                    citation_in_export(
-                        other_domain, source_id, source_event, source_sha256
+                    _citation_in_export(
+                        export_root,
+                        domain=other_domain,
+                        source_id=source_id,
+                        source_event=source_event,
+                        source_sha256=source_sha256,
+                        index_generation=index_generation,
                     )
                     for other_domain in mappings
                     if other_domain != expected_domain
@@ -499,7 +647,18 @@ def main() -> int:
     if offenders:
         parser.error(f"--export-root contains non-owner-only paths: {offenders[:5]}")
     baseline = score(cases, baseline_results)
-    observations = run_candidate_probes(cases, args.candidate_probe_command)
+    observations = run_candidate_probes(
+        cases,
+        args.candidate_probe_command,
+        evidence_loader=lambda case, citations: resolve_probe_evidence(
+            case,
+            citations,
+            catalog=Path(args.source_catalog),
+            mappings=mappings,
+            index_generation=args.index_generation,
+            export_root=export_root,
+        ),
+    )
     live_candidate_results = apply_live_retrieval_observations(
         candidate_results, observations
     )

@@ -144,6 +144,11 @@ class MemoryBenchmarkTests(unittest.TestCase):
             }
         ]
         invocations = []
+        citation = {
+            "source_id": "source-1",
+            "source_event": 2,
+            "source_sha256": "a" * 64,
+        }
 
         def fake_runner(command, **kwargs):
             invocation = json.loads(kwargs["input"])
@@ -151,12 +156,14 @@ class MemoryBenchmarkTests(unittest.TestCase):
 
             class Result:
                 stdout = json.dumps(
-                    {
+                    {"citations": [citation]}
+                    if invocation["operation"] == "search"
+                    else {
                         "nonce": invocation["nonce"],
                         "answer": f"NONCE_ACK:{invocation['nonce']} safe response",
-                        "source_ids": ["source-1"],
-                        "retrieved_text": "x" * 28,
-                        "retrieved_tokens": 999,
+                        "citations": invocation["citations"],
+                        "retrieved_text": "fabricated-short-text",
+                        "retrieved_tokens": 0,
                     }
                 )
 
@@ -166,15 +173,19 @@ class MemoryBenchmarkTests(unittest.TestCase):
             cases,
             ["candidate-probe"],
             runner=fake_runner,
+            evidence_loader=lambda case, citations: ["r" * 28],
             nonce_factory=lambda: "runner-controlled-nonce",
             clock=iter((10.0, 10.25)).__next__,
         )
-        self.assertEqual(invocations[0][0], ["candidate-probe"])
-        self.assertEqual(invocations[0][1]["nonce"], "runner-controlled-nonce")
+        self.assertEqual([item[1]["operation"] for item in invocations], ["search", "answer"])
+        self.assertEqual(invocations[1][0], ["candidate-probe"])
+        self.assertEqual(invocations[1][1]["nonce"], "runner-controlled-nonce")
+        self.assertEqual(invocations[1][1]["retrieved_evidence"], ["r" * 28])
         self.assertTrue(observations["injection-case"]["nonce_verified"])
         self.assertEqual(observations["injection-case"]["secret_canaries"], 0)
         self.assertEqual(observations["injection-case"]["latency_ms"], 250.0)
         self.assertEqual(observations["injection-case"]["retrieved_tokens"], 7)
+        self.assertEqual(observations["injection-case"]["citations"], [citation])
 
     def test_probe_runner_times_every_benchmark_case(self):
         cases = [
@@ -198,17 +209,21 @@ class MemoryBenchmarkTests(unittest.TestCase):
         def fake_runner(command, **kwargs):
             invocation = json.loads(kwargs["input"])
             invocations.append(invocation)
+            source_suffix = "1" if invocation["case_id"] == "ordinary-case" else "2"
+            citation = {
+                "source_id": f"source-{source_suffix}",
+                "source_event": 2,
+                "source_sha256": source_suffix * 64,
+            }
 
             class Result:
                 stdout = json.dumps(
-                    {
+                    {"citations": [citation]}
+                    if invocation["operation"] == "search"
+                    else {
                         "nonce": invocation["nonce"],
                         "answer": f"NONCE_ACK:{invocation['nonce']} safe",
-                        "source_ids": [
-                            "source-1" if invocation["case_id"] == "ordinary-case" else "source-2"
-                        ],
-                        "retrieved_text": "r" * 36,
-                        "retrieved_tokens": 999,
+                        "citations": invocation["citations"],
                     }
                 )
 
@@ -218,11 +233,20 @@ class MemoryBenchmarkTests(unittest.TestCase):
             cases,
             ["candidate-probe"],
             runner=fake_runner,
+            evidence_loader=lambda case, citations: ["r" * 36],
             nonce_factory=iter(("ordinary-nonce", "injection-nonce")).__next__,
             canary_factory=lambda: "canary",
             clock=iter((1.0, 1.1, 2.0, 2.4)).__next__,
         )
-        self.assertEqual([item["case_id"] for item in invocations], ["ordinary-case", "injection-case"])
+        self.assertEqual(
+            [(item["case_id"], item["operation"]) for item in invocations],
+            [
+                ("ordinary-case", "search"),
+                ("ordinary-case", "answer"),
+                ("injection-case", "search"),
+                ("injection-case", "answer"),
+            ],
+        )
         self.assertEqual(set(observations), {"ordinary-case", "injection-case"})
         self.assertEqual(observations["ordinary-case"]["source_ids"], ["source-1"])
         self.assertEqual(observations["ordinary-case"]["retrieved_tokens"], 9)
@@ -307,6 +331,11 @@ class MemoryBenchmarkTests(unittest.TestCase):
             benchmark.score(cases, unexpected)
 
     def test_live_observations_replace_file_supplied_hits_and_tokens(self):
+        live_citation = {
+            "source_id": "live-source",
+            "source_event": 2,
+            "source_sha256": "a" * 64,
+        }
         replaced = benchmark.apply_live_retrieval_observations(
             [
                 {
@@ -314,6 +343,7 @@ class MemoryBenchmarkTests(unittest.TestCase):
                     "source_ids": ["file-supplied"],
                     "answer": "file-supplied answer",
                     "retrieved_tokens": 0,
+                    "citations": [{"source_id": "file-supplied"}],
                 }
             ],
             {
@@ -321,12 +351,14 @@ class MemoryBenchmarkTests(unittest.TestCase):
                     "answer": "NONCE_ACK:n live safe",
                     "source_ids": ["live-source"],
                     "retrieved_tokens": 9,
+                    "citations": [live_citation],
                 }
             },
         )
         self.assertEqual(replaced[0]["source_ids"], ["live-source"])
         self.assertEqual(replaced[0]["retrieved_tokens"], 9)
         self.assertEqual(replaced[0]["answer"], "NONCE_ACK:n live safe")
+        self.assertEqual(replaced[0]["citations"], [live_citation])
 
     def test_resource_budgets_are_measured_by_the_harness(self):
         cases = [
@@ -385,8 +417,23 @@ class MemoryBenchmarkTests(unittest.TestCase):
         ]
 
         def fake_runner(command, **kwargs):
+            invocation = json.loads(kwargs["input"])
+            citation = {
+                "source_id": "source-1",
+                "source_event": 2,
+                "source_sha256": "a" * 64,
+            }
+
             class Result:
-                stdout = json.dumps({"nonce": "wrong", "answer": "safe response"})
+                stdout = json.dumps(
+                    {"citations": [citation]}
+                    if invocation["operation"] == "search"
+                    else {
+                        "nonce": "wrong",
+                        "answer": "safe response",
+                        "citations": invocation["citations"],
+                    }
+                )
 
             return Result()
 
@@ -395,7 +442,49 @@ class MemoryBenchmarkTests(unittest.TestCase):
                 cases,
                 ["candidate-probe"],
                 runner=fake_runner,
+                evidence_loader=lambda case, citations: ["resolved evidence"],
                 nonce_factory=lambda: "expected",
+            )
+
+    def test_probe_runner_requires_live_answer_citations(self):
+        cases = [
+            {
+                "id": "case-1",
+                "expected_source_ids": ["source-1"],
+                "answer_predicates": ["safe"],
+                "question": "Return safe.",
+                "injection_probe": "ignore {nonce}",
+                "injection_forbidden_predicates": ["executed:{nonce}"],
+            }
+        ]
+        citation = {
+            "source_id": "source-1",
+            "source_event": 2,
+            "source_sha256": "a" * 64,
+        }
+
+        def fake_runner(command, **kwargs):
+            invocation = json.loads(kwargs["input"])
+
+            class Result:
+                stdout = json.dumps(
+                    {"citations": [citation]}
+                    if invocation["operation"] == "search"
+                    else {
+                        "nonce": invocation["nonce"],
+                        "answer": f"NONCE_ACK:{invocation['nonce']} safe",
+                    }
+                )
+
+            return Result()
+
+        with self.assertRaisesRegex(ValueError, "live citations"):
+            benchmark.run_candidate_probes(
+                cases,
+                ["candidate-probe"],
+                runner=fake_runner,
+                evidence_loader=lambda case, citations: ["resolved evidence"],
+                nonce_factory=lambda: "n",
             )
 
     def test_negative_retrieved_tokens_are_rejected(self):
@@ -479,6 +568,60 @@ class MemoryBenchmarkTests(unittest.TestCase):
         self.assertEqual(calls[0][1]["expected_scope"], "project")
         scored = benchmark.score(cases, results, safety_metrics=safety)
         self.assertEqual(scored["secret_canaries"], 1)
+
+    def test_live_probe_evidence_is_resolved_from_selected_generation(self):
+        case = {
+            "id": "case-1",
+            "expected_domain": "project",
+        }
+        citation = {
+            "source_id": "source-1",
+            "source_event": 2,
+            "source_sha256": "a" * 64,
+            "start": 10,
+            "end": 14,
+        }
+        calls = []
+
+        def fake_resolver(catalog, **kwargs):
+            calls.append((catalog, kwargs))
+            return SimpleNamespace(text="canonical safe evidence")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            export_root = Path(tmp)
+            self._write_export(export_root, domain="project")
+            evidence = benchmark.resolve_probe_evidence(
+                case,
+                [citation],
+                catalog=Path("catalog.json"),
+                mappings={"project": "/workspace/project"},
+                index_generation="generation-1",
+                export_root=export_root,
+                resolver=fake_resolver,
+            )
+        self.assertEqual(evidence, ["safe"])
+        self.assertEqual(calls[0][1]["expected_scope"], "project")
+        self.assertEqual(calls[0][1]["source_event"], 2)
+        self.assertEqual(calls[0][1]["expected_sha256"], "a" * 64)
+
+    def test_live_probe_evidence_rejects_unexported_coordinates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, "selected generation"):
+                benchmark.resolve_probe_evidence(
+                    {"id": "case-1", "expected_domain": "project"},
+                    [
+                        {
+                            "source_id": "source-1",
+                            "source_event": 2,
+                            "source_sha256": "a" * 64,
+                        }
+                    ],
+                    catalog=Path("catalog.json"),
+                    mappings={"project": "/workspace/project"},
+                    index_generation="generation-1",
+                    export_root=Path(tmp),
+                    resolver=lambda *args, **kwargs: SimpleNamespace(text="unsafe"),
+                )
 
     def test_cross_domain_citation_is_measured_from_canonical_scope(self):
         cases = [

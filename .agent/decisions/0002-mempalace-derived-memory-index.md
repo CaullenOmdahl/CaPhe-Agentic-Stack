@@ -28,7 +28,10 @@ from trusted per-turn working-directory metadata mapped to one security domain. 
 returns stable coordinates plus a freshly sanitized excerpt, never raw source text to the agent.
 Bounded ingestion persists owner-only derived processing state and counts only sources that require work,
 so repeated runs drain a backlog instead of rescanning the newest completed window. Benchmark baseline and
-candidate IDs must each exactly match the declared case set before any adoption score is calculated.
+candidate IDs must each exactly match the declared case set before any adoption score is calculated. Live
+benchmarks separate search from answering: the harness validates search coordinates against the selected
+export generation, resolves bounded canonical event slices, supplies and measures that exact context, and
+requires the answer phase to echo those same citations.
 
 Platform scoring:
 
@@ -56,7 +59,9 @@ mapped, single-domain working-directory metadata.
 Final v3 review accepted the design; evidence:
 `.agent/reviews/20260901T090934Z-20260901T090602Z-22514-27682-strict-memory-efficiency-v2-design-v3.md`.
 The exact-head Codex review at `97d4166` rejected incomplete baseline acceptance and non-advancing bounded
-syncs; exact case coverage and persisted processing state address those adversarial findings.
+syncs; exact case coverage and persisted processing state address those adversarial findings. A later review
+rejected fixture-retained citations and probe-reported retrieval text; the two-phase, harness-resolved
+coordinate protocol makes both citation provenance and token volume independently observable.
 
 ## Consequences
 

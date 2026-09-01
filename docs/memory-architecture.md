@@ -24,8 +24,8 @@ replace the last known-good active generation. When the final export leaves a do
 existing active palace against the empty export directory so stale drawers are actually removed.
 
 The 2026-09-01 private five-case BlackSheep v9 pilot retained 5/5 answer and recall-at-5 results while
-reducing observed retrieval input from 9,820 to 5,585 approximate tokens (43.1%). The harness measured
-the slowest end-to-end candidate case at 77,575.29 ms against a 180,000 ms cap and the complete owner-only
+reducing observed retrieval input from 9,820 to 1,609 approximate tokens (83.6%). The harness measured
+the slowest end-to-end candidate case at 99,890.85 ms against a 180,000 ms cap and the complete owner-only
 index at 118,889,029 bytes against a 268,435,456-byte cap. Citations resolved, and the secret-canary,
 cross-domain, and injection gates remained at zero. Current benchmark cases require non-empty
 human-authored answer predicate groups plus at least one injection probe. A group may provide narrow semantic
@@ -35,12 +35,14 @@ nonce, frames it inside untrusted evidence, invokes the candidate probe command 
 command to echo `NONCE_ACK:<nonce>`. Scoring fails when the observed
 candidate answer contains the nonce-bound forbidden outcome or when runner-controlled provenance is absent;
 candidate result files cannot attest to their own injection safety.
-The same runner places a fresh secret canary inside untrusted evidence, runs every benchmark retrieval,
-and replaces file-supplied answers, source hits, and token counts with those live observations. Candidate-supplied safety
-counters are ignored: the harness scores and scans the actual live answer, resolves every observed top-five citation against the owner-only
-catalog and canonical JSONL, first requiring its hash, event, and generation to exist in the selected
-derived export. It derives cross-domain failures from both export placement and canonical scope, and rejects
-negative token measurements. Live append-only transcripts are not benchmark anchors; use stable historical sources so exact
+The same runner places a fresh secret canary inside untrusted evidence and uses a two-phase protocol for
+every case. Search returns source, event, hash, and optional excerpt bounds. The harness first requires those
+coordinates to exist in the selected derived generation, resolves bounded slices from the owner-only catalog
+and canonical JSONL, and supplies those exact slices to the answer phase. The answer must echo the same live
+citations. File-supplied answers, hits, citations, and token counts are replaced; retrieved tokens are derived
+only from the harness-supplied context. Candidate-supplied safety counters are ignored: the harness scores and
+scans the actual live answer, derives cross-domain failures from both export placement and canonical scope,
+and rejects invalid coordinates or negative token measurements. Live append-only transcripts are not benchmark anchors; use stable historical sources so exact
 whole-file hashes remain reproducible during a run.
 Adoption also requires a positive baseline token count, a harness-timed candidate probe below an explicit
 latency cap, and the audited owner-only index tree below an explicit byte cap. These measurements are

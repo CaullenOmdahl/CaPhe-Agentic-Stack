@@ -55,6 +55,9 @@ observable evidence required to accept a change.
   or cycle. Affected mode is allowed only when dependency completeness is proven by built-in workspace
   extractors (Dart/pub, Node workspaces/package dependencies, Cargo metadata, or Go modules) or a declared
   repository verifier. Otherwise affected mode escalates to the full matrix. Manifest edits force full.
+- `intended` Generated manifests inspect each Python test root's nearest project declaration and invoke
+  pytest when it is declared; plain test trees retain unittest discovery so default gates do not silently
+  skip a repository's authoritative tests.
 - `intended` Failure output is preserved and displayed.
 - `intended` Initialization fails atomically on malformed markers and deduplicates symlink aliases.
 - `intended` Peer review denies host filesystem access by default. It exposes only the staged snapshot,

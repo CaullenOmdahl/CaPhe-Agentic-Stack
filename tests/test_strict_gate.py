@@ -166,6 +166,30 @@ class StrictGatePlanTests(unittest.TestCase):
             ],
         )
 
+    def test_default_manifest_uses_declared_pytest_runner(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "tests").mkdir()
+            (root / "pyproject.toml").write_text(
+                "[project]\nname='pytest-project'\nversion='0.1.0'\n"
+                "[tool.pytest.ini_options]\ntestpaths=['tests']\n"
+            )
+            data = strict_gate.discover_default_manifest(root)
+        python_commands = [
+            command
+            for command in data["components"][0]["commands"]
+            if command["name"].startswith("python-")
+        ]
+        self.assertEqual(
+            python_commands,
+            [
+                {
+                    "name": "python-pytest",
+                    "run": ["python3", "-m", "pytest", "tests"],
+                }
+            ],
+        )
+
     def test_default_manifest_discovers_independent_cargo_and_go_roots(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
