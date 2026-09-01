@@ -321,8 +321,8 @@ def _relative_cwd(root: Path, manifest: Path) -> str:
     return "." if str(parent) == "." else str(parent)
 
 
-def _declares_pytest(project_root: Path) -> bool:
-    """Detect an explicit pytest contract without importing project dependencies."""
+def _has_pytest_configuration(project_root: Path) -> bool:
+    """Detect pytest configuration that makes the project root a test entrypoint."""
     if (project_root / "pytest.ini").is_file() or (project_root / "conftest.py").is_file():
         return True
     if (project_root / "tests" / "conftest.py").is_file():
@@ -337,6 +337,33 @@ def _declares_pytest(project_root: Path) -> bool:
         tool = data.get("tool", {}) if isinstance(data, dict) else {}
         if isinstance(tool, dict) and isinstance(tool.get("pytest"), dict):
             return True
+
+    setup_cfg = project_root / "setup.cfg"
+    if setup_cfg.is_file() and re.search(
+        r"(?im)^\s*\[tool:pytest\]\s*$", setup_cfg.read_text(errors="replace")
+    ):
+        return True
+    tox_ini = project_root / "tox.ini"
+    return bool(
+        tox_ini.is_file()
+        and re.search(
+            r"(?im)^\s*(?:commands\s*=\s*)?.*\bpytest\b",
+            tox_ini.read_text(errors="replace"),
+        )
+    )
+
+
+def _declares_pytest(project_root: Path) -> bool:
+    """Detect an explicit pytest contract without importing project dependencies."""
+    if _has_pytest_configuration(project_root):
+        return True
+
+    pyproject = project_root / "pyproject.toml"
+    if pyproject.is_file():
+        try:
+            data = tomllib.loads(pyproject.read_text(errors="replace"))
+        except (OSError, tomllib.TOMLDecodeError):
+            data = {}
         project = data.get("project", {}) if isinstance(data, dict) else {}
         dependency_groups: list[Any] = []
         if isinstance(project, dict):
@@ -361,16 +388,6 @@ def _declares_pytest(project_root: Path) -> bool:
         ):
             return True
 
-    setup_cfg = project_root / "setup.cfg"
-    if setup_cfg.is_file() and re.search(
-        r"(?im)^\s*\[tool:pytest\]\s*$", setup_cfg.read_text(errors="replace")
-    ):
-        return True
-    tox_ini = project_root / "tox.ini"
-    if tox_ini.is_file() and re.search(
-        r"(?im)^\s*(?:commands\s*=\s*)?.*\bpytest\b", tox_ini.read_text(errors="replace")
-    ):
-        return True
     for requirements in project_root.glob("requirements*.txt"):
         if requirements.is_file() and re.search(
             r"(?im)^\s*pytest(?:\s|$|[<>=!~;\[])",
@@ -512,6 +529,14 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
         for tests in root.rglob("tests")
         if tests.is_dir() and not any(part in excluded_python_parts for part in tests.parts)
     }
+    pytest_config_roots = {
+        config.parent
+        for pattern in ("pyproject.toml", "pytest.ini", "setup.cfg", "tox.ini")
+        for config in root.rglob(pattern)
+        if not any(part in excluded_python_parts for part in config.parts)
+        and _has_pytest_configuration(config.parent)
+    }
+    python_test_roots.update(pytest_config_roots)
     for python_root in sorted(python_test_roots):
         cwd = "." if python_root == root else python_root.relative_to(root).as_posix()
         suffix = "" if cwd == "." else f"-{cwd.replace('/', '-')}"
@@ -519,7 +544,12 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
         command = (
             {
                 "name": f"python-pytest{suffix}",
-                "run": ["python3", "-m", "pytest", "tests"],
+                "run": [
+                    "python3",
+                    "-m",
+                    "pytest",
+                    *(["tests"] if (python_root / "tests").is_dir() else []),
+                ],
             }
             if runner == "pytest"
             else {

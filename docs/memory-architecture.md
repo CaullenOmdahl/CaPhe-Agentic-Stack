@@ -22,8 +22,9 @@ MemPalace may create backend files with group/world-readable defaults. After eve
 `repair`, or migration, run the adapter's `harden_owner_only_tree`, require
 `audit_owner_only_tree` to return no paths, and only then permit retrieval. A successful sync writes
 `active-generation` atomically after mining and reconciliation finish; a failed new generation cannot
-replace the last known-good active generation. When the final export leaves a domain, sync reconciles the
-existing active palace against the empty export directory so stale drawers are actually removed.
+replace the last known-good active generation. When the final export leaves a domain, sync reconciles every
+initialized retained palace generation against the empty export directory so stale drawers are removed
+from historical as well as active derived indexes.
 
 The 2026-09-01 private five-case BlackSheep v10 pilot retained 5/5 answer and recall-at-5 results while
 reducing observed retrieval input from 9,820 to 3,742 approximate tokens (61.9%). The harness measured
@@ -70,6 +71,8 @@ removed from the private catalog, processed state, and every affected domain exp
 Every source is also preflighted as readable valid JSONL before a generation transition writes anything.
 Every requested source root must exist as a readable, searchable, non-symlink directory before any export
 or pruning begins, so a missing or unmounted canonical source cannot be mistaken for intentional deletion.
+The complete source-root list supplied to each run is authoritative: catalog and processed-state entries
+outside that set are retired and their exports are pruned before new sources are processed.
 During ordinary same-generation sync, a source that becomes unreadable or invalid is pruned from the
 catalog and exports instead of leaving stale retrievable content.
 The exporter records a hash of the trusted domain mapping. Mapping additions, removals, or root changes

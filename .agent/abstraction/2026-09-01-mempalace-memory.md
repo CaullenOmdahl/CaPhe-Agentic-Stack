@@ -69,7 +69,9 @@ immutable source records and loading only the evidence relevant to the current t
   state require work. Owner-only derived state lets repeated bounded passes advance through the backlog;
   unchanged, quarantined, and previously invalid sources do not permanently consume the front of every batch.
 - `intended` A secret discovered after indexing tombstones the derived drawer and triggers a sanitized
-  rebuild. User-authorized source deletion is followed by deletion verification and complete reindex.
+  rebuild. User-authorized source deletion is followed by deletion verification across every retained
+  palace generation and complete reindex. Each sync's complete source-root list is authoritative; sources
+  under retired roots are removed from derived state.
 - `intended` Failure of the derived index falls back to existing source/registry lookup.
 - `legacy` Loading broad manually maintained summaries into every task is reduced to a small identity
   layer plus scoped query-time retrieval.

@@ -118,6 +118,38 @@ class MemorySyncTests(unittest.TestCase):
             )
             self.assertEqual((domain / "active-generation").read_text().strip(), "generation-1")
 
+    def test_empty_export_reconciles_every_retained_generation(self):
+        spec = importlib.util.spec_from_file_location("sync_mempalace_all_empty", MODULE_PATH)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as tmp:
+            domain = Path(tmp) / "project-12345678"
+            (domain / "export").mkdir(parents=True, mode=0o700)
+            palaces = []
+            for generation in ("generation-1", "generation-2"):
+                palace = domain / "palaces" / generation
+                palace.mkdir(parents=True, mode=0o700)
+                (palace / ".initialized").write_text(generation + "\n")
+                palaces.append(palace.resolve())
+            (domain / "active-generation").write_text("generation-2\n")
+            calls = []
+
+            def fake_run(command, **kwargs):
+                calls.append(command)
+
+            module.sync_domain(domain, generation="generation-3", runner=fake_run)
+            self.assertEqual(len(calls), 2)
+            self.assertTrue(all("sync" in command for command in calls))
+            self.assertTrue(all("mine" not in command for command in calls))
+            self.assertEqual(
+                {
+                    Path(command[command.index("--palace") + 1])
+                    for command in calls
+                },
+                set(palaces),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

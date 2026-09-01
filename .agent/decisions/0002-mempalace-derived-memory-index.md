@@ -68,6 +68,10 @@ could evade forbidden-outcome matching, unavailable source roots could be treate
 isolated palace sizes were summed against a per-domain cap. The accepted repair normalizes injection
 outcomes, validates every canonical source root before mutation, and measures the largest benchmarked
 palace independently.
+A subsequent exact-head review found that empty-domain reconciliation touched only the active generation
+and that catalog entries under roots removed from `--source-root` survived. Empty-domain sync now
+reconciles every initialized retained generation, and each run treats its complete validated source-root
+set as authoritative for pruning retired derived records.
 
 ## Consequences
 

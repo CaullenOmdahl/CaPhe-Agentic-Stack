@@ -269,7 +269,7 @@ def export_sources(
             )
         except (OSError, TypeError):
             belongs_to_current_roots = False
-        if belongs_to_current_roots and source_id not in current_source_ids:
+        if not belongs_to_current_roots or source_id not in current_source_ids:
             stale_source_ids.add(source_id)
     for source_id in stale_source_ids:
         _remove_source_exports(source_id, all_domain_roots)

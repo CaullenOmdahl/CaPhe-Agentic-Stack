@@ -82,6 +82,7 @@ def sync_domain(
         raise ValueError("generation must be a safe path component")
     has_exports = any(export_dir.glob("*.md"))
     selected_generation = generation
+    retained_palaces: list[Path] = []
     if not has_exports:
         active_pointer = domain_root / "active-generation"
         if not active_pointer.is_file():
@@ -89,10 +90,21 @@ def sync_domain(
         selected_generation = active_pointer.read_text().strip()
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", selected_generation):
             raise ValueError("active generation is invalid")
+        palaces_root = domain_root / "palaces"
+        if palaces_root.is_symlink() or not palaces_root.is_dir():
+            raise ValueError("palaces directory is unavailable")
+        for retained in sorted(palaces_root.iterdir()):
+            if retained.is_symlink():
+                raise ValueError("retained palace must not be a symlink")
+            if not retained.is_dir():
+                continue
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", retained.name):
+                raise ValueError("retained generation is invalid")
+            retained_palaces.append(retained)
     palace = domain_root / "palaces" / selected_generation
     if has_exports:
         palace.mkdir(mode=0o700, parents=True, exist_ok=True)
-    elif palace.is_symlink() or not palace.is_dir():
+    elif palace.is_symlink() or palace not in retained_palaces:
         raise ValueError("active palace is unavailable")
     harden_owner_only_tree(domain_root)
     env = _private_local_env()
@@ -109,9 +121,19 @@ def sync_domain(
     initialized_marker = palace / ".initialized"
     wing = domain_root.name.rsplit("-", 1)[0]
     if not has_exports:
-        if not initialized_marker.is_file():
-            raise ValueError("active palace is not initialized")
-        run_write([*base, "sync", str(export_dir), "--wing", wing, "--apply"])
+        for retained_palace in retained_palaces:
+            if not (retained_palace / ".initialized").is_file():
+                raise ValueError("retained palace is not initialized")
+            run_write(
+                [
+                    *_base_command(retained_palace),
+                    "sync",
+                    str(export_dir),
+                    "--wing",
+                    wing,
+                    "--apply",
+                ]
+            )
         return
     if not initialized_marker.exists():
         run_write(

@@ -97,6 +97,41 @@ class MemoryExportTests(unittest.TestCase):
                 exporter.safe_source_id(second_root, second),
             )
 
+    def test_retired_source_root_is_pruned_from_derived_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            retired = root / "retired-sessions"
+            current = root / "current-sessions"
+            output = root / "pilot"
+            retired.mkdir()
+            current.mkdir()
+            output.mkdir(mode=0o700)
+            events = [
+                {"type": "turn_context", "payload": {"cwd": "/workspace/project"}},
+                {
+                    "type": "response_item",
+                    "payload": {"type": "message", "role": "user", "content": "retire me"},
+                },
+                {
+                    "type": "response_item",
+                    "payload": {"type": "message", "role": "assistant", "content": "answer"},
+                },
+            ]
+            source = retired / "session.jsonl"
+            source.write_text("".join(json.dumps(event) + "\n" for event in events))
+            exporter.export_sources(
+                [retired], {"project": "/workspace/project"}, output, "generation-1"
+            )
+            self.assertTrue(any((output / "project" / "export").glob("*.md")))
+
+            exporter.export_sources(
+                [current], {"project": "/workspace/project"}, output, "generation-1"
+            )
+
+            self.assertFalse(any((output / "project" / "export").glob("*.md")))
+            self.assertEqual(json.loads((output / "source-catalog.json").read_text()), {})
+            self.assertEqual(json.loads((output / "processed-state.json").read_text()), {})
+
     def test_unsafe_domain_name_is_rejected_before_export(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

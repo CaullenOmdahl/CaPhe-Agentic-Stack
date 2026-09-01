@@ -56,8 +56,9 @@ observable evidence required to accept a change.
   extractors (Dart/pub, Node workspaces/package dependencies, Cargo metadata, or Go modules) or a declared
   repository verifier. Otherwise affected mode escalates to the full matrix. Manifest edits force full.
 - `intended` Generated manifests inspect each Python test root's nearest project declaration and invoke
-  pytest when it is declared; plain test trees retain unittest discovery so default gates do not silently
-  skip a repository's authoritative tests.
+  pytest when it is declared. A project with explicit pytest configuration is itself a test root even when
+  its configured `testpaths` does not include a directory literally named `tests`; plain test trees retain
+  unittest discovery so default gates do not silently skip a repository's authoritative tests.
 - `intended` Failure output is preserved and displayed.
 - `intended` Initialization fails atomically on malformed markers and deduplicates symlink aliases.
 - `intended` Peer review denies host filesystem access by default. It exposes only the staged snapshot,
