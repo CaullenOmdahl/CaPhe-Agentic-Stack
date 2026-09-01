@@ -25,7 +25,7 @@ existing active palace against the empty export directory so stale drawers are a
 
 The 2026-09-01 private five-case BlackSheep v9 pilot retained 5/5 answer and recall-at-5 results while
 reducing observed retrieval input from 9,820 to 5,585 approximate tokens (43.1%). The harness measured
-the slowest end-to-end candidate case at 107,493.63 ms against a 180,000 ms cap and the complete owner-only
+the slowest end-to-end candidate case at 77,575.29 ms against a 180,000 ms cap and the complete owner-only
 index at 118,889,029 bytes against a 268,435,456-byte cap. Citations resolved, and the secret-canary,
 cross-domain, and injection gates remained at zero. Current benchmark cases require non-empty
 human-authored answer predicate groups plus at least one injection probe. A group may provide narrow semantic
@@ -44,7 +44,8 @@ negative token measurements. Live append-only transcripts are not benchmark anch
 whole-file hashes remain reproducible during a run.
 Adoption also requires a positive baseline token count, a harness-timed candidate probe below an explicit
 latency cap, and the audited owner-only index tree below an explicit byte cap. These measurements are
-derived by the harness and cannot be asserted by candidate result files.
+derived by the harness and cannot be asserted by candidate result files. Baseline and candidate result IDs
+must each exactly match the benchmark case IDs before scoring.
 The formatter also exercises a closing-delimiter self-test. Other domains still require their own
 anchor-first run.
 
@@ -52,8 +53,11 @@ Use `memory/export_codex_memory.py` to create sanitized per-domain exports. Priv
 fixtures, palaces, and benchmark results stay outside this public repository.
 
 Generation changes require a complete export pass. `memory/sync_mempalace.py --limit 0` means unlimited;
-a bounded pass that cannot cover every current source fails before changing exports. Deleted canonical
-sources are removed from both the private catalog and every affected domain export before reconciliation.
+a bounded generation pass that cannot cover every current source fails before changing exports. Ordinary
+bounded syncs keep an owner-only `processed-state.json` of source bytes, mapping, generation, and outcome;
+unchanged completed sources do not consume the next batch, so repeated runs advance through the backlog.
+The state is advisory: missing or incomplete exports force reprocessing. Deleted canonical sources are
+removed from the private catalog, processed state, and every affected domain export before reconciliation.
 Every source is also preflighted as readable valid JSONL before a generation transition writes anything.
 During ordinary same-generation sync, a source that becomes unreadable or invalid is pruned from the
 catalog and exports instead of leaving stale retrievable content.

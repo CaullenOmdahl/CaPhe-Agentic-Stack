@@ -60,6 +60,9 @@ immutable source records and loading only the evidence relevant to the current t
   Tool output and fetched third-party content are excluded from startup context and ingestion by default.
 - `intended` Indexing is idempotent, resume-safe, incremental, and bounded by per-palace quotas. Large
   tool outputs, binary/base64 content, and generated build logs are excluded by default.
+- `intended` A bounded ingestion pass counts only sources whose bytes, generation, mapping, or processing
+  state require work. Owner-only derived state lets repeated bounded passes advance through the backlog;
+  unchanged, quarantined, and previously invalid sources do not permanently consume the front of every batch.
 - `intended` A secret discovered after indexing tombstones the derived drawer and triggers a sanitized
   rebuild. User-authorized source deletion is followed by deletion verification and complete reindex.
 - `intended` Failure of the derived index falls back to existing source/registry lookup.
@@ -88,6 +91,8 @@ immutable source records and loading only the evidence relevant to the current t
 - Correctness is scored against human-authored expected source IDs and observable answer predicates; an
   LLM may assist analysis but cannot be the acceptance oracle. Secret-canary success is a regression
   control, not a claim that novel secret formats are impossible.
+- Baseline and candidate result IDs must each match the benchmark case IDs exactly; partial or extra fixtures
+  fail before scoring so an incomplete baseline cannot lower the adoption bar.
 - Warm query p95 target below two seconds on the primary local machine.
 - Raw sources and the existing memory system remain untouched during the pilot.
 

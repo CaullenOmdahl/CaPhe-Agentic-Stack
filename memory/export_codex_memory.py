@@ -83,6 +83,75 @@ def _remove_source_exports(source_id: str, domain_roots: dict[str, Path]) -> Non
                 stale_path.unlink()
 
 
+def _source_exports_complete(
+    source_id: str,
+    domain_roots: dict[str, Path],
+    source_hash: str,
+    generation: str,
+) -> bool:
+    found = False
+    for domain_root in domain_roots.values():
+        export_dir = _validated_export_dir(domain_root)
+        paths = sorted(
+            {
+                export_dir / f"{source_id}.md",
+                *export_dir.glob(f"{source_id}-p*.md"),
+            }
+        )
+        paths = [path for path in paths if path.exists()]
+        if not paths:
+            continue
+        found = True
+        part_total: int | None = None
+        part_indexes: set[int] = set()
+        for path in paths:
+            if path.is_symlink() or not path.is_file():
+                return False
+            headers: dict[str, str] = {}
+            try:
+                header_lines = path.read_text(errors="replace").splitlines()[:6]
+            except OSError:
+                return False
+            for line in header_lines:
+                if ": " in line:
+                    key, value = line.split(": ", 1)
+                    headers[key] = value
+            try:
+                part_index_text, current_total_text = headers["source_part"].split("/", 1)
+                part_index = int(part_index_text)
+                current_total = int(current_total_text)
+            except (KeyError, TypeError, ValueError):
+                return False
+            if (
+                headers.get("source_id") != source_id
+                or headers.get("source_sha256") != source_hash
+                or headers.get("index_generation") != generation
+                or current_total <= 0
+                or not 1 <= part_index <= current_total
+                or (part_total is not None and part_total != current_total)
+            ):
+                return False
+            part_total = current_total
+            part_indexes.add(part_index)
+        if (
+            part_total is None
+            or len(paths) != part_total
+            or part_indexes != set(range(1, part_total + 1))
+        ):
+            return False
+    return found
+
+
+def _source_has_exports(source_id: str, domain_roots: dict[str, Path]) -> bool:
+    for domain_root in domain_roots.values():
+        export_dir = _validated_export_dir(domain_root)
+        if (export_dir / f"{source_id}.md").exists() or any(
+            export_dir.glob(f"{source_id}-p*.md")
+        ):
+            return True
+    return False
+
+
 def atomic_write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False, encoding="utf-8") as handle:
@@ -124,6 +193,17 @@ def export_sources(
         catalog = {}
     if not isinstance(catalog, dict):
         catalog = {}
+    processed_state_path = output_root / "processed-state.json"
+    try:
+        processed_state = (
+            json.loads(processed_state_path.read_text())
+            if processed_state_path.exists()
+            else {}
+        )
+    except (OSError, json.JSONDecodeError):
+        processed_state = {}
+    if not isinstance(processed_state, dict):
+        processed_state = {}
     existing_generations: set[str] = set()
     has_existing_exports = False
     for domain_root in all_domain_roots.values():
@@ -134,6 +214,11 @@ def export_sources(
                 if line.startswith("index_generation: "):
                     existing_generations.add(line.removeprefix("index_generation: ").strip())
                     break
+    existing_generations.update(
+        state.get("generation")
+        for state in processed_state.values()
+        if isinstance(state, dict) and isinstance(state.get("generation"), str)
+    )
     mapping_state_path = output_root / "mapping-state"
     mapping_hash = hashlib.sha256(
         json.dumps(mappings, sort_keys=True, separators=(",", ":")).encode()
@@ -143,7 +228,7 @@ def export_sources(
     except OSError:
         previous_mapping_hash = ""
     mapping_transition = bool(
-        has_existing_exports
+        (has_existing_exports or processed_state)
         and (not previous_mapping_hash or previous_mapping_hash != mapping_hash)
     )
     if mapping_transition and limit is not None and len(candidates) > limit:
@@ -164,7 +249,11 @@ def export_sources(
 
     resolved_source_roots = [root.resolve() for root in source_roots]
     stale_source_ids: set[str] = set()
-    for source_id, source_path_text in catalog.items():
+    known_source_paths = dict(catalog)
+    for source_id, state in processed_state.items():
+        if source_id not in known_source_paths and isinstance(state, dict):
+            known_source_paths[source_id] = state.get("source_path")
+    for source_id, source_path_text in known_source_paths.items():
         try:
             source_path = Path(source_path_text).resolve()
             belongs_to_current_roots = any(
@@ -177,18 +266,57 @@ def export_sources(
     for source_id in stale_source_ids:
         _remove_source_exports(source_id, all_domain_roots)
         catalog.pop(source_id, None)
+        processed_state.pop(source_id, None)
     for source_root, path in candidates:
-        if limit is not None and stats["sessions"] >= limit:
-            break
-        stats["sessions"] += 1
         source_id = safe_source_id(source_root, path)
+        source_path = str(path.resolve())
         try:
             raw_source = path.read_bytes()
-            events = parse_events(raw_source, path)
-        except (OSError, ValueError):
+        except OSError:
+            if limit is not None and stats["sessions"] >= limit:
+                break
+            stats["sessions"] += 1
             stats["invalid"] += 1
             _remove_source_exports(source_id, all_domain_roots)
             catalog.pop(source_id, None)
+            processed_state.pop(source_id, None)
+            continue
+        source_hash = hashlib.sha256(raw_source).hexdigest()
+        previous_state = processed_state.get(source_id)
+        state_is_current = isinstance(previous_state, dict) and all(
+            (
+                previous_state.get("source_path") == source_path,
+                previous_state.get("source_sha256") == source_hash,
+                previous_state.get("generation") == generation,
+                previous_state.get("mapping_sha256") == mapping_hash,
+            )
+        )
+        if state_is_current:
+            status = previous_state.get("status")
+            if status == "exported" and _source_exports_complete(
+                source_id, all_domain_roots, source_hash, generation
+            ):
+                continue
+            if status in {"empty", "invalid", "quarantined"} and not _source_has_exports(
+                source_id, all_domain_roots
+            ):
+                continue
+        if limit is not None and stats["sessions"] >= limit:
+            break
+        stats["sessions"] += 1
+        state = {
+            "source_path": source_path,
+            "source_sha256": source_hash,
+            "generation": generation,
+            "mapping_sha256": mapping_hash,
+        }
+        try:
+            events = parse_events(raw_source, path)
+        except ValueError:
+            stats["invalid"] += 1
+            _remove_source_exports(source_id, all_domain_roots)
+            catalog.pop(source_id, None)
+            processed_state[source_id] = {**state, "status": "invalid"}
             continue
         records, quarantined = extract_records(events, mappings)
         if quarantined:
@@ -196,8 +324,7 @@ def export_sources(
         grouped: dict[str, list[Any]] = {}
         for record in records:
             grouped.setdefault(record.scope, []).append(record)
-        source_hash = hashlib.sha256(raw_source).hexdigest()
-        catalog[source_id] = str(path.resolve())
+        catalog[source_id] = source_path
         current_domains = set(grouped)
         for domain, existing_domain_root in all_domain_roots.items():
             if domain in current_domains:
@@ -255,7 +382,21 @@ def export_sources(
                 if stale_path.exists():
                     stale_path.unlink()
             stats["records"] += len(domain_records)
+        processed_state[source_id] = {
+            **state,
+            "status": (
+                "exported"
+                if records
+                else "quarantined"
+                if quarantined
+                else "empty"
+            ),
+        }
     atomic_write(catalog_path, json.dumps(catalog, indent=2, sort_keys=True) + "\n")
+    atomic_write(
+        processed_state_path,
+        json.dumps(processed_state, indent=2, sort_keys=True) + "\n",
+    )
     atomic_write(mapping_state_path, mapping_hash + "\n")
     return stats
 

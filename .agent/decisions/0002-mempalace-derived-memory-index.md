@@ -26,6 +26,9 @@ latency, recall, and token benchmarks pass.
 Derived palaces must live outside Git working trees with owner-only permissions. Scope is accepted only
 from trusted per-turn working-directory metadata mapped to one security domain. Exact-source resolution
 returns stable coordinates plus a freshly sanitized excerpt, never raw source text to the agent.
+Bounded ingestion persists owner-only derived processing state and counts only sources that require work,
+so repeated runs drain a backlog instead of rescanning the newest completed window. Benchmark baseline and
+candidate IDs must each exactly match the declared case set before any adoption score is calculated.
 
 Platform scoring:
 
@@ -52,6 +55,8 @@ that might not exist. V3 sanitizes every resolved excerpt and quarantines any tu
 mapped, single-domain working-directory metadata.
 Final v3 review accepted the design; evidence:
 `.agent/reviews/20260901T090934Z-20260901T090602Z-22514-27682-strict-memory-efficiency-v2-design-v3.md`.
+The exact-head Codex review at `97d4166` rejected incomplete baseline acceptance and non-advancing bounded
+syncs; exact case coverage and persisted processing state address those adversarial findings.
 
 ## Consequences
 

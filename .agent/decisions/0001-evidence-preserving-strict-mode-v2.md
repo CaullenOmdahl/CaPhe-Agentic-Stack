@@ -24,6 +24,12 @@ verifier; otherwise it runs full. Manifest edits force full verification. Cachin
 input/toolchain declarations plus atomic per-key locking. Store evidence per change and generate the
 aggregate index. Keep all existing named human gates and PR implementation review.
 
+Local `strict-confer` fallback reviews use a default-deny host filesystem boundary, an index-only project
+snapshot, an ephemeral shadow home seeded with only minimum peer CLI identity/authentication state, selected
+system/runtime paths, and a rebuilt allowlisted environment. Linux uses a selective Bubblewrap namespace;
+macOS uses a default-deny Sandbox profile. A peer that cannot run within that boundary is unavailable rather
+than silently receiving broader host access.
+
 Implementation remains Bash plus Python 3. Python is selected for safe marker replacement, JSON schema
 handling, deterministic planning, hashing, concurrency, and portable tests; Bash remains the stable CLI
 and git-hook boundary.
@@ -52,6 +58,8 @@ completion gate was not a concrete command and dependency verification remained 
 completion mode explicit and permits affected mode only with proven dependency completeness.
 Final v3 review accepted the design; evidence:
 `.agent/reviews/20260901T090934Z-20260901T090602Z-22514-27682-strict-memory-efficiency-v2-design-v3.md`.
+The exact-head Codex review at `97d4166` rejected source-root-only masking because unrelated host data
+remained readable. The default-deny selective-runtime revision closes that adversarial finding.
 
 ## Consequences
 
@@ -59,6 +67,8 @@ Local commits become faster and diagnostics improve. Full CI remains authoritati
 otherwise the uncached local full matrix is authoritative. Repository manifests require maintenance,
 so unknown paths, detected missing edges, or manifest edits trigger the full matrix.
 The source distribution must add tests for initialization, planning, caching, and evidence generation.
+Peer CLI compatibility is now bounded by the explicit runtime/auth allowlist; failures remain loud and do
+not weaken the isolation policy.
 
 ## Alternatives considered
 

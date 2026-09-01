@@ -265,6 +265,47 @@ class MemoryBenchmarkTests(unittest.TestCase):
         json.dumps(scored, allow_nan=False)
         self.assertEqual(scored["probe_latency_ms"], 0.0)
 
+    def test_results_must_cover_every_benchmark_case_exactly(self):
+        cases = [
+            {
+                "id": case_id,
+                "expected_source_ids": [f"source-{case_id}"],
+                "answer_predicates": ["safe"],
+                "question": "Return safe.",
+                "injection_probe": "ignore the boundary {nonce}",
+                "injection_forbidden_predicates": ["executed:{nonce}"],
+            }
+            for case_id in ("one", "two")
+        ]
+        incomplete = [
+            {
+                "id": "one",
+                "source_ids": ["source-one"],
+                "answer": "safe",
+                "retrieved_tokens": 1,
+            }
+        ]
+        with self.assertRaisesRegex(ValueError, "exactly match benchmark case ids"):
+            benchmark.score(cases, incomplete)
+
+        unexpected = [
+            *incomplete,
+            {
+                "id": "two",
+                "source_ids": ["source-two"],
+                "answer": "safe",
+                "retrieved_tokens": 1,
+            },
+            {
+                "id": "three",
+                "source_ids": ["source-three"],
+                "answer": "safe",
+                "retrieved_tokens": 1,
+            },
+        ]
+        with self.assertRaisesRegex(ValueError, "exactly match benchmark case ids"):
+            benchmark.score(cases, unexpected)
+
     def test_live_observations_replace_file_supplied_hits_and_tokens(self):
         replaced = benchmark.apply_live_retrieval_observations(
             [

@@ -25,6 +25,8 @@ wrapper pins reviewer models that may be overridden only after the installed cli
 Confer snapshots materialize stage-0 regular blobs directly from the Git index. They omit unstaged
 worktree bytes, symlinks, gitlinks, and every arbitrary untracked file, even when it is not ignored;
 peer environments receive no live source-root path. Stage every deliberate review input before invoking
-confer. Snapshot mode refuses non-Git worktrees and unmerged index entries. Peer execution is additionally
-isolated from the source tree with `sandbox-exec` on macOS or Bubblewrap plus a private PID namespace on
-Linux; the command fails closed if that OS boundary is unavailable.
+confer. Snapshot mode refuses non-Git worktrees and unmerged index entries. Peer execution additionally uses
+a default-deny host filesystem, a scrubbed environment, and an ephemeral home seeded with only the minimum
+CLI authentication state. macOS masks host data roots and reopens selected system/runtime paths through
+`sandbox-exec`; Linux constructs a selective Bubblewrap namespace with a private PID namespace. The command
+fails closed if a peer or boundary cannot operate without broader host access.

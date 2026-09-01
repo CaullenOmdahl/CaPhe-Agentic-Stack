@@ -11,6 +11,8 @@
     "bash strict-mode/test/strict-confer-isolation-test.sh",
     "bash test/public-safety-test.sh",
     "bash strict-mode/bin/strict-green-gate.sh --mode completion",
-    "private five-case memory benchmark and three-domain artifact gate"
+    "private five-case memory benchmark and three-domain artifact gate",
+    "real macOS Sandbox agy and Codex staged-snapshot probe",
+    "real Fedora Bubblewrap source-hiding probe"
   ]
 }

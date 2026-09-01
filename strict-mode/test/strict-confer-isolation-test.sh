@@ -28,6 +28,9 @@ make_mock_boundaries() {
 set -euo pipefail
 printf '%s\n' sandbox-exec >> "${STRICT_CONFER_BOUNDARY_LOG:-/dev/null}"
 [ "${1:-}" = "-f" ] || exit 2
+printf 'sandbox-profile: ' >> "${STRICT_CONFER_BOUNDARY_LOG:-/dev/null}"
+tr '\n' ' ' < "$2" >> "${STRICT_CONFER_BOUNDARY_LOG:-/dev/null}"
+printf '\n' >> "${STRICT_CONFER_BOUNDARY_LOG:-/dev/null}"
 shift 2
 exec "$@"
 MOCK
@@ -38,6 +41,7 @@ MOCK
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' bwrap >> "${STRICT_CONFER_BOUNDARY_LOG:-/dev/null}"
+printf 'bwrap-args: %s\n' "$*" >> "${STRICT_CONFER_BOUNDARY_LOG:-/dev/null}"
 while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do shift; done
 [ "${1:-}" = "--" ] || exit 2
 shift
@@ -45,6 +49,19 @@ exec "$@"
 MOCK
     chmod +x "$mockbin/bwrap"
   fi
+}
+
+make_real_boundary_peer() {
+  local path="$1" name="$2" unrelated="$3"
+  cat > "$path" <<MOCK
+#!/usr/bin/env bash
+set -euo pipefail
+if [ -f "$unrelated" ]; then
+  echo "$name unrelated: \$(cat "$unrelated")"
+fi
+echo "$name review: bounded"
+MOCK
+  chmod +x "$path"
 }
 
 make_mock_peer() {
@@ -73,6 +90,9 @@ if [ -f review-gitlink ]; then
 fi
 if [ -n "\${STRICT_CONFER_SOURCE_ROOT:-}" ] && [ -f "\${STRICT_CONFER_SOURCE_ROOT}/untracked-sensitive.txt" ]; then
   echo "$name source-root snapshot: \$(cat "\${STRICT_CONFER_SOURCE_ROOT}/untracked-sensitive.txt")"
+fi
+if [ -n "\${STRICT_CONFER_ENV_CANARY:-}" ]; then
+  echo "$name env snapshot: \$STRICT_CONFER_ENV_CANARY"
 fi
 printf '%s\\n' "$name:\${STRICT_CONFER_RUN_ID:-}:\${STRICT_CONFER_RUN_ROOT:-}:\${STRICT_CONFER_PEER:-}:\$(pwd)" >> "\$STRICT_CONFER_TEST_LOG"
 MOCK
@@ -118,6 +138,7 @@ test_parallel_runs_are_ephemeral_and_unique() {
   (
     cd "$project"
     PATH="$mockbin:$PATH" STRICT_CONFER_TEST_LOG="$log" STRICT_CONFER_BOUNDARY_LOG="$TMP/boundary.log" \
+      STRICT_CONFER_ENV_CANARY="must not reach peer environment" \
       "$ROOT/bin/strict-confer.sh" codex --save same-label "first prompt" \
       > "$TMP/out-1" 2> "$TMP/err-1"
   ) &
@@ -125,6 +146,7 @@ test_parallel_runs_are_ephemeral_and_unique() {
   (
     cd "$project"
     PATH="$mockbin:$PATH" STRICT_CONFER_TEST_LOG="$log" STRICT_CONFER_BOUNDARY_LOG="$TMP/boundary.log" \
+      STRICT_CONFER_ENV_CANARY="must not reach peer environment" \
       "$ROOT/bin/strict-confer.sh" codex --save same-label "second prompt" \
       > "$TMP/out-2" 2> "$TMP/err-2"
   ) &
@@ -145,7 +167,17 @@ test_parallel_runs_are_ephemeral_and_unique() {
   [ "$root_count" -eq 2 ] || fail "expected 2 unique run roots, got $root_count"
   [ "$cwd_count" -eq 4 ] || fail "expected 4 isolated peer working directories, got $cwd_count"
   [ "$evidence_count" -eq 2 ] || fail "expected 2 non-clobbered evidence files, got $evidence_count"
-  [ "$(wc -l < "$TMP/boundary.log" | tr -d ' ')" -eq 4 ] || fail "every peer must run inside the OS boundary"
+  [ -s "$TMP/boundary.log" ] || fail "peer boundary invocations were not recorded"
+  case "$(uname -s)" in
+    Darwin)
+      grep -q '(deny default)' "$TMP/boundary.log" || fail "macOS boundary did not default-deny host access"
+      ! grep -q '(allow default)' "$TMP/boundary.log" || fail "macOS boundary still allows the whole host"
+      ;;
+    Linux)
+      grep -q -- '--ro-bind /usr /usr' "$TMP/boundary.log" || fail "Linux boundary omitted the system runtime"
+      ! grep -q -- '--ro-bind / /' "$TMP/boundary.log" || fail "Linux boundary still exposes the whole host"
+      ;;
+  esac
   grep -q "snapshot: tracked workspace is visible" "$TMP/out-1" || fail "first run peer could not read tracked snapshot"
   grep -q "snapshot: tracked workspace is visible" "$TMP/out-2" || fail "second run peer could not read tracked snapshot"
   ! grep -q "must stay local" "$TMP/out-1" || fail "first run copied an untracked local file"
@@ -162,11 +194,45 @@ test_parallel_runs_are_ephemeral_and_unique() {
   ! grep -q "source-root snapshot" "$TMP/out-2" || fail "second run exposed the live source root"
   ! grep -q "must stay private" "$TMP/out-1" || fail "first run copied an ignored secret-bearing file"
   ! grep -q "must stay private" "$TMP/out-2" || fail "second run copied an ignored secret-bearing file"
+  ! grep -q "must not reach peer environment" "$TMP/out-1" || fail "first run inherited an unrelated environment value"
+  ! grep -q "must not reach peer environment" "$TMP/out-2" || fail "second run inherited an unrelated environment value"
 
   while IFS= read -r root; do
     [ -n "$root" ] || continue
     [ ! -e "$root" ] || fail "ephemeral run root was not cleaned: $root"
   done < <(awk -F: '{print $3}' "$log" | sort -u)
+}
+
+test_real_boundary_hides_unrelated_host_files() {
+  case "$(uname -s)" in
+    Darwin) command -v sandbox-exec >/dev/null 2>&1 || return 0 ;;
+    Linux) command -v bwrap >/dev/null 2>&1 || return 0 ;;
+    *) return 0 ;;
+  esac
+  local project="$TMP/real-boundary-project"
+  local peerbin="$TMP/real-boundary-bin"
+  local unrelated="$TMP/unrelated-sensitive.txt"
+  mkdir -p "$project" "$peerbin"
+  git -C "$project" init -q
+  printf '%s\n' "must stay outside reviewer reach" > "$unrelated"
+  make_real_boundary_peer "$peerbin/claude" "claude" "$unrelated"
+  make_real_boundary_peer "$peerbin/agy" "agy" "$unrelated"
+  make_real_boundary_peer "$peerbin/codex" "codex" "$unrelated"
+
+  if ! (
+    cd "$project"
+    PATH="$peerbin:$PATH" \
+    STRICT_CONFER_RUN_ROOT="$TMP/real-boundary-run" \
+      "$ROOT/bin/strict-confer.sh" codex "review bounded snapshot" \
+      > "$TMP/real-boundary-out" 2> "$TMP/real-boundary-err"
+  ); then
+    cat "$TMP/real-boundary-err" >&2
+    find "$TMP/real-boundary-run" -type f \( -name 'stderr.txt' -o -name 'review-stderr.txt' \) \
+      -exec sh -c 'for path do echo "--- $path" >&2; cat "$path" >&2; done' sh {} +
+    fail "real peer boundary could not run the bounded mock reviewers"
+  fi
+  ! grep -q 'must stay outside reviewer reach' "$TMP/real-boundary-out" || \
+    fail "peer read an unrelated host file outside the review snapshot"
 }
 
 test_current_peer_cli_invocations() {
@@ -190,7 +256,7 @@ test_current_peer_cli_invocations() {
 
   grep -q -- "agy args: --sandbox --mode plan --dangerously-skip-permissions --model test-gemini --effort high --print=review prompt" "$TMP/args-out" || \
     fail "agy was not invoked with the verified headless read-only command"
-  grep -q -- "codex args: exec -m test-codex --ephemeral --skip-git-repo-check --sandbox read-only review prompt" "$TMP/args-out" || \
+  grep -q -- "codex args: exec -m test-codex --ephemeral --skip-git-repo-check --sandbox danger-full-access review prompt" "$TMP/args-out" || \
     fail "codex model override was not honored"
 }
 
@@ -297,6 +363,7 @@ MOCK
 }
 
 test_parallel_runs_are_ephemeral_and_unique
+test_real_boundary_hides_unrelated_host_files
 test_current_peer_cli_invocations
 test_snapshot_tolerates_tracked_deletions
 test_live_workspace_bypass_is_refused

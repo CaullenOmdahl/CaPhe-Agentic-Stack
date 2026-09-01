@@ -33,6 +33,7 @@ AGY_MODEL="${STRICT_CONFER_AGY_MODEL:-gemini-3.7-flash-high}"
 CODEX_MODEL="${STRICT_CONFER_CODEX_MODEL:-gpt-5.4}"
 RUN_ID="${STRICT_CONFER_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$$-$RANDOM}"
 SOURCE_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+ORIGINAL_HOME="${HOME:?strict-confer requires HOME}"
 if [ "${STRICT_CONFER_NO_SNAPSHOT:-0}" = "1" ]; then
   echo "strict-confer refuses live-workspace review; stage deliberate inputs for a bounded snapshot" >&2
   exit 2
@@ -72,6 +73,9 @@ run_isolated() {
   local peer_cwd
   peer_cwd="$peer_dir/workspace"
   mkdir -p "$peer_cwd" || return 1
+  local peer_home
+  peer_home="$peer_dir/home"
+  mkdir -p "$peer_home/.config" "$peer_home/.cache" "$peer_home/.local/share" || return 1
   git -C "$SOURCE_ROOT" ls-files --stage -z |
     while IFS= read -r -d '' index_entry; do
       index_meta=${index_entry%%$'\t'*}
@@ -89,29 +93,139 @@ EOF
       git -C "$SOURCE_ROOT" cat-file blob "$object_id" > "$destination" || exit 1
       case "$index_mode" in 100755) chmod 755 "$destination" ;; *) chmod 644 "$destination" ;; esac
     done || return 1
+  local peer_executable
+  peer_executable="$(command -v "${1:-}")" || return 1
+  peer_executable="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$peer_executable")" || return 1
+  [ -f "$peer_executable" ] || {
+    echo "strict-confer peer executable is not a regular file: $peer_executable" >&2
+    return 1
+  }
+  shift
+  set -- "$peer_executable" "$@"
+
+  # Give each peer a throwaway home. Only minimum authentication/identity state is copied;
+  # histories, memories, plugins, arbitrary config, and unrelated credentials remain outside.
+  case "$peer" in
+    codex)
+      mkdir -p "$peer_home/.codex" || return 1
+      if [ -f "$ORIGINAL_HOME/.codex/auth.json" ] && [ ! -L "$ORIGINAL_HOME/.codex/auth.json" ]; then
+        install -m 600 "$ORIGINAL_HOME/.codex/auth.json" "$peer_home/.codex/auth.json" || return 1
+      fi
+      ;;
+    claude)
+      mkdir -p "$peer_home/.claude" || return 1
+      if [ -f "$ORIGINAL_HOME/.claude/.credentials.json" ] && [ ! -L "$ORIGINAL_HOME/.claude/.credentials.json" ]; then
+        install -m 600 "$ORIGINAL_HOME/.claude/.credentials.json" "$peer_home/.claude/.credentials.json" || return 1
+      fi
+      if [ -f "$ORIGINAL_HOME/.claude.json" ] && [ ! -L "$ORIGINAL_HOME/.claude.json" ]; then
+        python3 - "$ORIGINAL_HOME/.claude.json" "$peer_home/.claude.json" <<'PY' || return 1
+import json
+import os
+import sys
+
+source, destination = sys.argv[1:]
+with open(source, encoding="utf-8") as handle:
+    value = json.load(handle)
+allowed = {
+    key: value[key]
+    for key in ("hasCompletedOnboarding", "installMethod", "oauthAccount", "userID")
+    if key in value
+}
+with open(destination, "w", encoding="utf-8") as handle:
+    json.dump(allowed, handle, separators=(",", ":"))
+    handle.write("\n")
+os.chmod(destination, 0o600)
+PY
+      fi
+      ;;
+    agy)
+      mkdir -p "$peer_home/.gemini/antigravity-cli" || return 1
+      agy_token="$ORIGINAL_HOME/.gemini/antigravity-cli/antigravity-oauth-token"
+      if [ -f "$agy_token" ] && [ ! -L "$agy_token" ]; then
+        install -m 600 "$agy_token" "$peer_home/.gemini/antigravity-cli/antigravity-oauth-token" || return 1
+      fi
+      ;;
+  esac
+  chmod -R go-rwx "$peer_home" || return 1
+
+  local peer_path
+  peer_path="$(dirname "$peer_executable"):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
   local -a boundary_command
   case "$(uname -s)" in
     Darwin)
-      command -v sandbox-exec >/dev/null 2>&1 || {
+      local sandbox_executable
+      sandbox_executable="$(command -v sandbox-exec)" || {
         echo "strict-confer requires sandbox-exec on macOS" >&2; return 1;
       }
-      local sandbox_profile escaped_source
+      local sandbox_profile escaped_peer_dir escaped_peer_executable escaped_source escaped_home
       sandbox_profile="$peer_dir/source-boundary.sb"
-      escaped_source=$(python3 -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$SOURCE_ROOT") || return 1
+      escaped_peer_dir=$(python3 -c 'import json, os, sys; print(json.dumps(os.path.realpath(sys.argv[1])))' "$peer_dir") || return 1
+      escaped_peer_executable=$(python3 -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$peer_executable") || return 1
+      escaped_source=$(python3 -c 'import json, os, sys; print(json.dumps(os.path.realpath(sys.argv[1])))' "$SOURCE_ROOT") || return 1
+      escaped_home=$(python3 -c 'import json, os, sys; print(json.dumps(os.path.realpath(sys.argv[1])))' "$ORIGINAL_HOME") || return 1
       {
-        printf '%s\n' '(version 1)' '(allow default)'
-        printf '(deny file-read* (subpath %s))\n' "$escaped_source"
-        printf '(deny file-write* (subpath %s))\n' "$escaped_source"
+        printf '%s\n' \
+          '(version 1)' \
+          '(deny default)' \
+          '(allow process*)' \
+          '(allow network*)' \
+          '(allow sysctl-read)' \
+          '(allow mach-lookup)' \
+          '(allow ipc-posix*)' \
+          '(allow signal)' \
+          '(allow file-read-metadata)'
+        # macOS runtime loaders consult several sealed/Cryptex paths. Permit reads first,
+        # then mask every host data root and re-open only selected runtime and peer paths.
+        printf '%s\n' '(allow file-read*)'
+        printf '(deny file-read* (subpath "/Users") (subpath "/Volumes") (subpath "/Network") (subpath "/System/Volumes/Data") (subpath "/private/tmp") (subpath "/private/etc") (subpath "/private/var") (subpath "/Library") (subpath "/opt") (subpath %s) (subpath %s))\n' "$escaped_source" "$escaped_home"
+        printf '(allow file-read* (subpath %s) (literal %s)' "$escaped_peer_dir" "$escaped_peer_executable"
+        for runtime_path in \
+          /Library/Apple /Library/Frameworks /opt/homebrew \
+          /private/etc/ssl /private/etc/resolv.conf /private/etc/hosts \
+          /private/var/db/timezone /private/var/run
+        do
+          if [ -e "$runtime_path" ]; then
+            escaped_runtime=$(python3 -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$runtime_path") || return 1
+            if [ -d "$runtime_path" ]; then
+              printf ' (subpath %s)' "$escaped_runtime"
+            else
+              printf ' (literal %s)' "$escaped_runtime"
+            fi
+          fi
+        done
+        printf ')\n'
+        printf '(allow file-write* (subpath %s) (literal "/dev/null"))\n' "$escaped_peer_dir"
       } > "$sandbox_profile" || return 1
-      boundary_command=(sandbox-exec -f "$sandbox_profile")
+      boundary_command=("$sandbox_executable" -f "$sandbox_profile")
       ;;
     Linux)
-      command -v bwrap >/dev/null 2>&1 || {
+      local bwrap_executable
+      bwrap_executable="$(command -v bwrap)" || {
         echo "strict-confer requires bubblewrap on Linux" >&2; return 1;
       }
-      boundary_command=(
-        bwrap --die-with-parent --unshare-pid --ro-bind / / --tmpfs "$SOURCE_ROOT"
-        --bind "$peer_dir" "$peer_dir" --proc /proc --dev /dev --chdir "$peer_cwd" --
+      boundary_command=("$bwrap_executable" --die-with-parent --unshare-pid --ro-bind /usr /usr)
+      for runtime_path in /bin /sbin /lib /lib64; do
+        if [ -L "$runtime_path" ]; then
+          boundary_command+=(--symlink "$(readlink "$runtime_path")" "$runtime_path")
+        elif [ -e "$runtime_path" ]; then
+          boundary_command+=(--ro-bind "$runtime_path" "$runtime_path")
+        fi
+      done
+      if [ -e /opt ]; then
+        boundary_command+=(--ro-bind /opt /opt)
+      fi
+      for runtime_path in \
+        /etc/ssl /etc/pki /etc/resolv.conf /etc/hosts /etc/nsswitch.conf \
+        /etc/gai.conf /etc/passwd /etc/group /etc/localtime
+      do
+        if [ -e "$runtime_path" ]; then
+          boundary_command+=(--ro-bind "$runtime_path" "$runtime_path")
+        fi
+      done
+      boundary_command+=(
+        --tmpfs /tmp --ro-bind "$peer_executable" "$peer_executable"
+        --bind "$peer_dir" "$peer_dir" --proc /proc --dev /dev
+        --chdir "$peer_cwd" --
       )
       ;;
     *) echo "strict-confer has no filesystem boundary for $(uname -s)" >&2; return 1 ;;
@@ -121,6 +235,13 @@ EOF
   STRICT_CONFER_RUN_ROOT="$RUN_ROOT" \
   STRICT_CONFER_CWD="$peer_cwd" \
   STRICT_CONFER_TIMEOUT_SECONDS="$PEER_TIMEOUT_SECONDS" \
+  HOME="$peer_home" \
+  CODEX_HOME="$peer_home/.codex" \
+  CLAUDE_CONFIG_DIR="$peer_home/.claude" \
+  XDG_CONFIG_HOME="$peer_home/.config" \
+  XDG_CACHE_HOME="$peer_home/.cache" \
+  XDG_DATA_HOME="$peer_home/.local/share" \
+  PATH="$peer_path" \
   TMPDIR="$peer_dir/tmp" \
     python3 - "${boundary_command[@]}" "$@" <<'PY'
 import os
@@ -131,9 +252,33 @@ import sys
 args = sys.argv[1:]
 cwd = os.environ["STRICT_CONFER_CWD"]
 timeout = float(os.environ["STRICT_CONFER_TIMEOUT_SECONDS"])
-child_env = os.environ.copy()
-child_env.pop("STRICT_CONFER_SOURCE_ROOT", None)
-child_env.pop("OLDPWD", None)
+allowed_names = {
+    "PATH",
+    "HOME",
+    "CODEX_HOME",
+    "CLAUDE_CONFIG_DIR",
+    "XDG_CONFIG_HOME",
+    "XDG_CACHE_HOME",
+    "XDG_DATA_HOME",
+    "TMPDIR",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "TERM",
+    "COLORTERM",
+    "NO_COLOR",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "STRICT_CONFER_PEER",
+    "STRICT_CONFER_RUN_ID",
+    "STRICT_CONFER_RUN_ROOT",
+    "STRICT_CONFER_CWD",
+    "STRICT_CONFER_TIMEOUT_SECONDS",
+    "STRICT_CONFER_BOUNDARY_LOG",
+    "STRICT_CONFER_TEST_LOG",
+    "STRICT_CONFER_CHILD_PID_FILE",
+}
+child_env = {name: value for name, value in os.environ.items() if name in allowed_names}
 child_env["PWD"] = cwd
 
 try:
@@ -178,11 +323,49 @@ except subprocess.TimeoutExpired:
 PY
 }
 
-run_claude() { command -v claude >/dev/null 2>&1 || return 1; mkdir -p "$RUN_ROOT/claude" || return 1; local o; o=$(run_isolated claude claude --safe-mode -p --no-session-persistence "$1" 2>"$RUN_ROOT/claude/stderr.txt") || return 1; [ -n "$o" ] && printf '%s\n' "$o" || return 1; }
-run_codex()  { command -v codex  >/dev/null 2>&1 || return 1; mkdir -p "$RUN_ROOT/codex" || return 1; local o; o=$(run_isolated codex codex exec -m "$CODEX_MODEL" --ephemeral --skip-git-repo-check --sandbox read-only "$1" 2>"$RUN_ROOT/codex/stderr.txt") || return 1; [ -n "$o" ] && printf '%s\n' "$o" || return 1; }
+run_claude() {
+  command -v claude >/dev/null 2>&1 || return 1
+  mkdir -p "$RUN_ROOT/claude" || return 1
+  local o status
+  o=$(run_isolated claude claude --safe-mode -p --no-session-persistence "$1" 2>"$RUN_ROOT/claude/stderr.txt")
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    cat "$RUN_ROOT/claude/stderr.txt" >&2
+    echo "strict-confer claude boundary exit: $status" >&2
+    return 1
+  fi
+  [ -n "$o" ] && printf '%s\n' "$o" || return 1
+}
+run_codex() {
+  command -v codex >/dev/null 2>&1 || return 1
+  mkdir -p "$RUN_ROOT/codex" || return 1
+  local o status
+  # The outer default-deny OS boundary is authoritative. Avoid nesting Codex's own
+  # Seatbelt inside it; nested macOS sandboxes can block even read-only inspection.
+  o=$(run_isolated codex codex exec -m "$CODEX_MODEL" --ephemeral --skip-git-repo-check --sandbox danger-full-access "$1" 2>"$RUN_ROOT/codex/stderr.txt")
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    cat "$RUN_ROOT/codex/stderr.txt" >&2
+    echo "strict-confer codex boundary exit: $status" >&2
+    return 1
+  fi
+  [ -n "$o" ] && printf '%s\n' "$o" || return 1
+}
 # agy headless mode cannot prompt for repository-mandated reads. Auto-approval is bounded by
 # both plan mode and the bounded tracked-file snapshot above.
-run_agy()    { command -v agy    >/dev/null 2>&1 || return 1; mkdir -p "$RUN_ROOT/agy" || return 1; local o; o=$(run_isolated agy agy --sandbox --mode plan --dangerously-skip-permissions --model "$AGY_MODEL" --effort high --print="$1" 2>"$RUN_ROOT/agy/stderr.txt") || return 1; [ -n "$o" ] && printf '%s\n' "$o" || return 1; }
+run_agy() {
+  command -v agy >/dev/null 2>&1 || return 1
+  mkdir -p "$RUN_ROOT/agy" || return 1
+  local o status
+  o=$(run_isolated agy agy --sandbox --mode plan --dangerously-skip-permissions --model "$AGY_MODEL" --effort high --print="$1" 2>"$RUN_ROOT/agy/stderr.txt")
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    cat "$RUN_ROOT/agy/stderr.txt" >&2
+    echo "strict-confer agy boundary exit: $status" >&2
+    return 1
+  fi
+  [ -n "$o" ] && printf '%s\n' "$o" || return 1
+}
 
 case "$HOST" in
   claude) peers="agy codex" ;;
@@ -210,6 +393,9 @@ while IFS=: read -r p pid; do
   if wait "$pid"; then
     body="$(cat "$RUN_ROOT/$p/stdout.txt")"
   else
+    if [ -s "$RUN_ROOT/$p/review-stderr.txt" ]; then
+      sed "s/^/$p: /" "$RUN_ROOT/$p/review-stderr.txt" >&2
+    fi
     body="(!! $p UNAVAILABLE — independent review NOT obtained)"
     missing=1
   fi

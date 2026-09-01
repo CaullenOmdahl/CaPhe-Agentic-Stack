@@ -31,6 +31,8 @@ observable evidence required to accept a change.
 - Per-change evidence records are canonical; the aggregate traceability document is generated.
 - Caching is disabled by default. A repository may opt in per command only when it declares all content,
   environment, configuration, and toolchain identity inputs.
+- Local peer review runs from an index-only snapshot behind an OS boundary. Each peer receives an
+  ephemeral home containing only the minimum CLI identity/authentication state needed to run.
 
 ## Rules
 
@@ -55,6 +57,10 @@ observable evidence required to accept a change.
   repository verifier. Otherwise affected mode escalates to the full matrix. Manifest edits force full.
 - `intended` Failure output is preserved and displayed.
 - `intended` Initialization fails atomically on malformed markers and deduplicates symlink aliases.
+- `intended` Peer review denies host filesystem access by default. It exposes only the staged snapshot,
+  the peer's ephemeral run directory, selected operating-system/runtime paths, the exact peer executable,
+  and network access needed for the review service. The child environment is rebuilt from an allowlist;
+  unrelated repositories, notes, credentials, environment variables, and host temporary files stay hidden.
 - `legacy` Re-running all auto-detected stacks at every commit is replaced by explicit impact scope.
 - `legacy` A single ever-growing traceability table is replaced by per-change evidence records.
 
@@ -66,6 +72,8 @@ observable evidence required to accept a change.
 - Unknown paths, an under-specified component detected by graph lint, or any manifest change
   conservatively triggers the full local matrix.
 - A failed or missing independent review remains a failure, not a cached success.
+- A reviewer CLI that cannot operate within the bounded runtime fails loudly; broad host access is not a
+  compatibility fallback.
 
 ## Non-functional targets
 

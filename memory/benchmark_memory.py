@@ -368,6 +368,14 @@ def score(
 ) -> dict:
     validate_cases(cases)
     by_id = _results_by_id(results)
+    case_ids = {case["id"] for case in cases}
+    if set(by_id) != case_ids:
+        missing = sorted(case_ids - set(by_id))
+        unexpected = sorted(set(by_id) - case_ids)
+        raise ValueError(
+            "benchmark result ids must exactly match benchmark case ids; "
+            f"missing={missing}, unexpected={unexpected}"
+        )
     correct = 0
     recalled = 0
     tokens = 0

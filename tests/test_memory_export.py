@@ -44,6 +44,8 @@ class MemoryExportTests(unittest.TestCase):
             catalog = output / "source-catalog.json"
             self.assertEqual(catalog.stat().st_mode & 0o077, 0)
             self.assertIn(str(session.resolve()), json.loads(catalog.read_text()).values())
+            processed_state = output / "processed-state.json"
+            self.assertEqual(processed_state.stat().st_mode & 0o077, 0)
 
     def test_unmapped_session_is_quarantined_without_content_export(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -318,6 +320,130 @@ class MemoryExportTests(unittest.TestCase):
                 },
                 old_exports,
             )
+
+    def test_repeated_bounded_syncs_advance_past_completed_sources(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "sessions"
+            output = root / "pilot"
+            source.mkdir()
+            output.mkdir(mode=0o700)
+            for index, name in enumerate(("oldest", "middle", "newest"), 1):
+                events = [
+                    {"type": "turn_context", "payload": {"cwd": "/workspace/project"}},
+                    {"type": "response_item", "payload": {"type": "message", "role": "user", "content": name}},
+                    {"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": "answer"}},
+                ]
+                path = source / f"{name}.jsonl"
+                path.write_text("".join(json.dumps(event) + "\n" for event in events))
+                os.utime(path, (index, index))
+
+            first = exporter.export_sources(
+                [source],
+                {"project": "/workspace/project"},
+                output,
+                "g",
+                limit=2,
+                recent_first=True,
+            )
+            second = exporter.export_sources(
+                [source],
+                {"project": "/workspace/project"},
+                output,
+                "g",
+                limit=2,
+                recent_first=True,
+            )
+
+            self.assertEqual(first["sessions"], 2)
+            self.assertEqual(second["sessions"], 1)
+            self.assertEqual(
+                len(json.loads((output / "source-catalog.json").read_text())),
+                3,
+            )
+
+    def test_processed_state_does_not_hide_a_missing_export(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "sessions"
+            output = root / "pilot"
+            source.mkdir()
+            output.mkdir(mode=0o700)
+            events = [
+                {"type": "turn_context", "payload": {"cwd": "/workspace/project"}},
+                {"type": "response_item", "payload": {"type": "message", "role": "user", "content": "question"}},
+                {"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": "answer"}},
+            ]
+            (source / "session.jsonl").write_text(
+                "".join(json.dumps(event) + "\n" for event in events)
+            )
+            exporter.export_sources(
+                [source], {"project": "/workspace/project"}, output, "g"
+            )
+            export_path = next((output / "project" / "export").glob("*.md"))
+            export_path.unlink()
+
+            stats = exporter.export_sources(
+                [source],
+                {"project": "/workspace/project"},
+                output,
+                "g",
+                limit=1,
+            )
+
+            self.assertEqual(stats["sessions"], 1)
+            self.assertTrue(any((output / "project" / "export").glob("*.md")))
+
+    def test_quarantined_and_invalid_sources_do_not_starve_a_bounded_backlog(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "sessions"
+            output = root / "pilot"
+            source.mkdir()
+            output.mkdir(mode=0o700)
+
+            mapped_events = [
+                {"type": "turn_context", "payload": {"cwd": "/workspace/project"}},
+                {"type": "response_item", "payload": {"type": "message", "role": "user", "content": "question"}},
+                {"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": "answer"}},
+            ]
+            mapped = source / "mapped.jsonl"
+            mapped.write_text("".join(json.dumps(event) + "\n" for event in mapped_events))
+            quarantined = source / "quarantined.jsonl"
+            quarantined.write_text(
+                "".join(
+                    json.dumps(event) + "\n"
+                    for event in [
+                        {"type": "turn_context", "payload": {"cwd": "/unmapped"}},
+                        {"type": "response_item", "payload": {"type": "message", "role": "user", "content": "private"}},
+                    ]
+                )
+            )
+            invalid = source / "invalid.jsonl"
+            invalid.write_text("{malformed\n")
+            for timestamp, path in enumerate((mapped, quarantined, invalid), 1):
+                os.utime(path, (timestamp, timestamp))
+
+            first = exporter.export_sources(
+                [source],
+                {"project": "/workspace/project"},
+                output,
+                "g",
+                limit=2,
+                recent_first=True,
+            )
+            second = exporter.export_sources(
+                [source],
+                {"project": "/workspace/project"},
+                output,
+                "g",
+                limit=2,
+                recent_first=True,
+            )
+
+            self.assertEqual(first["sessions"], 2)
+            self.assertEqual(second["sessions"], 1)
+            self.assertTrue(any((output / "project" / "export").glob("*.md")))
 
     def test_large_session_is_partitioned_before_mining(self):
         with tempfile.TemporaryDirectory() as tmp:
