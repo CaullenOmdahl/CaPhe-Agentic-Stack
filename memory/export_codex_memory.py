@@ -15,19 +15,22 @@ from typing import Any
 from mempalace_adapter import extract_records, index_generation_id, validate_palace_path
 
 
-def read_events(path: Path) -> list[dict[str, Any]]:
+def parse_events(raw: bytes, path: Path) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
-    with path.open(errors="replace") as handle:
-        for line_number, line in enumerate(handle, 1):
-            if not line.strip():
-                continue
-            try:
-                item = json.loads(line)
-            except json.JSONDecodeError as error:
-                raise ValueError(f"{path}:{line_number}: {error}") from error
-            if isinstance(item, dict):
-                events.append(item)
+    for line_number, line in enumerate(raw.decode(errors="replace").splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise ValueError(f"{path}:{line_number}: {error}") from error
+        if isinstance(item, dict):
+            events.append(item)
     return events
+
+
+def read_events(path: Path) -> list[dict[str, Any]]:
+    return parse_events(path.read_bytes(), path)
 
 
 def safe_source_id(source_root: Path, path: Path) -> str:
@@ -63,12 +66,20 @@ def export_sources(
         candidates.sort(key=lambda item: item[1].stat().st_mtime, reverse=True)
     else:
         candidates.sort(key=lambda item: (str(item[0]), str(item[1])))
+    catalog_path = output_root / "source-catalog.json"
+    try:
+        catalog = json.loads(catalog_path.read_text()) if catalog_path.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        catalog = {}
+    if not isinstance(catalog, dict):
+        catalog = {}
     for source_root, path in candidates:
         if limit is not None and stats["sessions"] >= limit:
-            return stats
+            break
         stats["sessions"] += 1
         try:
-            events = read_events(path)
+            raw_source = path.read_bytes()
+            events = parse_events(raw_source, path)
         except (OSError, ValueError):
             stats["invalid"] += 1
             continue
@@ -79,7 +90,8 @@ def export_sources(
         for record in records:
             grouped.setdefault(record.scope, []).append(record)
         source_id = safe_source_id(source_root, path)
-        source_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+        source_hash = hashlib.sha256(raw_source).hexdigest()
+        catalog[source_id] = str(path.resolve())
         for domain, domain_records in grouped.items():
             domain_root = output_root / domain
             domain_root.mkdir(mode=0o700, exist_ok=True)
@@ -126,6 +138,7 @@ def export_sources(
                 if stale_path.exists():
                     stale_path.unlink()
             stats["records"] += len(domain_records)
+    atomic_write(catalog_path, json.dumps(catalog, indent=2, sort_keys=True) + "\n")
     return stats
 
 

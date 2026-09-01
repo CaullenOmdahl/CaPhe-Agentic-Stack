@@ -41,6 +41,9 @@ class MemoryExportTests(unittest.TestCase):
             self.assertNotIn("rollout-private-name", text)
             self.assertIn("[REDACTED:GITHUB_TOKEN]", text)
             self.assertEqual(exported.stat().st_mode & 0o077, 0)
+            catalog = output / "source-catalog.json"
+            self.assertEqual(catalog.stat().st_mode & 0o077, 0)
+            self.assertIn(str(session.resolve()), json.loads(catalog.read_text()).values())
 
     def test_unmapped_session_is_quarantined_without_content_export(self):
         with tempfile.TemporaryDirectory() as tmp:

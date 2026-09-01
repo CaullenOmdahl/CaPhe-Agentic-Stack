@@ -26,3 +26,7 @@ ADR's Pareto adoption floor for that domain; other domains still require their o
 
 Use `memory/export_codex_memory.py` to create sanitized per-domain exports. Private mapping files, pilot
 fixtures, palaces, and benchmark results stay outside this public repository.
+
+Exports maintain an owner-only private source catalog. Resolve a selected result's source ID, event,
+source hash, domain, and index generation with `memory/resolve_codex_memory.py`; it re-reads the canonical
+JSONL once, rejects stale hashes or cross-domain events, sanitizes again, and emits only an untrusted frame.

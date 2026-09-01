@@ -116,6 +116,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     output_root = Path(args.output_root).resolve()
     mapping_path = Path(args.mapping).resolve()
     validate_palace_path(output_root)
+    harden_owner_only_tree(output_root)
     if stat.S_IMODE(mapping_path.stat().st_mode) & 0o077:
         raise PermissionError("mapping file must be owner-only")
     mappings = json.loads(mapping_path.read_text())

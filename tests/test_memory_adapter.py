@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -58,6 +59,54 @@ class MemoryAdapterTests(unittest.TestCase):
         self.assertNotIn("sensitive-token-value", resolved.text)
         self.assertIn("UNTRUSTED_MEMORY_EVIDENCE", resolved.framed)
         self.assertIn("session-1", resolved.framed)
+
+    def test_catalog_resolution_rechecks_hash_scope_and_sanitization(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            session = root / "session.jsonl"
+            secret = "Bearer " + "sensitive-token-value-1234567890"
+            events = [
+                {"type": "turn_context", "payload": {"cwd": "/workspace/project"}},
+                {"type": "response_item", "payload": {"type": "message", "role": "user", "content": "question"}},
+                {"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": secret}},
+            ]
+            raw = "".join(json.dumps(event) + "\n" for event in events).encode()
+            session.write_bytes(raw)
+            catalog = root / "source-catalog.json"
+            catalog.write_text(json.dumps({"source-1": str(session)}))
+            catalog.chmod(0o600)
+            resolved = adapter.resolve_catalog_event(
+                catalog,
+                source_id="source-1",
+                source_event=2,
+                expected_sha256=hashlib.sha256(raw).hexdigest(),
+                expected_scope="project",
+                mappings={"project": "/workspace/project"},
+                index_generation="generation-1",
+            )
+            self.assertNotIn("sensitive-token-value", resolved.text)
+            self.assertIn("source_event=\"2\"", resolved.framed)
+            self.assertIn("index_generation=\"generation-1\"", resolved.framed)
+            with self.assertRaises(adapter.IsolationError):
+                adapter.resolve_catalog_event(
+                    catalog,
+                    source_id="source-1",
+                    source_event=2,
+                    expected_sha256="0" * 64,
+                    expected_scope="project",
+                    mappings={"project": "/workspace/project"},
+                    index_generation="generation-1",
+                )
+            with self.assertRaises(adapter.IsolationError):
+                adapter.resolve_catalog_event(
+                    catalog,
+                    source_id="source-1",
+                    source_event=2,
+                    expected_sha256=hashlib.sha256(raw).hexdigest(),
+                    expected_scope="other",
+                    mappings={"project": "/workspace/project"},
+                    index_generation="generation-1",
+                )
 
     def test_palace_path_must_be_outside_git_and_owner_only(self):
         with tempfile.TemporaryDirectory() as tmp:

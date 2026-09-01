@@ -43,6 +43,15 @@ class ResolvedExcerpt(NamedTuple):
     content_hash: str
 
 
+class ResolvedEvent(NamedTuple):
+    text: str
+    framed: str
+    source_id: str
+    source_event: int
+    role: str
+    content_hash: str
+
+
 SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("PRIVATE_KEY", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.DOTALL)),
     ("GITHUB_TOKEN", re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}")),
@@ -159,6 +168,56 @@ def resolve_excerpt(source: str, start: int, end: int, *, source_id: str) -> Res
         f'sha256="{content_hash}">\n{excerpt}\n</UNTRUSTED_MEMORY_EVIDENCE>'
     )
     return ResolvedExcerpt(excerpt, framed, source_id, start, end, content_hash)
+
+
+def resolve_catalog_event(
+    catalog_path: Path,
+    *,
+    source_id: str,
+    source_event: int,
+    expected_sha256: str,
+    expected_scope: str,
+    mappings: dict[str, str],
+    index_generation: str,
+) -> ResolvedEvent:
+    """Resolve one indexed event, failing closed on stale hashes or cross-domain scope."""
+    catalog_path = catalog_path.resolve()
+    if not catalog_path.is_file() or stat.S_IMODE(catalog_path.stat().st_mode) & 0o077:
+        raise IsolationError("source catalog must be an owner-only regular file")
+    try:
+        catalog = json.loads(catalog_path.read_text())
+        source_path = Path(catalog[source_id]).resolve()
+        raw = source_path.read_bytes()
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as error:
+        raise IsolationError("source catalog entry is unavailable") from error
+    content_hash = hashlib.sha256(raw).hexdigest()
+    if content_hash != expected_sha256:
+        raise IsolationError("source changed after indexing; refresh before resolving")
+    events: list[dict[str, Any]] = []
+    try:
+        for line in raw.decode(errors="replace").splitlines():
+            if line.strip():
+                item = json.loads(line)
+                if isinstance(item, dict):
+                    events.append(item)
+    except json.JSONDecodeError as error:
+        raise IsolationError("canonical source is not valid JSONL") from error
+    records, _ = extract_records(events, mappings)
+    matches = [
+        record
+        for record in records
+        if record.source_index == source_event and record.scope == expected_scope
+    ]
+    if len(matches) != 1:
+        raise IsolationError("source event is missing, ambiguous, or outside the requested scope")
+    record = matches[0]
+    text = sanitize_text(record.text)
+    framed = (
+        f'<UNTRUSTED_MEMORY_EVIDENCE source_id="{source_id}" source_event="{source_event}" '
+        f'role="{record.role}" sha256="{content_hash}" index_generation="{index_generation}">\n'
+        f"{text}\n</UNTRUSTED_MEMORY_EVIDENCE>"
+    )
+    return ResolvedEvent(text, framed, source_id, source_event, record.role, content_hash)
 
 
 def validate_palace_path(path: Path) -> None:
