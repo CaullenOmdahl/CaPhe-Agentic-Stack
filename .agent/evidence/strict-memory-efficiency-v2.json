@@ -1,0 +1,18 @@
+{
+  "approval": "Caullen Omdahl, 2026-09-01",
+  "decision": "ADR-0001; ADR-0002",
+  "id": "strict-memory-efficiency-v2",
+  "lane": "full-risk",
+  "review": "https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/pull/6",
+  "status": "implementation-review",
+  "tests": [
+    "python3 -m unittest discover -s tests -v",
+    "bash strict-mode/test/shell-syntax-test.sh",
+    "bash strict-mode/test/strict-confer-isolation-test.sh",
+    "bash test/public-safety-test.sh",
+    "bash strict-mode/bin/strict-green-gate.sh --mode completion",
+    "private five-case memory benchmark and three-domain artifact gate",
+    "real macOS Sandbox agy and Codex staged-snapshot probe",
+    "real Fedora Bubblewrap source-hiding probe"
+  ]
+}

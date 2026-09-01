@@ -10,3 +10,10 @@ private/
 local/
 cache/
 tmp/
+.agent/cache/
+.agent/reviews/
+.claude/settings.json
+**/__pycache__/
+*.pyc
+mempalace-data/
+memory-pilot/

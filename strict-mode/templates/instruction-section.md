@@ -1,9 +1,3 @@
-# Codex Entry Point
-
-You are Codex, one coding agent using this repository's shared agentic stack.
-
-Read `adapters/codex/CODEX.md`, then read `docs/canon.md`.
-
 <!-- STRICT-MODE:BEGIN (managed by strict-mode; edit the canon, not this marker) -->
 ## Strict Mode
 

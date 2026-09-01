@@ -1,0 +1,103 @@
+# ADR 0001 — Evidence-preserving Strict Mode v2
+
+- **Status:** accepted
+- **Date:** 2026-09-01
+- **Approver:** Caullen Omdahl (authorized full implementation in chat, 2026-09-01)
+- **Deciders / reviewers:** Codex; v1 rejected by Claude and agy; v2 accepted-with-conditions by Claude
+  and rejected by agy; v3 accepted by Claude and agy
+
+## Context
+
+The existing methodology preserves strong evidence but applies broad initialization text, automatic
+stack discovery, full local checks, and centralized traceability in ways that duplicate work and omit
+some nested components. See the linked Strict Mode v2 abstraction.
+
+## Decision
+
+Adopt three evidence lanes, selected by deterministic evidence: mechanically proven, scoped behavior,
+and full risk. Use a declarative component manifest for affected-component local checks and require an
+uncached complete matrix in pull-request CI. If CI is absent or incomplete, completion requires the full
+uncached local matrix through `strict-green-gate.sh --mode completion`; focused pre-commit success is
+labeled `FAST GREEN` and cannot satisfy DoD. Manifest lint blocks uncovered paths, and affected mode is
+available only when dependency completeness is proven by built-in workspace extractors or a repository
+verifier; otherwise it runs full. Manifest edits force full verification. Caching is disabled by default and requires explicit complete
+input/toolchain declarations plus atomic per-key locking. Store evidence per change and generate the
+aggregate index. Keep all existing named human gates and PR implementation review.
+Generated manifests preserve each Python test root's declared runner: explicit pytest configuration or
+dependency, including standardized top-level and Poetry dependency groups, selects `python -m pytest`, while
+undeclared roots retain unittest discovery. Explicitly configured pytest project roots are scheduled even
+without a literal `tests/` directory, and pytest receives no hard-coded path, allowing its complete
+`testpaths` contract to select the suite. Ancestor pytest commands explicitly ignore nested Python project
+roots, which are scheduled by their own runner. Plain unittest projects with root-level `test*.py` modules are
+also discovery roots; they start discovery at the project root when no `tests/` directory exists.
+
+Local `strict-confer` fallback reviews use a default-deny host filesystem boundary, an index-only project
+snapshot, an ephemeral shadow home seeded with only non-secret CLI preferences, selected system/runtime
+paths, and a rebuilt allowlisted environment. Host authentication files and token caches are never copied
+into model-readable storage. Linux uses a selective Bubblewrap namespace; macOS uses a default-deny Sandbox
+profile. A peer that cannot run or authenticate within that boundary is unavailable rather than silently
+receiving broader host or credential access.
+
+Implementation remains Bash plus Python 3. Python is selected for safe marker replacement, JSON schema
+handling, deterministic planning, hashing, concurrency, and portable tests; Bash remains the stable CLI
+and git-hook boundary.
+
+Platform scoring:
+
+| Option | Platform | Performance | Determinism | Portability | Ecosystem | Security |
+|---|---:|---:|---:|---:|---:|---:|
+| Bash wrapper + Python core | 5 | 4 | 5 | 5 | 5 | 4 |
+| Bash only | 5 | 3 | 3 | 3 | 3 | 3 |
+| Node core | 4 | 4 | 5 | 3 | 5 | 4 |
+| Rust binary | 3 | 5 | 5 | 2 | 4 | 5 |
+
+Python wins because it is already used by strict-confer, is present on supported developer machines,
+and avoids adding a compiled distribution artifact. Bash-only loses on reliable JSON, hashing, and
+parallel log management. Node is not universal across all governed repositories. Rust adds build and
+distribution overhead disproportionate to this control-plane tool.
+
+## Second opinion
+
+V1 was rejected because it lacked a no-CI fallback, permitted self-attested lane selection, could not
+detect incomplete dependency declarations, and under-specified cache identity and locking. V2 adds an
+uncached full local completion fallback, deterministic exemption proofs, manifest/graph lint with full
+fallback, and default-off locked caching. Claude accepted v2 with conditions; agy rejected because the
+completion gate was not a concrete command and dependency verification remained optional. V3 makes the
+completion mode explicit and permits affected mode only with proven dependency completeness.
+Final v3 review accepted the design; evidence:
+`.agent/reviews/20260901T090934Z-20260901T090602Z-22514-27682-strict-memory-efficiency-v2-design-v3.md`.
+The exact-head Codex review at `97d4166` rejected source-root-only masking because unrelated host data
+remained readable. The default-deny selective-runtime revision closes that adversarial finding.
+A later exact-head review found that unconditional unittest discovery could skip declared pytest suites;
+runner-aware Python discovery closes that coverage gap without changing plain unittest repositories.
+A later exact-head review reproduced a second coverage gap when pytest configured `testpaths = ["spec"]`;
+configured pytest project roots are now discovery entrypoints independent of directory naming.
+The final integration review found that passing `tests` still masked additional configured roots; invoking
+pytest without positional paths closes the remaining coverage gap.
+The subsequent exact-head review found dependency-declared pytest projects with only root-level tests;
+dependency declarations now make their project directory a discovery root as well.
+The next exact-head review found that a plain unittest project containing only root-level test modules was
+not scheduled. Root-level `test*.py` discovery now creates a unittest project and uses the project root as
+its start directory. The same review found authentication files copied into peer homes; local fallback
+review now carries no host credentials and fails closed when a peer cannot authenticate independently.
+The following exact-head review found nested `tests/` directories and modules could schedule the same
+unittest project twice. Both discovery signals now resolve to the nearest declared Python project before
+deduplication.
+The next review reproduced duplicate parent/child pytest collection and a Poetry dev-group suite silently
+classified as unittest. Ancestor pytest runs now ignore nested project roots, and Poetry main, legacy dev,
+and named-group dependency tables participate in runner selection.
+
+## Consequences
+
+Local commits become faster and diagnostics improve. Full CI remains authoritative when complete;
+otherwise the uncached local full matrix is authoritative. Repository manifests require maintenance,
+so unknown paths, detected missing edges, or manifest edits trigger the full matrix.
+The source distribution must add tests for initialization, planning, caching, and evidence generation.
+Peer CLI compatibility is now bounded by the explicit runtime allowlist and credential-free shadow home;
+failures remain loud and do not weaken the isolation policy.
+
+## Alternatives considered
+
+- Keep the current all-local gate: rejected because it duplicates workspace work and can miss nested stacks.
+- Remove local gates: rejected because it delays cheap feedback.
+- Trust automatic discovery only: rejected because dependency impact is repository-specific.

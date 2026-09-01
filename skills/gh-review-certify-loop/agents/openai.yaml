@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitHub Review Certify Loop"
+  short_description: "Loop active GitHub PR reviews to green"
+  default_prompt: "Use $gh-review-certify-loop to run the repository's active GitHub review integrations until the PR is clear, then merge only if explicitly requested."

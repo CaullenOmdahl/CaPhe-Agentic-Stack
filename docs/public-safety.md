@@ -20,4 +20,12 @@ rg --hidden --no-ignore --glob '!.git' -n '/Users/|/home/|[A-Za-z]:\\Users\\|\.e
 find . -path ./.git -prune -o -type f \( -name '.env' -o -name '.env.*' -o -name '.npmrc' -o -name '*credential*' -o -name '*secret*' \) -print
 ```
 
+The enforced `test/public-safety-test.sh` gate also rejects standalone OpenAI `sk-...` key families and
+keeps its detector definitions and regression fixtures out of self-matching scope. It scans stage-0 regular
+Git index blobs separately from worktree and untracked files, so sanitizing a worktree copy after staging a
+secret cannot hide the staged credential. Staged blobs are scanned to end-of-stream rather than terminating
+the pipe on the first match, preventing an upstream `SIGPIPE` under `pipefail` from turning a detected secret
+in a large blob into a false negative.
+Findings report only the affected filename; matched credential text is never echoed into local or CI logs.
+
 If a useful workflow depends on private details, document the shape of the workflow and keep the private values in a separate ignored local file or private repository.

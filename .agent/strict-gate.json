@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "components": [
+    {
+      "name": "stack",
+      "paths": [
+        "**"
+      ],
+      "depends_on": [],
+      "dependency_verification": {
+        "kind": "single-component"
+      },
+      "commands": [
+        {
+          "name": "python-tests",
+          "run": [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests",
+            "-v"
+          ]
+        },
+        {
+          "name": "shell-syntax",
+          "run": [
+            "bash",
+            "strict-mode/test/shell-syntax-test.sh"
+          ]
+        },
+        {
+          "name": "strict-confer-isolation",
+          "run": [
+            "bash",
+            "strict-mode/test/strict-confer-isolation-test.sh"
+          ]
+        },
+        {
+          "name": "public-safety",
+          "run": [
+            "bash",
+            "test/public-safety-test.sh"
+          ]
+        }
+      ]
+    }
+  ]
+}

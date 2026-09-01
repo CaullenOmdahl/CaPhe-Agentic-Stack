@@ -17,7 +17,9 @@ This stack treats pull requests as the canonical implementation-review path.
 
 ## Review Agents
 
-When the repository is connected to review agents, use the repository's normal pull-request review integration. Comment triggers such as `/gemini review`, `@codex review`, or `@claude review` may be used where those apps are installed.
+When a repository is connected to review agents, discover which integrations are currently active from
+recent workflow runs, checks, and review responses, then use that repository's normal pull-request path.
+Do not hard-code or wait on a retired or unresponsive reviewer. Record the reviewers that actually ran.
 
 Do not claim review is complete unless the relevant review path actually ran or the user explicitly accepted a fallback.
 
