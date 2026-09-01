@@ -13,7 +13,9 @@ The stack uses protected source records plus rebuildable local retrieval indexes
 - **Lifecycle:** explicit corrections supersede; default search masks invalid facts. Index generation records
   MemPalace, backend, embedder/dimension, sanitizer, and chunker identity.
 
-The local pilot pins MemPalace 3.9.0 and forbids remote embeddings. Adoption requires the privacy,
+The local pilot pins MemPalace 3.9.0 and forbids remote embeddings. Sanitizer v6 starts a fresh index
+generation and redacts standalone fine-grained GitHub tokens in addition to the existing vendor and
+assignment patterns. Adoption requires the privacy,
 isolation, injection, citation, correctness, recall, latency, storage, and token benchmarks in ADR-0002.
 
 MemPalace may create backend files with group/world-readable defaults. After every `init`, `mine`,
@@ -23,10 +25,11 @@ MemPalace may create backend files with group/world-readable defaults. After eve
 replace the last known-good active generation. When the final export leaves a domain, sync reconciles the
 existing active palace against the empty export directory so stale drawers are actually removed.
 
-The 2026-09-01 private five-case BlackSheep v9 pilot retained 5/5 answer and recall-at-5 results while
-reducing observed retrieval input from 9,820 to 1,609 approximate tokens (83.6%). The harness measured
-the slowest end-to-end candidate case at 99,890.85 ms against a 180,000 ms cap and the complete owner-only
-index at 118,889,029 bytes against a 268,435,456-byte cap. Citations resolved, and the secret-canary,
+The 2026-09-01 private five-case BlackSheep v10 pilot retained 5/5 answer and recall-at-5 results while
+reducing observed retrieval input from 9,820 to 3,742 approximate tokens (61.9%). The harness measured
+the slowest end-to-end candidate case at 130,097.95 ms against a 180,000 ms cap and the benchmarked
+owner-only palace at 109,212,400 bytes against a 268,435,456-byte cap. The full local v10 generation
+contains 904 canonical sources across 18 physically isolated mapped domains. Citations resolved, and the secret-canary,
 cross-domain, and injection gates remained at zero. Current benchmark cases require non-empty
 human-authored answer predicate groups plus at least one injection probe. A group may provide narrow semantic
 alternatives for formatting-equivalent terms, and the result records every case's recall and missing groups.
@@ -38,14 +41,16 @@ candidate result files cannot attest to their own injection safety.
 The same runner places a fresh secret canary inside untrusted evidence and uses a two-phase protocol for
 every case. Search returns source, event, hash, and optional excerpt bounds. The harness first requires those
 coordinates to exist in the selected derived generation, resolves bounded slices from the owner-only catalog
-and canonical JSONL, and supplies those exact slices to the answer phase. The answer must echo the same live
+and canonical JSONL, frames every slice as untrusted evidence itself, and supplies those exact frames to the
+answer phase. The answer must echo the same live
 citations. File-supplied answers, hits, citations, and token counts are replaced; retrieved tokens are derived
 only from the harness-supplied context. Candidate-supplied safety counters are ignored: the harness scores and
 scans the actual live answer, derives cross-domain failures from both export placement and canonical scope,
 and rejects invalid coordinates or negative token measurements. Live append-only transcripts are not benchmark anchors; use stable historical sources so exact
 whole-file hashes remain reproducible during a run.
 Adoption also requires a positive baseline token count, a harness-timed candidate probe below an explicit
-latency cap, and the audited owner-only index tree below an explicit byte cap. These measurements are
+latency cap, and each audited owner-only security domain named by the acceptance cases below an explicit
+byte cap. Unrelated mapped domains do not consume a case set's per-palace budget. These measurements are
 derived by the harness and cannot be asserted by candidate result files. Baseline and candidate result IDs
 must each exactly match the benchmark case IDs before scoring.
 The formatter also exercises a closing-delimiter self-test. Other domains still require their own

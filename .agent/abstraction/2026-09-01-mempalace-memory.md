@@ -59,8 +59,9 @@ immutable source records and loading only the evidence relevant to the current t
 - `intended` Retrieved memory is framed as untrusted quoted evidence with source and trust metadata.
   Tool output and fetched third-party content are excluded from startup context and ingestion by default.
 - `intended` Benchmark probes are two-phase. Search returns coordinates only; the harness resolves those
-  coordinates from the selected generation, supplies the exact slices to the answer phase, requires the
-  answer to echo the live citations, and derives token volume from the supplied text rather than probe claims.
+  coordinates from the selected generation, frames and supplies the exact slices to the answer phase,
+  requires the answer to echo the live citations, and derives token volume from the underlying supplied
+  text rather than probe claims.
 - `intended` Indexing is idempotent, resume-safe, incremental, and bounded by per-palace quotas. Large
   tool outputs, binary/base64 content, and generated build logs are excluded by default.
 - `intended` A bounded ingestion pass counts only sources whose bytes, generation, mapping, or processing

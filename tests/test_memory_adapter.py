@@ -28,6 +28,7 @@ class MemoryAdapterTests(unittest.TestCase):
             "AWS_SECRET_ACCESS_KEY=example-secret-value-123456",
             "SLACK_TOKEN=" + "xoxb-" + "1234567890-abcdefghijklmnop",
             "NPM_AUTH_TOKEN=" + "npm_" + "abcdefghijklmnopqrstuvwxyz",
+            "github_pat_" + "A" * 82,
             "AKIA" + "ABCDEFGHIJKLMNOP",
         ]
         sanitized = adapter.sanitize_text("\n".join(credentials))

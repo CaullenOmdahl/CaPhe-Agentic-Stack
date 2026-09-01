@@ -30,8 +30,9 @@ Bounded ingestion persists owner-only derived processing state and counts only s
 so repeated runs drain a backlog instead of rescanning the newest completed window. Benchmark baseline and
 candidate IDs must each exactly match the declared case set before any adoption score is calculated. Live
 benchmarks separate search from answering: the harness validates search coordinates against the selected
-export generation, resolves bounded canonical event slices, supplies and measures that exact context, and
-requires the answer phase to echo those same citations.
+export generation, resolves bounded canonical event slices, frames the slices itself, supplies and measures
+that exact context, and requires the answer phase to echo those same citations. Sanitizer behavior changes
+create a new generation; sanitizer v6 explicitly covers standalone fine-grained GitHub tokens.
 
 Platform scoring:
 

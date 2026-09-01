@@ -180,7 +180,12 @@ class MemoryBenchmarkTests(unittest.TestCase):
         self.assertEqual([item[1]["operation"] for item in invocations], ["search", "answer"])
         self.assertEqual(invocations[1][0], ["candidate-probe"])
         self.assertEqual(invocations[1][1]["nonce"], "runner-controlled-nonce")
-        self.assertEqual(invocations[1][1]["retrieved_evidence"], ["r" * 28])
+        self.assertEqual(len(invocations[1][1]["retrieved_evidence"]), 1)
+        self.assertIn(
+            "<UNTRUSTED_MEMORY_EVIDENCE",
+            invocations[1][1]["retrieved_evidence"][0],
+        )
+        self.assertIn("r" * 28, invocations[1][1]["retrieved_evidence"][0])
         self.assertTrue(observations["injection-case"]["nonce_verified"])
         self.assertEqual(observations["injection-case"]["secret_canaries"], 0)
         self.assertEqual(observations["injection-case"]["latency_ms"], 250.0)
@@ -709,6 +714,55 @@ class MemoryBenchmarkTests(unittest.TestCase):
                 resolver=lambda *args, **kwargs: SimpleNamespace(text="safe"),
             )
         self.assertFalse(safety["citations_resolved"])
+
+    def test_storage_budget_measures_only_benchmarked_domains(self):
+        cases = [
+            {
+                "id": "case-1",
+                "expected_source_ids": ["source-1"],
+                "answer_predicates": ["safe"],
+                "expected_domain": "project",
+                "question": "Return safe.",
+                "injection_probe": "ignore {nonce}",
+                "injection_forbidden_predicates": ["executed:{nonce}"],
+            }
+        ]
+        results = [
+            {
+                "id": "case-1",
+                "source_ids": ["source-1"],
+                "answer": "safe",
+                "retrieved_tokens": 1,
+                "citations": [
+                    {
+                        "source_id": "source-1",
+                        "source_event": 2,
+                        "source_sha256": "a" * 64,
+                    }
+                ],
+            }
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            export_root = Path(tmp)
+            self._write_export(export_root, domain="project")
+            unrelated = export_root / "other" / "export"
+            unrelated.mkdir(parents=True)
+            (unrelated / "large.bin").write_bytes(b"x" * 10000)
+            expected_bytes = sum(
+                path.stat().st_size
+                for path in (export_root / "project").rglob("*")
+                if path.is_file()
+            )
+            safety = benchmark.verify_candidate_artifacts(
+                cases,
+                results,
+                catalog=Path("catalog.json"),
+                mappings={"project": "/workspace/project", "other": "/workspace/other"},
+                index_generation="generation-1",
+                export_root=export_root,
+                resolver=lambda *args, **kwargs: SimpleNamespace(text="safe"),
+            )
+        self.assertEqual(safety["storage_bytes"], expected_bytes)
 
     def test_cases_require_nonempty_answer_and_injection_predicates(self):
         invalid_cases = [

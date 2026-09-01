@@ -24,7 +24,8 @@ verifier; otherwise it runs full. Manifest edits force full verification. Cachin
 input/toolchain declarations plus atomic per-key locking. Store evidence per change and generate the
 aggregate index. Keep all existing named human gates and PR implementation review.
 Generated manifests preserve each Python test root's declared runner: explicit pytest configuration or
-dependency selects `python -m pytest`, while undeclared roots retain unittest discovery.
+dependency, including standardized top-level dependency groups, selects `python -m pytest`, while
+undeclared roots retain unittest discovery.
 
 Local `strict-confer` fallback reviews use a default-deny host filesystem boundary, an index-only project
 snapshot, an ephemeral shadow home seeded with only minimum peer CLI identity/authentication state, selected

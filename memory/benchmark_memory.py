@@ -161,13 +161,25 @@ def run_candidate_probes(
             raise ValueError(
                 f"candidate search {case['id']} did not resolve to measured evidence"
             )
+        framed_retrieved_evidence = [
+            frame_untrusted_evidence(
+                item,
+                case_id=case["id"],
+                source_id=citation["source_id"],
+                source_event=citation["source_event"],
+                sha256=citation["source_sha256"],
+                start=citation.get("start", 0),
+                end=citation.get("end", len(item)),
+            )
+            for item, citation in zip(retrieved_evidence, citations, strict=True)
+        ]
         invocation = {
             "operation": "answer",
             "case_id": case["id"],
             "nonce": nonce,
             "question": case["question"],
             "untrusted_evidence": framed,
-            "retrieved_evidence": retrieved_evidence,
+            "retrieved_evidence": framed_retrieved_evidence,
             "citations": citations,
         }
         completed = runner(
@@ -409,12 +421,14 @@ def verify_candidate_artifacts(
     citations_resolved = True
     secret_canaries = 0
     cross_domain_hits = 0
+    benchmarked_domains: set[str] = set()
 
     for case in cases:
         case_id = case["id"]
         expected_domain = case.get("expected_domain")
         if not isinstance(expected_domain, str) or expected_domain not in mappings:
             raise ValueError(f"{case_id}.expected_domain must name a mapped domain")
+        benchmarked_domains.add(expected_domain)
         result = by_id.get(case_id)
         if result is None:
             citations_resolved = False
@@ -499,7 +513,8 @@ def verify_candidate_artifacts(
         "cross_domain_hits": cross_domain_hits,
         "storage_bytes": sum(
             path.stat().st_size
-            for path in export_root.rglob("*")
+            for domain in benchmarked_domains
+            for path in (export_root / domain).rglob("*")
             if path.is_file() and not path.is_symlink()
         ),
     }

@@ -344,6 +344,9 @@ def _declares_pytest(project_root: Path) -> bool:
             optional = project.get("optional-dependencies", {})
             if isinstance(optional, dict):
                 dependency_groups.extend(optional.values())
+        standardized_groups = data.get("dependency-groups", {})
+        if isinstance(standardized_groups, dict):
+            dependency_groups.extend(standardized_groups.values())
         if any(
             isinstance(group, list)
             and any(

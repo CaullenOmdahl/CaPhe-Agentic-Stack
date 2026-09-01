@@ -13,7 +13,7 @@ import stat
 from typing import Any, Iterable, NamedTuple
 
 
-SANITIZER_VERSION = "sanitize-v5"
+SANITIZER_VERSION = "sanitize-v6"
 CHUNKER_VERSION = "chunk-v2"
 EVIDENCE_TAG = "UNTRUSTED_MEMORY_EVIDENCE"
 
@@ -57,6 +57,7 @@ class ResolvedEvent(NamedTuple):
 SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("PRIVATE_KEY", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.DOTALL)),
     ("GITHUB_TOKEN", re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}")),
+    ("GITHUB_FINE_GRAINED_TOKEN", re.compile(r"github_pat_[A-Za-z0-9_]{20,}")),
     ("AWS_ACCESS_KEY", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
     ("SLACK_TOKEN", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
     ("NPM_TOKEN", re.compile(r"\bnpm_[A-Za-z0-9]{20,}\b")),
