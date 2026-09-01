@@ -1,6 +1,7 @@
 import importlib.util
 from pathlib import Path
 import tempfile
+import subprocess
 import unittest
 
 
@@ -39,6 +40,28 @@ class MemorySyncTests(unittest.TestCase):
             self.assertIn("--apply", flattened)
             self.assertNotIn("--accept-external-llm", flattened)
             self.assertTrue(all(kwargs["check"] for _, kwargs in calls))
+            self.assertEqual(module.audit_owner_only_tree(domain), [])
+
+    def test_failed_write_is_rehardened_before_error_propagates(self):
+        spec = importlib.util.spec_from_file_location("sync_mempalace_failure", MODULE_PATH)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as tmp:
+            domain = Path(tmp) / "project-12345678"
+            export = domain / "export"
+            export.mkdir(parents=True, mode=0o700)
+            (export / "source.md").write_text("sanitized source")
+
+            def failing_run(command, **kwargs):
+                generated = domain / "palace" / "partial.bin"
+                generated.parent.mkdir(parents=True, exist_ok=True)
+                generated.write_bytes(b"partial")
+                generated.chmod(0o644)
+                raise subprocess.CalledProcessError(1, command)
+
+            with self.assertRaises(subprocess.CalledProcessError):
+                module.sync_domain(domain, runner=failing_run)
             self.assertEqual(module.audit_owner_only_tree(domain), [])
 
 

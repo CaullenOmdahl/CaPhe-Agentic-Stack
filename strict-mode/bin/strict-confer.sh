@@ -69,7 +69,12 @@ run_isolated() {
     if git -C "$SOURCE_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       local file_list
       file_list="$peer_dir/files.txt"
-      git -C "$SOURCE_ROOT" ls-files --cached --others --exclude-standard -z > "$file_list" || return 1
+      git -C "$SOURCE_ROOT" ls-files --cached --others --exclude-standard -z |
+        while IFS= read -r -d '' tracked_path; do
+          if [ -e "$SOURCE_ROOT/$tracked_path" ] || [ -L "$SOURCE_ROOT/$tracked_path" ]; then
+            printf '%s\0' "$tracked_path"
+          fi
+        done > "$file_list" || return 1
       rsync -a --from0 --files-from="$file_list" "$SOURCE_ROOT"/ "$peer_cwd"/ || return 1
     else
       rsync -a --delete \

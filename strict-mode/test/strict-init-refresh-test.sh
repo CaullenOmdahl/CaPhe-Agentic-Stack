@@ -119,6 +119,7 @@ git -C "$WORKTREE_MAIN" worktree add -q -b strict-init-test "$WORKTREE_CHILD"
 HOOK=$(git -C "$WORKTREE_CHILD" rev-parse --git-path hooks/pre-commit)
 [ -x "$WORKTREE_CHILD/$HOOK" ] || [ -x "$HOOK" ]
 grep -q 'strict-green-gate' "$WORKTREE_CHILD/$HOOK" 2>/dev/null || grep -q 'strict-green-gate' "$HOOK"
+(cd "$WORKTREE_CHILD" && HOME="$HOME_ROOT" "$HOOK" >/dev/null)
 
 words=$(sed -n '/^## Strict Mode$/,/^<!-- STRICT-MODE:END -->$/p' "$ROOT/templates/instruction-section.md" | wc -w | tr -d ' ')
 [ "$words" -le 180 ] || { echo "managed section exceeds 180 words: $words" >&2; exit 1; }

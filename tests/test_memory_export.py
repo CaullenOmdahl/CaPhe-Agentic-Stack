@@ -63,6 +63,67 @@ class MemoryExportTests(unittest.TestCase):
             self.assertEqual(stats["quarantined"], 1)
             self.assertFalse(any(output.rglob("*.md")))
 
+    def test_source_ids_are_namespaced_by_source_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            first_root = root / "first"
+            second_root = root / "second"
+            first = first_root / "same" / "session.jsonl"
+            second = second_root / "same" / "session.jsonl"
+            first.parent.mkdir(parents=True)
+            second.parent.mkdir(parents=True)
+            first.write_text("")
+            second.write_text("")
+            self.assertNotEqual(
+                exporter.safe_source_id(first_root, first),
+                exporter.safe_source_id(second_root, second),
+            )
+
+    def test_unsafe_domain_name_is_rejected_before_export(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "sessions"
+            output = root / "pilot"
+            source.mkdir()
+            output.mkdir(mode=0o700)
+            events = [
+                {"type": "turn_context", "payload": {"cwd": "/workspace/project"}},
+                {"type": "response_item", "payload": {"type": "message", "role": "user", "content": "question"}},
+                {"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": "answer"}},
+            ]
+            (source / "session.jsonl").write_text("".join(json.dumps(event) + "\n" for event in events))
+            with self.assertRaises(exporter.IsolationError):
+                exporter.export_sources([source], {"../escaped": "/workspace/project"}, output, "g")
+            self.assertFalse((root / "escaped").exists())
+
+    def test_reexport_removes_source_from_previous_or_quarantined_domain(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "sessions"
+            output = root / "pilot"
+            source.mkdir()
+            output.mkdir(mode=0o700)
+            session = source / "moving.jsonl"
+
+            def write_turn(cwd):
+                events = [
+                    {"type": "turn_context", "payload": {"cwd": cwd}},
+                    {"type": "response_item", "payload": {"type": "message", "role": "user", "content": "question"}},
+                    {"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": "answer"}},
+                ]
+                session.write_text("".join(json.dumps(event) + "\n" for event in events))
+
+            write_turn("/workspace/a")
+            exporter.export_sources([source], {"domain-a": "/workspace/a"}, output, "g")
+            self.assertTrue(any((output / "domain-a" / "export").glob("*.md")))
+            write_turn("/workspace/b")
+            exporter.export_sources([source], {"domain-b": "/workspace/b"}, output, "g")
+            self.assertFalse(any((output / "domain-a" / "export").glob("*.md")))
+            self.assertTrue(any((output / "domain-b" / "export").glob("*.md")))
+            write_turn("/workspace/unmapped")
+            exporter.export_sources([source], {"domain-b": "/workspace/b"}, output, "g")
+            self.assertFalse(any((output / "domain-b" / "export").glob("*.md")))
+
     def test_large_session_is_partitioned_before_mining(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

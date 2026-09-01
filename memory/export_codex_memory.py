@@ -8,11 +8,19 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import tempfile
 from typing import Any
 
-from mempalace_adapter import extract_records, index_generation_id, validate_palace_path
+from mempalace_adapter import (
+    CHUNKER_VERSION,
+    SANITIZER_VERSION,
+    IsolationError,
+    extract_records,
+    index_generation_id,
+    validate_palace_path,
+)
 
 
 def parse_events(raw: bytes, path: Path) -> list[dict[str, Any]]:
@@ -35,7 +43,19 @@ def read_events(path: Path) -> list[dict[str, Any]]:
 
 def safe_source_id(source_root: Path, path: Path) -> str:
     relative = path.relative_to(source_root).as_posix()
-    return hashlib.sha256(relative.encode()).hexdigest()[:20]
+    identity = f"{source_root.resolve()}\0{relative}"
+    return hashlib.sha256(identity.encode()).hexdigest()[:20]
+
+
+def _validated_domain_root(output_root: Path, domain: str) -> Path:
+    if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*", domain) or domain in {".", ".."}:
+        raise IsolationError(f"unsafe memory domain name: {domain!r}")
+    domain_root = (output_root / domain).resolve()
+    try:
+        domain_root.relative_to(output_root.resolve())
+    except ValueError as error:
+        raise IsolationError(f"memory domain escapes output root: {domain!r}") from error
+    return domain_root
 
 
 def atomic_write(path: Path, text: str) -> None:
@@ -58,6 +78,11 @@ def export_sources(
     max_export_chars: int = 200_000,
 ) -> dict[str, int]:
     validate_palace_path(output_root)
+    domain_roots = {domain: _validated_domain_root(output_root, domain) for domain in mappings}
+    all_domain_roots = dict(domain_roots)
+    for existing in output_root.iterdir():
+        if existing.is_dir():
+            all_domain_roots.setdefault(existing.name, _validated_domain_root(output_root, existing.name))
     if max_export_chars <= 0:
         raise ValueError("max_export_chars must be positive")
     stats = {"sessions": 0, "records": 0, "export_files": 0, "quarantined": 0, "invalid": 0}
@@ -92,8 +117,20 @@ def export_sources(
         source_id = safe_source_id(source_root, path)
         source_hash = hashlib.sha256(raw_source).hexdigest()
         catalog[source_id] = str(path.resolve())
+        current_domains = set(grouped)
+        for domain, existing_domain_root in all_domain_roots.items():
+            if domain in current_domains:
+                continue
+            existing_export = existing_domain_root / "export"
+            stale_candidates = {
+                existing_export / f"{source_id}.md",
+                *existing_export.glob(f"{source_id}-p*.md"),
+            }
+            for stale_path in stale_candidates:
+                if stale_path.exists():
+                    stale_path.unlink()
         for domain, domain_records in grouped.items():
-            domain_root = output_root / domain
+            domain_root = domain_roots[domain]
             domain_root.mkdir(mode=0o700, exist_ok=True)
             export_dir = domain_root / "export"
             export_dir.mkdir(mode=0o700, exist_ok=True)
@@ -166,8 +203,8 @@ def main(argv: list[str] | None = None) -> int:
         args.backend,
         args.embedder,
         args.dimension,
-        "sanitize-v1",
-        "chunk-v1",
+        SANITIZER_VERSION,
+        CHUNKER_VERSION,
     )
     try:
         stats = export_sources(

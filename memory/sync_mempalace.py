@@ -61,19 +61,25 @@ def sync_domain(domain_root: Path, *, runner: Runner = subprocess.run, max_chunk
         return
     palace = domain_root / "palace"
     palace.mkdir(mode=0o700, parents=True, exist_ok=True)
+    harden_owner_only_tree(domain_root)
     env = _private_local_env()
     base = _base_command(palace)
+    def run_write(command: list[str], **kwargs: object) -> None:
+        try:
+            runner(command, text=True, check=True, env=env, **kwargs)
+        finally:
+            harden_owner_only_tree(domain_root)
+            offenders = audit_owner_only_tree(domain_root)
+            if offenders:
+                raise PermissionError(f"owner-only palace audit failed for {domain_root}: {offenders[:5]}")
+
     if not (export_dir / "mempalace.yaml").exists():
-        runner(
+        run_write(
             [*base, "init", str(export_dir), "--backend", "chroma", "--yes", "--no-llm"],
             input="n\n",
-            text=True,
-            check=True,
-            env=env,
         )
-    harden_owner_only_tree(domain_root)
     wing = domain_root.name.rsplit("-", 1)[0]
-    runner(
+    run_write(
         [
             *base,
             "mine",
@@ -87,20 +93,10 @@ def sync_domain(domain_root: Path, *, runner: Runner = subprocess.run, max_chunk
             "--max-chunks-per-file",
             str(max_chunks_per_file),
         ],
-        text=True,
-        check=True,
-        env=env,
     )
-    runner(
+    run_write(
         [*base, "sync", str(export_dir), "--wing", wing, "--apply"],
-        text=True,
-        check=True,
-        env=env,
     )
-    harden_owner_only_tree(domain_root)
-    offenders = audit_owner_only_tree(domain_root)
-    if offenders:
-        raise PermissionError(f"owner-only palace audit failed for {domain_root}: {offenders[:5]}")
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -13,7 +13,7 @@ from typing import Any, Iterable, NamedTuple
 
 
 SANITIZER_VERSION = "sanitize-v1"
-CHUNKER_VERSION = "chunk-v1"
+CHUNKER_VERSION = "chunk-v2"
 
 
 class IsolationError(ValueError):
@@ -158,11 +158,20 @@ def extract_records(events: Iterable[dict[str, Any]], mappings: dict[str, str]) 
     return records, quarantined
 
 
-def resolve_excerpt(source: str, start: int, end: int, *, source_id: str) -> ResolvedExcerpt:
+def resolve_excerpt(
+    source: str,
+    start: int,
+    end: int,
+    *,
+    source_id: str,
+    expected_sha256: str,
+) -> ResolvedExcerpt:
     if start < 0 or end < start or end > len(source):
         raise ValueError("invalid source coordinates")
     excerpt = sanitize_text(source[start:end])
     content_hash = hashlib.sha256(source.encode()).hexdigest()
+    if content_hash != expected_sha256:
+        raise IsolationError("source changed after indexing; refresh before resolving")
     framed = (
         f'<UNTRUSTED_MEMORY_EVIDENCE source_id="{source_id}" start="{start}" end="{end}" '
         f'sha256="{content_hash}">\n{excerpt}\n</UNTRUSTED_MEMORY_EVIDENCE>'
@@ -238,27 +247,37 @@ def _validate_outside_git(path: Path) -> None:
 
 def audit_owner_only_tree(path: Path) -> list[tuple[str, int]]:
     """Return generated paths whose mode permits group or other access."""
+    if path.is_symlink():
+        raise IsolationError("palace root must not be a symlink")
     resolved = path.resolve()
     if not resolved.exists() or not resolved.is_dir():
         raise IsolationError("palace directory must already exist")
     _validate_outside_git(resolved)
     offenders: list[tuple[str, int]] = []
     for candidate in (resolved, *sorted(resolved.rglob("*"))):
+        relative = "." if candidate == resolved else candidate.relative_to(resolved).as_posix()
+        if candidate.is_symlink():
+            offenders.append((relative, stat.S_IMODE(candidate.lstat().st_mode)))
+            continue
         mode = stat.S_IMODE(candidate.stat().st_mode)
         expected = 0o700 if candidate.is_dir() else 0o600
         if mode != expected:
-            relative = "." if candidate == resolved else candidate.relative_to(resolved).as_posix()
             offenders.append((relative, mode))
     return offenders
 
 
 def harden_owner_only_tree(path: Path) -> None:
     """Repair MemPalace-generated modes after init/mine before any retrieval."""
+    if path.is_symlink():
+        raise IsolationError("palace root must not be a symlink")
     resolved = path.resolve()
     if not resolved.exists() or not resolved.is_dir():
         raise IsolationError("palace directory must already exist")
     _validate_outside_git(resolved)
-    for candidate in (resolved, *resolved.rglob("*")):
+    candidates = (resolved, *resolved.rglob("*"))
+    if any(candidate.is_symlink() for candidate in candidates):
+        raise IsolationError("palace tree must not contain symlinks")
+    for candidate in candidates:
         candidate.chmod(0o700 if candidate.is_dir() else 0o600)
 
 

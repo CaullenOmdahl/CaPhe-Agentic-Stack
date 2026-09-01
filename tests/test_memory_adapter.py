@@ -55,10 +55,17 @@ class MemoryAdapterTests(unittest.TestCase):
     def test_exact_source_resolution_returns_only_sanitized_untrusted_frame(self):
         secret = "Bearer " + "sensitive-token-value-1234567890"
         source = "before\n" + secret + "\nafter\n"
-        resolved = adapter.resolve_excerpt(source, 0, len(source), source_id="session-1")
+        expected_hash = hashlib.sha256(source.encode()).hexdigest()
+        resolved = adapter.resolve_excerpt(
+            source, 0, len(source), source_id="session-1", expected_sha256=expected_hash
+        )
         self.assertNotIn("sensitive-token-value", resolved.text)
         self.assertIn("UNTRUSTED_MEMORY_EVIDENCE", resolved.framed)
         self.assertIn("session-1", resolved.framed)
+        with self.assertRaises(adapter.IsolationError):
+            adapter.resolve_excerpt(
+                source, 0, len(source), source_id="session-1", expected_sha256="0" * 64
+            )
 
     def test_catalog_resolution_rechecks_hash_scope_and_sanitization(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -140,6 +147,20 @@ class MemoryAdapterTests(unittest.TestCase):
             self.assertEqual(root.stat().st_mode & 0o777, 0o700)
             self.assertEqual(generated.stat().st_mode & 0o777, 0o700)
             self.assertEqual(index.stat().st_mode & 0o777, 0o600)
+
+    def test_palace_tree_rejects_symlinks_without_chmodding_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            root = base / "palace"
+            root.mkdir(mode=0o700)
+            outside = base / "outside.txt"
+            outside.write_text("private")
+            outside.chmod(0o640)
+            (root / "escape").symlink_to(outside)
+            self.assertTrue(any(path == "escape" for path, _ in adapter.audit_owner_only_tree(root)))
+            with self.assertRaises(adapter.IsolationError):
+                adapter.harden_owner_only_tree(root)
+            self.assertEqual(outside.stat().st_mode & 0o777, 0o640)
 
     def test_index_identity_changes_with_sanitizer_or_embedder(self):
         first = adapter.index_generation_id("3.9.0", "chroma", "minilm", 384, "sanitize-v1", "chunk-v1")

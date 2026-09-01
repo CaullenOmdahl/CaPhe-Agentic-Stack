@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-exec "$SCRIPT_DIR/strict-green-gate.sh" --mode affected
+GATE="$SCRIPT_DIR/strict-green-gate.sh"
+if [ ! -x "$GATE" ]; then GATE="$HOME/strict-mode/bin/strict-green-gate.sh"; fi
+exec "$GATE" --mode affected

@@ -118,6 +118,30 @@ test_current_peer_cli_invocations() {
     fail "codex model override was not honored"
 }
 
+test_snapshot_tolerates_tracked_deletions() {
+  local project="$TMP/deletion-project"
+  local mockbin="$TMP/deletion-bin"
+  mkdir -p "$project" "$mockbin"
+  git -C "$project" init -q
+  git -C "$project" config user.name strict-confer-test
+  git -C "$project" config user.email strict-confer-test@example.invalid
+  printf '%s\n' present > "$project/keep.txt"
+  printf '%s\n' deleted > "$project/delete.txt"
+  git -C "$project" add keep.txt delete.txt
+  git -C "$project" commit -qm initial
+  rm "$project/delete.txt"
+  make_mock_peer "$mockbin/claude" "claude"
+  make_mock_peer "$mockbin/agy" "agy"
+  make_mock_peer "$mockbin/codex" "codex"
+  (
+    cd "$project"
+    PATH="$mockbin:$PATH" STRICT_CONFER_TEST_LOG="$TMP/deletion-peer.log" \
+      "$ROOT/bin/strict-confer.sh" codex "review deletion" \
+      > "$TMP/deletion-out" 2> "$TMP/deletion-err"
+  )
+  ! grep -q 'UNAVAILABLE' "$TMP/deletion-out" || fail "tracked deletion broke the peer snapshot"
+}
+
 test_timeout_kills_peer_child_process_group() {
   local project="$TMP/timeout-project"
   local mockbin="$TMP/timeout-bin"
@@ -165,5 +189,6 @@ MOCK
 
 test_parallel_runs_are_ephemeral_and_unique
 test_current_peer_cli_invocations
+test_snapshot_tolerates_tracked_deletions
 test_timeout_kills_peer_child_process_group
 echo "strict-confer isolation tests passed"
