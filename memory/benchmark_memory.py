@@ -507,16 +507,19 @@ def verify_candidate_artifacts(
                 secret_canaries += int(sanitize_text(resolved.text) != resolved.text)
         if not hits or not set(hits).issubset(cited_source_ids):
             citations_resolved = False
+    domain_storage_bytes = {
+        domain: sum(
+            path.stat().st_size
+            for path in (export_root / domain).rglob("*")
+            if path.is_file() and not path.is_symlink()
+        )
+        for domain in benchmarked_domains
+    }
     return {
         "citations_resolved": citations_resolved,
         "secret_canaries": secret_canaries,
         "cross_domain_hits": cross_domain_hits,
-        "storage_bytes": sum(
-            path.stat().st_size
-            for domain in benchmarked_domains
-            for path in (export_root / domain).rglob("*")
-            if path.is_file() and not path.is_symlink()
-        ),
+        "storage_bytes": max(domain_storage_bytes.values(), default=0),
     }
 
 
@@ -606,7 +609,7 @@ def score(
                 not observation.get("nonce_verified", False)
                 or not nonce
                 or any(
-                    predicate.replace("{nonce}", nonce) in observed_answer
+                    _predicate_matches(predicate.replace("{nonce}", nonce), observed_answer)
                     for predicate in forbidden
                 )
             )

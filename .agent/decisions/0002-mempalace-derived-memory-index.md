@@ -63,6 +63,11 @@ The exact-head Codex review at `97d4166` rejected incomplete baseline acceptance
 syncs; exact case coverage and persisted processing state address those adversarial findings. A later review
 rejected fixture-retained citations and probe-reported retrieval text; the two-phase, harness-resolved
 coordinate protocol makes both citation provenance and token volume independently observable.
+The final exact-head review found three remaining acceptance gaps: superficial case/punctuation changes
+could evade forbidden-outcome matching, unavailable source roots could be treated as an empty export, and
+isolated palace sizes were summed against a per-domain cap. The accepted repair normalizes injection
+outcomes, validates every canonical source root before mutation, and measures the largest benchmarked
+palace independently.
 
 ## Consequences
 

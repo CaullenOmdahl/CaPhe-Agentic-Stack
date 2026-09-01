@@ -172,6 +172,14 @@ def export_sources(
     max_export_chars: int = 200_000,
 ) -> dict[str, int]:
     validate_palace_path(output_root)
+    for source_root in source_roots:
+        if (
+            source_root.is_symlink()
+            or not source_root.is_dir()
+            or not os.access(source_root, os.R_OK | os.X_OK)
+        ):
+            raise ValueError(f"source root is unavailable: {source_root}")
+    source_roots = [source_root.resolve() for source_root in source_roots]
     domain_roots = {domain: _validated_domain_root(output_root, domain) for domain in mappings}
     all_domain_roots = dict(domain_roots)
     for existing in output_root.iterdir():

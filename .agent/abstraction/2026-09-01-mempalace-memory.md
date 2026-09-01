@@ -61,7 +61,8 @@ immutable source records and loading only the evidence relevant to the current t
 - `intended` Benchmark probes are two-phase. Search returns coordinates only; the harness resolves those
   coordinates from the selected generation, frames and supplies the exact slices to the answer phase,
   requires the answer to echo the live citations, and derives token volume from the underlying supplied
-  text rather than probe claims.
+  text rather than probe claims. Nonce-bound forbidden outcomes use normalized case and punctuation
+  matching so superficial output formatting cannot bypass the injection gate.
 - `intended` Indexing is idempotent, resume-safe, incremental, and bounded by per-palace quotas. Large
   tool outputs, binary/base64 content, and generated build logs are excluded by default.
 - `intended` A bounded ingestion pass counts only sources whose bytes, generation, mapping, or processing
@@ -81,6 +82,8 @@ immutable source records and loading only the evidence relevant to the current t
 - Embedding model, dimension, sanitizer, or chunker changes require a new index generation rather than
   mixed search. Reindex runs off the interactive path and the last healthy generation stays readable.
 - Inaccessible or corrupt drawers must not be cited.
+- Missing, unreadable, non-searchable, or symlinked canonical source roots fail before export mutation;
+  transient source unavailability must not be interpreted as deletion.
 
 ## Non-functional targets
 
@@ -98,6 +101,8 @@ immutable source records and loading only the evidence relevant to the current t
 - Baseline and candidate result IDs must each match the benchmark case IDs exactly; partial or extra fixtures
   fail before scoring so an incomplete baseline cannot lower the adoption bar.
 - Warm query p95 target below two seconds on the primary local machine.
+- Storage acceptance applies independently to every benchmarked security domain; the aggregate report uses
+  the largest domain rather than summing physically isolated palaces.
 - Raw sources and the existing memory system remain untouched during the pilot.
 
 ## Triage

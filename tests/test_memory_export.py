@@ -16,6 +16,22 @@ SPEC.loader.exec_module(exporter)
 
 
 class MemoryExportTests(unittest.TestCase):
+    def test_missing_source_root_fails_before_export_mutation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output = root / "pilot"
+            output.mkdir(mode=0o700)
+            sentinel = output / "sentinel"
+            sentinel.write_text("unchanged")
+            with self.assertRaisesRegex(ValueError, "source root"):
+                exporter.export_sources(
+                    [root / "missing-sessions"],
+                    {"project": "/workspace/project"},
+                    output,
+                    "generation-1",
+                )
+            self.assertEqual(sentinel.read_text(), "unchanged")
+
     def test_export_is_sanitized_scoped_and_path_private(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
