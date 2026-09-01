@@ -133,6 +133,38 @@ class StrictGatePlanTests(unittest.TestCase):
         )
         self.assertEqual(diff_check["run"], ["git", "diff", "--cached", "--check"])
 
+    def test_default_manifest_keeps_python_tests_in_hybrid_dart_repo(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "pubspec.yaml").write_text("name: hybrid\nenvironment:\n  sdk: ^3.0.0\n")
+            (root / "tests").mkdir()
+            data = strict_gate.discover_default_manifest(root)
+        names = {command["name"] for command in data["components"][0]["commands"]}
+        self.assertIn("dart-test-.", names)
+        self.assertIn("python-unittest", names)
+
+    def test_default_manifest_discovers_independent_cargo_and_go_roots(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for relative in ("cargo-one/Cargo.toml", "cargo-two/Cargo.toml"):
+                path = root / relative
+                path.parent.mkdir(parents=True)
+                path.write_text("[package]\nname='x'\nversion='0.1.0'\n")
+            workspace = root / "cargo-workspace"
+            (workspace / "member").mkdir(parents=True)
+            (workspace / "Cargo.toml").write_text("[workspace]\nmembers=['member']\n")
+            (workspace / "member" / "Cargo.toml").write_text("[package]\nname='member'\nversion='0.1.0'\n")
+            for relative in ("go-one/go.mod", "go-two/go.mod"):
+                path = root / relative
+                path.parent.mkdir(parents=True)
+                path.write_text("module example.invalid/test\n")
+            data = strict_gate.discover_default_manifest(root)
+        commands = data["components"][0]["commands"]
+        cargo_test_cwds = {command["cwd"] for command in commands if command["name"].startswith("cargo-test")}
+        go_test_cwds = {command["cwd"] for command in commands if command["name"].startswith("go-test")}
+        self.assertEqual(cargo_test_cwds, {"cargo-one", "cargo-two", "cargo-workspace"})
+        self.assertEqual(go_test_cwds, {"go-one", "go-two"})
+
 
 if __name__ == "__main__":
     unittest.main()

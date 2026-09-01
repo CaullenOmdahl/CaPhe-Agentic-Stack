@@ -7,9 +7,11 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import stat
 import subprocess
 import sys
+import tempfile
 from typing import Callable, Sequence
 
 
@@ -53,13 +55,30 @@ def _base_command(palace: Path) -> list[str]:
     ]
 
 
-def sync_domain(domain_root: Path, *, runner: Runner = subprocess.run, max_chunks_per_file: int = 500) -> None:
+def _write_private_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False, encoding="utf-8") as handle:
+        handle.write(text)
+        temporary = Path(handle.name)
+    temporary.chmod(0o600)
+    os.replace(temporary, path)
+
+
+def sync_domain(
+    domain_root: Path,
+    *,
+    generation: str,
+    runner: Runner = subprocess.run,
+    max_chunks_per_file: int = 500,
+) -> None:
     """Initialize/mine one physical domain, hardening every generated artifact before use."""
     domain_root = domain_root.resolve()
     export_dir = domain_root / "export"
     if not export_dir.is_dir() or not any(export_dir.glob("*.md")):
         return
-    palace = domain_root / "palace"
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", generation):
+        raise ValueError("generation must be a safe path component")
+    palace = domain_root / "palaces" / generation
     palace.mkdir(mode=0o700, parents=True, exist_ok=True)
     harden_owner_only_tree(domain_root)
     env = _private_local_env()
@@ -73,11 +92,13 @@ def sync_domain(domain_root: Path, *, runner: Runner = subprocess.run, max_chunk
             if offenders:
                 raise PermissionError(f"owner-only palace audit failed for {domain_root}: {offenders[:5]}")
 
-    if not (export_dir / "mempalace.yaml").exists():
+    initialized_marker = palace / ".initialized"
+    if not initialized_marker.exists():
         run_write(
             [*base, "init", str(export_dir), "--backend", "chroma", "--yes", "--no-llm"],
             input="n\n",
         )
+        _write_private_text(initialized_marker, generation + "\n")
     wing = domain_root.name.rsplit("-", 1)[0]
     run_write(
         [
@@ -97,6 +118,8 @@ def sync_domain(domain_root: Path, *, runner: Runner = subprocess.run, max_chunk
     run_write(
         [*base, "sync", str(export_dir), "--wing", wing, "--apply"],
     )
+    _write_private_text(domain_root / "active-generation", generation + "\n")
+    harden_owner_only_tree(domain_root)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -134,7 +157,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         max_export_chars=args.max_export_chars,
     )
     for domain_root in sorted(path for path in output_root.iterdir() if path.is_dir()):
-        sync_domain(domain_root, max_chunks_per_file=args.max_chunks_per_file)
+        sync_domain(domain_root, generation=generation, max_chunks_per_file=args.max_chunks_per_file)
     harden_owner_only_tree(output_root)
     print(json.dumps({"generation": generation, **stats}, sort_keys=True))
     return 0

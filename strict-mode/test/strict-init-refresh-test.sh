@@ -121,6 +121,21 @@ HOOK=$(git -C "$WORKTREE_CHILD" rev-parse --git-path hooks/pre-commit)
 grep -q 'strict-green-gate' "$WORKTREE_CHILD/$HOOK" 2>/dev/null || grep -q 'strict-green-gate' "$HOOK"
 (cd "$WORKTREE_CHILD" && HOME="$HOME_ROOT" "$HOOK" >/dev/null)
 
+CUSTOM_HOOK_REPO="$TEST_ROOT/custom-hook-repo"
+mkdir -p "$CUSTOM_HOOK_REPO"
+git -C "$CUSTOM_HOOK_REPO" init -q
+CUSTOM_HOOK=$(git -C "$CUSTOM_HOOK_REPO" rev-parse --git-path hooks/pre-commit)
+mkdir -p "$(dirname "$CUSTOM_HOOK_REPO/$CUSTOM_HOOK")"
+cat > "$CUSTOM_HOOK_REPO/$CUSTOM_HOOK" <<'HOOK'
+#!/usr/bin/env bash
+echo custom-check
+"$HOME/strict-mode/bin/strict-green-gate.sh" --mode affected
+HOOK
+chmod +x "$CUSTOM_HOOK_REPO/$CUSTOM_HOOK"
+cp "$CUSTOM_HOOK_REPO/$CUSTOM_HOOK" "$CUSTOM_HOOK_REPO/hook-before"
+(cd "$CUSTOM_HOOK_REPO" && HOME="$HOME_ROOT" "$ROOT/bin/strict-init.sh" >/dev/null)
+cmp "$CUSTOM_HOOK_REPO/hook-before" "$CUSTOM_HOOK_REPO/$CUSTOM_HOOK"
+
 words=$(sed -n '/^## Strict Mode$/,/^<!-- STRICT-MODE:END -->$/p' "$ROOT/templates/instruction-section.md" | wc -w | tr -d ' ')
 [ "$words" -le 180 ] || { echo "managed section exceeds 180 words: $words" >&2; exit 1; }
 

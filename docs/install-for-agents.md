@@ -63,12 +63,15 @@ The repository is the distribution source. The local machine is the runtime envi
 7. Configure local memory retrieval only when requested.
    - Keep private domain mappings, sanitized exports, physical palaces, and benchmark fixtures outside
      this public repository with owner-only permissions.
-   - Use separate physical palaces for separate security domains.
+   - Use separate physical domain roots for separate security domains and a distinct palace directory
+     for every index generation. Read the owner-only `active-generation` pointer instead of guessing
+     which generation is current.
    - Pin the reviewed MemPalace version and keep embeddings local unless a separate human-gated decision
      authorizes a remote backend.
    - Do not enable automatic ingestion until the private adoption benchmark passes.
-   - After a domain passes, use `memory/sync_mempalace.py` for bounded local-only updates. If recurring
-     sync is useful, schedule that deterministic command at the OS layer instead of waking a model.
+   - After a domain passes, use `memory/sync_mempalace.py` for bounded local-only updates. It advances
+     `active-generation` only after the new generation completes successfully. If recurring sync is
+     useful, schedule that deterministic command at the OS layer instead of waking a model.
    - Re-run owner-only hardening and the tree permission audit after every index write.
 
 8. Create or update private local notes when useful.

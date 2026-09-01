@@ -4,7 +4,8 @@ The stack uses protected source records plus rebuildable local retrieval indexes
 
 - **Source:** transcripts and explicit notes remain canonical.
 - **Derived drawers:** sanitizer-approved excerpts with stable source coordinates and content hashes.
-- **Isolation:** separate owner-only palaces outside Git worktrees for each security domain.
+- **Isolation:** separate owner-only domain roots outside Git worktrees, with an immutable palace for each
+  index generation.
 - **Scope:** trusted per-turn working-directory metadata mapped to an explicit repository root; ambiguous
   records quarantine rather than guess.
 - **Retrieval:** semantic/lexical search selects candidates; exact resolution sanitizes again and frames
@@ -17,7 +18,9 @@ isolation, injection, citation, correctness, recall, latency, storage, and token
 
 MemPalace may create backend files with group/world-readable defaults. After every `init`, `mine`,
 `repair`, or migration, run the adapter's `harden_owner_only_tree`, require
-`audit_owner_only_tree` to return no paths, and only then permit retrieval.
+`audit_owner_only_tree` to return no paths, and only then permit retrieval. A successful sync writes
+`active-generation` atomically after mining and reconciliation finish; a failed new generation cannot
+replace the last known-good active generation.
 
 The 2026-09-01 private five-case BlackSheep pilot retained 5/5 answer and recall-at-5 results while
 reducing observed retrieval input from 9,820 to 6,110 approximate tokens (37.8%). Citations resolved,

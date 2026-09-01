@@ -371,20 +371,37 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
             run = [package_manager, script_name] if package_manager == "pnpm" else ["npm", "run", script_name, "--silent"]
             commands.append({"name": name, "run": run, "cwd": cwd})
 
-    cargo = next((path for path in sorted(root.rglob("Cargo.toml")) if "target" not in path.parts), None)
-    if cargo:
+    cargo_manifests = [
+        path for path in sorted(root.rglob("Cargo.toml")) if "target" not in path.parts
+    ]
+    cargo_workspaces = {
+        path
+        for path in cargo_manifests
+        if re.search(r"(?m)^\s*\[workspace\]\s*$", path.read_text(errors="replace"))
+    }
+    cargo_roots = [
+        path
+        for path in cargo_manifests
+        if path in cargo_workspaces
+        or not any(workspace.parent in path.parents for workspace in cargo_workspaces)
+    ]
+    for cargo in cargo_roots:
         cwd = _relative_cwd(root, cargo)
+        suffix = cwd.replace("/", "-")
         commands.extend(
             [
-                {"name": "cargo-fmt", "run": ["cargo", "fmt", "--all", "--check"], "cwd": cwd},
-                {"name": "cargo-clippy", "run": ["cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings"], "cwd": cwd},
-                {"name": "cargo-test", "run": ["cargo", "test", "--workspace"], "cwd": cwd},
+                {"name": f"cargo-fmt-{suffix}", "run": ["cargo", "fmt", "--all", "--check"], "cwd": cwd},
+                {"name": f"cargo-clippy-{suffix}", "run": ["cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings"], "cwd": cwd},
+                {"name": f"cargo-test-{suffix}", "run": ["cargo", "test", "--workspace"], "cwd": cwd},
             ]
         )
-    go_mod = next(iter(sorted(root.rglob("go.mod"))), None)
-    if go_mod:
-        commands.append({"name": "go-test", "run": ["go", "test", "./..."], "cwd": _relative_cwd(root, go_mod)})
-    if (root / "tests").is_dir() and not any(command["name"].endswith("test-.") for command in commands):
+    for go_mod in sorted(root.rglob("go.mod")):
+        if any(part in {"vendor", "build", "dist"} for part in go_mod.parts):
+            continue
+        cwd = _relative_cwd(root, go_mod)
+        suffix = cwd.replace("/", "-")
+        commands.append({"name": f"go-test-{suffix}", "run": ["go", "test", "./..."], "cwd": cwd})
+    if (root / "tests").is_dir():
         commands.append({"name": "python-unittest", "run": ["python3", "-m", "unittest", "discover", "-s", "tests", "-v"]})
 
     return {

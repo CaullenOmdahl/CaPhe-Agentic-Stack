@@ -113,7 +113,7 @@ for f in CLAUDE.md AGENTS.md GEMINI.md; do inject "$f" || exit 1; done
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   hook=$(git rev-parse --git-path hooks/pre-commit) || exit 1
   mkdir -p "$(dirname "$hook")" || exit 1
-  if [ -f "$hook" ] && ! grep -q 'strict-green-gate' "$hook"; then
+  if [ -f "$hook" ] && ! grep -qx '# STRICT-MODE:MANAGED-HOOK v2' "$hook"; then
     echo "  ! $hook exists and is not ours — left intact"
   else
     cp "$CANON/bin/pre-commit" "$hook" && chmod +x "$hook" || exit 1

@@ -26,12 +26,13 @@ class MemorySyncTests(unittest.TestCase):
                 if "init" in command:
                     (export / "mempalace.yaml").write_text("backend: chroma")
                 if "mine" in command:
-                    generated = domain / "palace" / "index.bin"
+                    palace = Path(command[command.index("--palace") + 1])
+                    generated = palace / "index.bin"
                     generated.parent.mkdir(parents=True, exist_ok=True)
                     generated.write_bytes(b"derived")
                     generated.chmod(0o644)
 
-            module.sync_domain(domain, runner=fake_run)
+            module.sync_domain(domain, generation="generation-1", runner=fake_run)
             flattened = [argument for command, _ in calls for argument in command]
             self.assertIn("--no-llm", flattened)
             self.assertIn("--max-chunks-per-file", flattened)
@@ -41,6 +42,7 @@ class MemorySyncTests(unittest.TestCase):
             self.assertNotIn("--accept-external-llm", flattened)
             self.assertTrue(all(kwargs["check"] for _, kwargs in calls))
             self.assertEqual(module.audit_owner_only_tree(domain), [])
+            self.assertEqual((domain / "active-generation").read_text().strip(), "generation-1")
 
     def test_failed_write_is_rehardened_before_error_propagates(self):
         spec = importlib.util.spec_from_file_location("sync_mempalace_failure", MODULE_PATH)
@@ -61,8 +63,34 @@ class MemorySyncTests(unittest.TestCase):
                 raise subprocess.CalledProcessError(1, command)
 
             with self.assertRaises(subprocess.CalledProcessError):
-                module.sync_domain(domain, runner=failing_run)
+                module.sync_domain(domain, generation="generation-1", runner=failing_run)
             self.assertEqual(module.audit_owner_only_tree(domain), [])
+
+    def test_failed_new_generation_does_not_replace_active_generation(self):
+        spec = importlib.util.spec_from_file_location("sync_mempalace_generation", MODULE_PATH)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as tmp:
+            domain = Path(tmp) / "project-12345678"
+            export = domain / "export"
+            export.mkdir(parents=True, mode=0o700)
+            (export / "source.md").write_text("sanitized source")
+
+            def success(command, **kwargs):
+                return None
+
+            module.sync_domain(domain, generation="generation-1", runner=success)
+
+            def failure(command, **kwargs):
+                if "mine" in command:
+                    raise subprocess.CalledProcessError(1, command)
+
+            with self.assertRaises(subprocess.CalledProcessError):
+                module.sync_domain(domain, generation="generation-2", runner=failure)
+            self.assertEqual((domain / "active-generation").read_text().strip(), "generation-1")
+            self.assertTrue((domain / "palaces" / "generation-1").is_dir())
+            self.assertTrue((domain / "palaces" / "generation-2").is_dir())
 
 
 if __name__ == "__main__":
