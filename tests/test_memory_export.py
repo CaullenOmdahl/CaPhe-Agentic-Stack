@@ -59,6 +59,32 @@ class MemoryExportTests(unittest.TestCase):
 
             self.assertFalse(any(output.rglob("*.md")))
 
+    def test_cli_preserves_source_root_symlink_for_validation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            real_source = root / "real-sessions"
+            source_link = root / "sessions-link"
+            output = root / "pilot"
+            mapping = root / "mapping.json"
+            real_source.mkdir()
+            source_link.symlink_to(real_source, target_is_directory=True)
+            output.mkdir(mode=0o700)
+            mapping.write_text(json.dumps({"project": "/workspace/project"}))
+            mapping.chmod(0o600)
+
+            result = exporter.main(
+                [
+                    "--source-root",
+                    str(source_link),
+                    "--mapping",
+                    str(mapping),
+                    "--output-root",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(result, 2)
+
     def test_export_is_sanitized_scoped_and_path_private(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

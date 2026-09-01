@@ -185,7 +185,7 @@ class StrictGatePlanTests(unittest.TestCase):
             [
                 {
                     "name": "python-pytest",
-                    "run": ["python3", "-m", "pytest", "tests"],
+                    "run": ["python3", "-m", "pytest"],
                 }
             ],
         )
@@ -193,10 +193,11 @@ class StrictGatePlanTests(unittest.TestCase):
     def test_default_manifest_honors_configured_pytest_testpaths(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            (root / "tests").mkdir()
             (root / "spec").mkdir()
             (root / "pyproject.toml").write_text(
                 "[project]\nname='pytest-project'\nversion='0.1.0'\n"
-                "[tool.pytest.ini_options]\ntestpaths=['spec']\n"
+                "[tool.pytest.ini_options]\ntestpaths=['tests', 'spec']\n"
             )
             data = strict_gate.discover_default_manifest(root)
         python_commands = [

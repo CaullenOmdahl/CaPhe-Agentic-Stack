@@ -465,7 +465,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     try:
         stats = export_sources(
-            [Path(path).resolve() for path in args.source_root],
+            [Path(path) for path in args.source_root],
             mappings,
             output_root,
             generation,

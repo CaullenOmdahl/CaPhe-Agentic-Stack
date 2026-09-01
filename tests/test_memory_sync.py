@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 import tempfile
 import subprocess
@@ -9,6 +10,35 @@ MODULE_PATH = Path(__file__).parents[1] / "memory" / "sync_mempalace.py"
 
 
 class MemorySyncTests(unittest.TestCase):
+    def test_cli_preserves_source_root_symlink_for_validation(self):
+        spec = importlib.util.spec_from_file_location("sync_mempalace_cli_root", MODULE_PATH)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            real_source = root / "real-sessions"
+            source_link = root / "sessions-link"
+            output = root / "pilot"
+            mapping = root / "mapping.json"
+            real_source.mkdir()
+            source_link.symlink_to(real_source, target_is_directory=True)
+            output.mkdir(mode=0o700)
+            mapping.write_text(json.dumps({"project": "/workspace/project"}))
+            mapping.chmod(0o600)
+
+            with self.assertRaisesRegex(ValueError, "source root"):
+                module.main(
+                    [
+                        "--source-root",
+                        str(source_link),
+                        "--mapping",
+                        str(mapping),
+                        "--output-root",
+                        str(output),
+                    ]
+                )
+
     def test_domain_sync_is_local_bounded_and_rehardens_generated_files(self):
         spec = importlib.util.spec_from_file_location("sync_mempalace", MODULE_PATH)
         module = importlib.util.module_from_spec(spec)

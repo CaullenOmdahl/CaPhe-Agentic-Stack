@@ -57,7 +57,8 @@ observable evidence required to accept a change.
   repository verifier. Otherwise affected mode escalates to the full matrix. Manifest edits force full.
 - `intended` Generated manifests inspect each Python test root's nearest project declaration and invoke
   pytest when it is declared. A project with explicit pytest configuration is itself a test root even when
-  its configured `testpaths` does not include a directory literally named `tests`; plain test trees retain
+  its configured `testpaths` does not include a directory literally named `tests`. Pytest runs from that
+  project root without a hard-coded path so every configured root is honored; plain test trees retain
   unittest discovery so default gates do not silently skip a repository's authoritative tests.
 - `intended` Failure output is preserved and displayed.
 - `intended` Initialization fails atomically on malformed markers and deduplicates symlink aliases.

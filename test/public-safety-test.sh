@@ -16,7 +16,7 @@ while IFS= read -r -d '' file; do
       failed=1
       ;;
   esac
-  if grep -nE '/Users/|/home/[^<]|github_pat_|gh[pousr]_[A-Za-z0-9]{20,}|BEGIN [A-Z ]*PRIVATE KEY|Bearer [A-Za-z0-9._~+/=-]{16,}' "$file"; then
+  if grep -nE '/Users/|/home/[^<]|github_pat_|gh[pousr]_[A-Za-z0-9]{20,}|sk-((proj|svcacct)-)?[A-Za-z0-9_-]{20,}|BEGIN [A-Z ]*PRIVATE KEY|Bearer [A-Za-z0-9._~+/=-]{16,}' "$file"; then
     echo "public-safety content finding: $file" >&2
     failed=1
   fi

@@ -77,6 +77,9 @@ The next exact-head review found retained palaces without an active pointer, sym
 orphan exports absent from state, and standalone OpenAI project keys. The accepted repair enumerates every
 initialized palace independently of the pointer, requires canonical candidate realpaths to remain inside
 their non-symlink root, derives orphan IDs from export filenames, and advances the sanitizer to v7.
+The final integration review also found that the CLI resolved source-root aliases before validation and
+that the public-repository scan lagged the v7 sanitizer. Both CLI entrypoints now preserve unresolved roots
+for fail-closed validation, and the public scan rejects the same standalone OpenAI key family.
 
 ## Consequences
 

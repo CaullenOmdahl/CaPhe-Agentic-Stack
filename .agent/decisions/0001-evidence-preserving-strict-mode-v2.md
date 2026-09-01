@@ -26,7 +26,8 @@ aggregate index. Keep all existing named human gates and PR implementation revie
 Generated manifests preserve each Python test root's declared runner: explicit pytest configuration or
 dependency, including standardized top-level dependency groups, selects `python -m pytest`, while
 undeclared roots retain unittest discovery. Explicitly configured pytest project roots are scheduled even
-without a literal `tests/` directory, allowing pytest's own `testpaths` contract to select the suite.
+without a literal `tests/` directory, and pytest receives no hard-coded path, allowing its complete
+`testpaths` contract to select the suite.
 
 Local `strict-confer` fallback reviews use a default-deny host filesystem boundary, an index-only project
 snapshot, an ephemeral shadow home seeded with only minimum peer CLI identity/authentication state, selected
@@ -68,6 +69,8 @@ A later exact-head review found that unconditional unittest discovery could skip
 runner-aware Python discovery closes that coverage gap without changing plain unittest repositories.
 A later exact-head review reproduced a second coverage gap when pytest configured `testpaths = ["spec"]`;
 configured pytest project roots are now discovery entrypoints independent of directory naming.
+The final integration review found that passing `tests` still masked additional configured roots; invoking
+pytest without positional paths closes the remaining coverage gap.
 
 ## Consequences
 

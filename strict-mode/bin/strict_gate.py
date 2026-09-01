@@ -548,7 +548,6 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
                     "python3",
                     "-m",
                     "pytest",
-                    *(["tests"] if (python_root / "tests").is_dir() else []),
                 ],
             }
             if runner == "pytest"

@@ -71,6 +71,7 @@ removed from the private catalog, processed state, and every affected domain exp
 Every source is also preflighted as readable valid JSONL before a generation transition writes anything.
 Every requested source root must exist as a readable, searchable, non-symlink directory before any export
 or pruning begins, so a missing or unmounted canonical source cannot be mistaken for intentional deletion.
+CLI entrypoints preserve the unresolved path through this check instead of normalizing away a symlink.
 The complete source-root list supplied to each run is authoritative: catalog and processed-state entries
 outside that set are retired and their exports are pruned before new sources are processed.
 Every transcript candidate must be a regular non-symlink file whose fully resolved path remains beneath
