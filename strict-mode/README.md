@@ -14,8 +14,9 @@ strict-mode/bin/strict-confer.sh codex --adversarial --save design-v1 "Review th
 ```
 
 The affected gate optimizes feedback. The completion gate and independent PR review remain authoritative.
-Default manifests include independent nested Python test roots as well as discovered Dart, Node, Cargo,
-and Go roots.
+Default manifests assign Python tests to their nearest declared project, run declared nested projects
+independently without ancestor pytest duplication, select pytest from common project/dependency formats,
+and also discover Dart, Node, Cargo, and Go roots.
 
 `strict-confer` is for design/ADR review or an explicitly recorded fallback when PR review is genuinely
 unavailable; it is not normal implementation-review evidence. Its local peer set is Claude Code, agy
@@ -26,7 +27,8 @@ Confer snapshots materialize stage-0 regular blobs directly from the Git index. 
 worktree bytes, symlinks, gitlinks, and every arbitrary untracked file, even when it is not ignored;
 peer environments receive no live source-root path. Stage every deliberate review input before invoking
 confer. Snapshot mode refuses non-Git worktrees and unmerged index entries. Peer execution additionally uses
-a default-deny host filesystem, a scrubbed environment, and an ephemeral home seeded with only the minimum
-CLI authentication state. macOS masks host data roots and reopens selected system/runtime paths through
-`sandbox-exec`; Linux constructs a selective Bubblewrap namespace with a private PID namespace. The command
-fails closed if a peer or boundary cannot operate without broader host access.
+a default-deny host filesystem, a scrubbed environment, and an ephemeral home containing only non-secret
+onboarding preferences. Host authentication files and token caches are never copied; an unauthenticated peer
+is unavailable. macOS masks host data roots and reopens selected system/runtime paths through `sandbox-exec`;
+Linux constructs a selective Bubblewrap namespace with a private PID namespace. The command fails closed if
+a peer or boundary cannot operate without broader host access.

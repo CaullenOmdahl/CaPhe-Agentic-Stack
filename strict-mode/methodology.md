@@ -48,9 +48,11 @@ absence or incomplete CI falls back to the complete local matrix.
 
 Manifest coverage is fail-closed. Uncovered paths block; unproven dependency completeness escalates local
 feedback to full. Cache is default-off and never participates in completion.
-Generated default manifests discover every nested Python `tests/` root independently, alongside Dart,
-Node, Cargo, and Go roots; a root-level project cannot hide a nested test suite. An explicit pytest
-configuration or dependency selects `python -m pytest`; otherwise the root uses unittest discovery.
+Generated default manifests assign Python test signals to their nearest declared project. Declared nested
+projects run independently and ancestor pytest commands ignore them, preventing duplicate collection.
+Pytest configuration or dependencies in PEP 621, standardized groups, Poetry tables, or requirements
+select `python -m pytest`; otherwise the project uses unittest discovery. Dart, Node, Cargo, and Go roots
+remain independently discovered.
 
 ## Review
 
@@ -63,9 +65,11 @@ not assumed equivalent. Reviewer-model overrides require client verification. Co
 stage-0 regular blobs from the Git index only; they omit unstaged worktree bytes, symlinks, gitlinks,
 arbitrary untracked state, and the live source-root environment, and refuse non-Git or unmerged roots.
 The peer process also runs behind a fail-closed, default-deny host filesystem boundary with a scrubbed
-environment and an ephemeral home containing only minimum CLI authentication state. macOS masks host data
-roots and reopens selected runtime paths through `sandbox-exec`; Linux constructs a selective Bubblewrap
-namespace with a private PID namespace. If a peer cannot run within that boundary, the review does not run.
+environment and an ephemeral home containing only non-secret onboarding preferences. Host authentication
+files and token caches are never copied; a peer that cannot authenticate without them is unavailable. macOS
+masks host data roots and reopens selected runtime paths through `sandbox-exec`; Linux constructs a selective
+Bubblewrap namespace with a private PID namespace. If a peer cannot run within that boundary, the review
+does not run.
 
 ## Artifact verification
 
