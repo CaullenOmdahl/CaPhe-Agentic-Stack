@@ -3,8 +3,8 @@
   "decision": "ADR-0001; ADR-0002",
   "id": "strict-memory-efficiency-v2",
   "lane": "full-risk",
-  "review": "pending-pr",
-  "status": "implemented-local",
+  "review": "https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/pull/6",
+  "status": "implementation-review",
   "tests": [
     "python3 -m unittest discover -s tests -v",
     "bash strict-mode/test/shell-syntax-test.sh",
