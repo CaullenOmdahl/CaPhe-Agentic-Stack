@@ -12,7 +12,6 @@ cache/
 tmp/
 .agent/cache/
 .agent/reviews/
-.agent/.strict-mode
 .claude/settings.json
 **/__pycache__/
 *.pyc

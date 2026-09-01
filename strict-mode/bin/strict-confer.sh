@@ -32,8 +32,11 @@ AGY_MODEL="${STRICT_CONFER_AGY_MODEL:-gemini-3.7-flash-high}"
 CODEX_MODEL="${STRICT_CONFER_CODEX_MODEL:-gpt-5.4}"
 RUN_ID="${STRICT_CONFER_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$$-$RANDOM}"
 SOURCE_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-if [ "${STRICT_CONFER_NO_SNAPSHOT:-0}" != "1" ] &&
-   ! git -C "$SOURCE_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+if [ "${STRICT_CONFER_NO_SNAPSHOT:-0}" = "1" ]; then
+  echo "strict-confer refuses live-workspace review; stage deliberate inputs for a bounded snapshot" >&2
+  exit 2
+fi
+if ! git -C "$SOURCE_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "strict-confer snapshot mode requires a Git worktree" >&2
   exit 2
 fi
@@ -67,22 +70,16 @@ run_isolated() {
   mkdir -p "$peer_dir/tmp" || return 1
   local peer_cwd
   peer_cwd="$peer_dir/workspace"
-  if [ "${STRICT_CONFER_NO_SNAPSHOT:-0}" = "1" ]; then
-    peer_cwd="$SOURCE_ROOT"
-  else
-    mkdir -p "$peer_cwd" || return 1
-    if git -C "$SOURCE_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-      local file_list
-      file_list="$peer_dir/files.txt"
-      git -C "$SOURCE_ROOT" ls-files --cached -z |
-        while IFS= read -r -d '' tracked_path; do
-          if [ -e "$SOURCE_ROOT/$tracked_path" ] || [ -L "$SOURCE_ROOT/$tracked_path" ]; then
-            printf '%s\0' "$tracked_path"
-          fi
-        done > "$file_list" || return 1
-      rsync -a --from0 --files-from="$file_list" "$SOURCE_ROOT"/ "$peer_cwd"/ || return 1
-    fi
-  fi
+  mkdir -p "$peer_cwd" || return 1
+  local file_list
+  file_list="$peer_dir/files.txt"
+  git -C "$SOURCE_ROOT" ls-files --cached -z |
+    while IFS= read -r -d '' tracked_path; do
+      if [ -e "$SOURCE_ROOT/$tracked_path" ] || [ -L "$SOURCE_ROOT/$tracked_path" ]; then
+        printf '%s\0' "$tracked_path"
+      fi
+    done > "$file_list" || return 1
+  rsync -a --from0 --files-from="$file_list" "$SOURCE_ROOT"/ "$peer_cwd"/ || return 1
   STRICT_CONFER_PEER="$peer" \
   STRICT_CONFER_RUN_ID="$RUN_ID" \
   STRICT_CONFER_RUN_ROOT="$RUN_ROOT" \

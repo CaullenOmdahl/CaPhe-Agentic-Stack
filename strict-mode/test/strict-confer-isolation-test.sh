@@ -152,6 +152,29 @@ test_snapshot_tolerates_tracked_deletions() {
   ! grep -q 'UNAVAILABLE' "$TMP/deletion-out" || fail "tracked deletion broke the peer snapshot"
 }
 
+test_live_workspace_bypass_is_refused() {
+  local project="$TMP/live-bypass-project"
+  local mockbin="$TMP/live-bypass-bin"
+  mkdir -p "$project" "$mockbin"
+  git -C "$project" init -q
+  printf '%s\n' "must never reach a peer" > "$project/untracked-sensitive.txt"
+  make_mock_peer "$mockbin/claude" "claude"
+  make_mock_peer "$mockbin/agy" "agy"
+  make_mock_peer "$mockbin/codex" "codex"
+  set +e
+  (
+    cd "$project"
+    PATH="$mockbin:$PATH" STRICT_CONFER_NO_SNAPSHOT=1 \
+      STRICT_CONFER_TEST_LOG="$TMP/live-bypass.log" \
+      "$ROOT/bin/strict-confer.sh" codex "reject live workspace" \
+      > "$TMP/live-bypass-out" 2> "$TMP/live-bypass-err"
+  )
+  local status=$?
+  set -e
+  [ "$status" -eq 2 ] || fail "live workspace bypass was not rejected with exit 2: $status"
+  [ ! -e "$TMP/live-bypass.log" ] || fail "a peer ran after the live workspace bypass request"
+}
+
 test_timeout_kills_peer_child_process_group() {
   local project="$TMP/timeout-project"
   local mockbin="$TMP/timeout-bin"
@@ -200,5 +223,6 @@ MOCK
 test_parallel_runs_are_ephemeral_and_unique
 test_current_peer_cli_invocations
 test_snapshot_tolerates_tracked_deletions
+test_live_workspace_bypass_is_refused
 test_timeout_kills_peer_child_process_group
 echo "strict-confer isolation tests passed"
