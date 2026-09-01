@@ -73,8 +73,12 @@ run_isolated() {
   mkdir -p "$peer_cwd" || return 1
   local file_list
   file_list="$peer_dir/files.txt"
-  git -C "$SOURCE_ROOT" ls-files --cached -z |
-    while IFS= read -r -d '' tracked_path; do
+  git -C "$SOURCE_ROOT" ls-files --stage -z |
+    while IFS= read -r -d '' index_entry; do
+      index_meta=${index_entry%%$'\t'*}
+      tracked_path=${index_entry#*$'\t'}
+      index_mode=${index_meta%% *}
+      case "$index_mode" in 100644|100755) ;; *) continue ;; esac
       if [ ! -L "$SOURCE_ROOT/$tracked_path" ] && [ -f "$SOURCE_ROOT/$tracked_path" ]; then
         printf '%s\0' "$tracked_path"
       fi
@@ -83,7 +87,6 @@ run_isolated() {
   STRICT_CONFER_PEER="$peer" \
   STRICT_CONFER_RUN_ID="$RUN_ID" \
   STRICT_CONFER_RUN_ROOT="$RUN_ROOT" \
-  STRICT_CONFER_SOURCE_ROOT="$SOURCE_ROOT" \
   STRICT_CONFER_CWD="$peer_cwd" \
   STRICT_CONFER_TIMEOUT_SECONDS="$PEER_TIMEOUT_SECONDS" \
   TMPDIR="$peer_dir/tmp" \
@@ -96,12 +99,16 @@ import sys
 args = sys.argv[1:]
 cwd = os.environ["STRICT_CONFER_CWD"]
 timeout = float(os.environ["STRICT_CONFER_TIMEOUT_SECONDS"])
+child_env = os.environ.copy()
+child_env.pop("STRICT_CONFER_SOURCE_ROOT", None)
+child_env.pop("OLDPWD", None)
+child_env["PWD"] = cwd
 
 try:
     proc = subprocess.Popen(
         args,
         cwd=cwd,
-        env=os.environ.copy(),
+        env=child_env,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

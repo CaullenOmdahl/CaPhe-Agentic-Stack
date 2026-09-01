@@ -13,6 +13,13 @@ fail() {
   exit 1
 }
 
+process_is_running() {
+  local pid="$1" state
+  kill -0 "$pid" 2>/dev/null || return 1
+  state=$(ps -o stat= -p "$pid" 2>/dev/null | tr -d '[:space:]')
+  case "$state" in Z*|"") return 1 ;; *) return 0 ;; esac
+}
+
 make_mock_peer() {
   local path="$1" name="$2"
   cat > "$path" <<MOCK
@@ -30,6 +37,12 @@ if [ -f untracked-sensitive.txt ]; then
 fi
 if [ -e review-link ]; then
   echo "$name symlink snapshot: \$(cat review-link)"
+fi
+if [ -f review-gitlink ]; then
+  echo "$name gitlink snapshot: \$(cat review-gitlink)"
+fi
+if [ -n "\${STRICT_CONFER_SOURCE_ROOT:-}" ] && [ -f "\${STRICT_CONFER_SOURCE_ROOT}/untracked-sensitive.txt" ]; then
+  echo "$name source-root snapshot: \$(cat "\${STRICT_CONFER_SOURCE_ROOT}/untracked-sensitive.txt")"
 fi
 printf '%s\\n' "$name:\${STRICT_CONFER_RUN_ID:-}:\${STRICT_CONFER_RUN_ROOT:-}:\${STRICT_CONFER_PEER:-}:\$(pwd)" >> "\$STRICT_CONFER_TEST_LOG"
 MOCK
@@ -60,6 +73,11 @@ test_parallel_runs_are_ephemeral_and_unique() {
   ln -s "$TMP/external-sensitive.txt" "$project/review-link"
   git -C "$project" add .gitignore review-target.txt review-link
   git -C "$project" commit -qm initial
+  rm "$project/review-link"
+  printf '%s\n' "must not replace indexed symlink" > "$project/review-link"
+  gitlink_oid=$(git -C "$project" rev-parse HEAD)
+  git -C "$project" update-index --add --cacheinfo "160000,$gitlink_oid,review-gitlink"
+  printf '%s\n' "must not replace indexed gitlink" > "$project/review-gitlink"
   printf '%s\n' "must stay local" > "$project/untracked-sensitive.txt"
   printf '%s\n' "must stay private" > "$project/.env"
   make_mock_peer "$mockbin/claude" "claude"
@@ -102,6 +120,12 @@ test_parallel_runs_are_ephemeral_and_unique() {
   ! grep -q "must stay local" "$TMP/out-2" || fail "second run copied an untracked local file"
   ! grep -q "must not escape through symlink" "$TMP/out-1" || fail "first run preserved an escaping tracked symlink"
   ! grep -q "must not escape through symlink" "$TMP/out-2" || fail "second run preserved an escaping tracked symlink"
+  ! grep -q "must not replace indexed symlink" "$TMP/out-1" || fail "first run trusted a replaced indexed symlink"
+  ! grep -q "must not replace indexed symlink" "$TMP/out-2" || fail "second run trusted a replaced indexed symlink"
+  ! grep -q "must not replace indexed gitlink" "$TMP/out-1" || fail "first run trusted a replaced indexed gitlink"
+  ! grep -q "must not replace indexed gitlink" "$TMP/out-2" || fail "second run trusted a replaced indexed gitlink"
+  ! grep -q "source-root snapshot" "$TMP/out-1" || fail "first run exposed the live source root"
+  ! grep -q "source-root snapshot" "$TMP/out-2" || fail "second run exposed the live source root"
   ! grep -q "must stay private" "$TMP/out-1" || fail "first run copied an ignored secret-bearing file"
   ! grep -q "must stay private" "$TMP/out-2" || fail "second run copied an ignored secret-bearing file"
 
@@ -182,6 +206,16 @@ test_live_workspace_bypass_is_refused() {
   [ ! -e "$TMP/live-bypass.log" ] || fail "a peer ran after the live workspace bypass request"
 }
 
+test_non_git_snapshot_is_refused() {
+  local project="$TMP/non-git-project"
+  mkdir -p "$project"
+  set +e
+  (cd "$project" && "$ROOT/bin/strict-confer.sh" codex "reject non-git" >/dev/null 2>&1)
+  local status=$?
+  set -e
+  [ "$status" -eq 2 ] || fail "non-Git snapshot was not rejected with exit 2: $status"
+}
+
 test_timeout_kills_peer_child_process_group() {
   local project="$TMP/timeout-project"
   local mockbin="$TMP/timeout-bin"
@@ -219,7 +253,7 @@ MOCK
   local child_pid
   child_pid="$(cat "$child_pid_file")"
   for _ in 1 2 3 4 5 6 7 8 9 10; do
-    if ! kill -0 "$child_pid" 2>/dev/null; then
+    if ! process_is_running "$child_pid"; then
       return 0
     fi
     sleep 0.2
@@ -231,5 +265,6 @@ test_parallel_runs_are_ephemeral_and_unique
 test_current_peer_cli_invocations
 test_snapshot_tolerates_tracked_deletions
 test_live_workspace_bypass_is_refused
+test_non_git_snapshot_is_refused
 test_timeout_kills_peer_child_process_group
 echo "strict-confer isolation tests passed"

@@ -74,12 +74,26 @@ def sync_domain(
     """Initialize/mine one physical domain, hardening every generated artifact before use."""
     domain_root = domain_root.resolve()
     export_dir = domain_root / "export"
-    if not export_dir.is_dir() or not any(export_dir.glob("*.md")):
+    if export_dir.is_symlink():
+        raise ValueError("export directory must not be a symlink")
+    if not export_dir.is_dir():
         return
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", generation):
         raise ValueError("generation must be a safe path component")
-    palace = domain_root / "palaces" / generation
-    palace.mkdir(mode=0o700, parents=True, exist_ok=True)
+    has_exports = any(export_dir.glob("*.md"))
+    selected_generation = generation
+    if not has_exports:
+        active_pointer = domain_root / "active-generation"
+        if not active_pointer.is_file():
+            return
+        selected_generation = active_pointer.read_text().strip()
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", selected_generation):
+            raise ValueError("active generation is invalid")
+    palace = domain_root / "palaces" / selected_generation
+    if has_exports:
+        palace.mkdir(mode=0o700, parents=True, exist_ok=True)
+    elif palace.is_symlink() or not palace.is_dir():
+        raise ValueError("active palace is unavailable")
     harden_owner_only_tree(domain_root)
     env = _private_local_env()
     base = _base_command(palace)
@@ -93,13 +107,18 @@ def sync_domain(
                 raise PermissionError(f"owner-only palace audit failed for {domain_root}: {offenders[:5]}")
 
     initialized_marker = palace / ".initialized"
+    wing = domain_root.name.rsplit("-", 1)[0]
+    if not has_exports:
+        if not initialized_marker.is_file():
+            raise ValueError("active palace is not initialized")
+        run_write([*base, "sync", str(export_dir), "--wing", wing, "--apply"])
+        return
     if not initialized_marker.exists():
         run_write(
             [*base, "init", str(export_dir), "--backend", "chroma", "--yes", "--no-llm"],
             input="n\n",
         )
-        _write_private_text(initialized_marker, generation + "\n")
-    wing = domain_root.name.rsplit("-", 1)[0]
+        _write_private_text(initialized_marker, selected_generation + "\n")
     run_write(
         [
             *base,
@@ -118,7 +137,7 @@ def sync_domain(
     run_write(
         [*base, "sync", str(export_dir), "--wing", wing, "--apply"],
     )
-    _write_private_text(domain_root / "active-generation", generation + "\n")
+    _write_private_text(domain_root / "active-generation", selected_generation + "\n")
     harden_owner_only_tree(domain_root)
 
 

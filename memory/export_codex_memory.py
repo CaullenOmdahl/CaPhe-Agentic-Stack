@@ -61,6 +61,17 @@ def _validated_domain_root(output_root: Path, domain: str) -> Path:
     return domain_root
 
 
+def _validated_export_dir(domain_root: Path, *, create: bool = False) -> Path:
+    export_dir = domain_root / "export"
+    if export_dir.is_symlink():
+        raise IsolationError(f"memory export directory must not be a symlink: {export_dir}")
+    if export_dir.exists() and not export_dir.is_dir():
+        raise IsolationError(f"memory export path must be a directory: {export_dir}")
+    if create:
+        export_dir.mkdir(mode=0o700, exist_ok=True)
+    return export_dir
+
+
 def atomic_write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False, encoding="utf-8") as handle:
@@ -124,7 +135,7 @@ def export_sources(
         for domain, existing_domain_root in all_domain_roots.items():
             if domain in current_domains:
                 continue
-            existing_export = existing_domain_root / "export"
+            existing_export = _validated_export_dir(existing_domain_root)
             stale_candidates = {
                 existing_export / f"{source_id}.md",
                 *existing_export.glob(f"{source_id}-p*.md"),
@@ -135,8 +146,7 @@ def export_sources(
         for domain, domain_records in grouped.items():
             domain_root = domain_roots[domain]
             domain_root.mkdir(mode=0o700, exist_ok=True)
-            export_dir = domain_root / "export"
-            export_dir.mkdir(mode=0o700, exist_ok=True)
+            export_dir = _validated_export_dir(domain_root, create=True)
             blocks: list[str] = []
             for record in domain_records:
                 prefix = f"[{record.role} source_event={record.source_index}]\n"

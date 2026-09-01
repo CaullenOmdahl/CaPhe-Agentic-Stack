@@ -58,6 +58,15 @@ ln -s CLAUDE.md "$SYMLINK_REPO/GEMINI.md"
 [ -L "$SYMLINK_REPO/AGENTS.md" ] && [ -L "$SYMLINK_REPO/GEMINI.md" ]
 [ "$(grep -c '^<!-- STRICT-MODE:BEGIN ' "$SYMLINK_REPO/CLAUDE.md")" -eq 1 ]
 
+CANONICAL_LINK_REPO="$TEST_ROOT/canonical-link-repo"
+mkdir -p "$CANONICAL_LINK_REPO/docs"
+printf '%s\n' canonical-instructions > "$CANONICAL_LINK_REPO/docs/instructions.md"
+ln -s docs/instructions.md "$CANONICAL_LINK_REPO/AGENTS.md"
+(cd "$CANONICAL_LINK_REPO" && HOME="$HOME_ROOT" "$ROOT/bin/strict-init.sh" >/dev/null)
+[ -L "$CANONICAL_LINK_REPO/AGENTS.md" ]
+grep -q '^canonical-instructions$' "$CANONICAL_LINK_REPO/docs/instructions.md"
+[ "$(grep -c '^<!-- STRICT-MODE:BEGIN ' "$CANONICAL_LINK_REPO/docs/instructions.md")" -eq 1 ]
+
 PROSE_REPO="$TEST_ROOT/prose-repo"
 mkdir -p "$PROSE_REPO"
 cat > "$PROSE_REPO/CLAUDE.md" <<'DOC'

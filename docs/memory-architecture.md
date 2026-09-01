@@ -20,14 +20,16 @@ MemPalace may create backend files with group/world-readable defaults. After eve
 `repair`, or migration, run the adapter's `harden_owner_only_tree`, require
 `audit_owner_only_tree` to return no paths, and only then permit retrieval. A successful sync writes
 `active-generation` atomically after mining and reconciliation finish; a failed new generation cannot
-replace the last known-good active generation.
+replace the last known-good active generation. When the final export leaves a domain, sync reconciles the
+existing active palace against the empty export directory so stale drawers are actually removed.
 
 The 2026-09-01 private five-case BlackSheep pilot retained 5/5 answer and recall-at-5 results while
 reducing observed retrieval input from 9,820 to 6,110 approximate tokens (37.8%). Citations resolved,
-and the secret-canary and cross-domain gates remained at zero. The injection gate now exercises the
-real evidence formatter with a closing-delimiter attack instead of accepting a result-supplied counter;
-the formatter escapes that delimiter before framing. This passes the ADR's Pareto adoption floor for
-that domain; other domains still require their own anchor-first run.
+and the secret-canary and cross-domain gates remained at zero. Current benchmark cases require non-empty
+human-authored answer predicates plus at least one injection probe. Each run must record that probe's hash,
+and scoring fails if the candidate answer contains a forbidden injection outcome or lacks probe provenance.
+The formatter also exercises a closing-delimiter self-test. Other domains still require their own
+anchor-first run.
 
 Use `memory/export_codex_memory.py` to create sanitized per-domain exports. Private mapping files, pilot
 fixtures, palaces, and benchmark results stay outside this public repository.

@@ -14,6 +14,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import tomllib
 from typing import Any, Iterable, NamedTuple
 
 
@@ -379,11 +380,32 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
         for path in cargo_manifests
         if re.search(r"(?m)^\s*\[workspace\]\s*$", path.read_text(errors="replace"))
     }
+    workspace_rules: dict[Path, tuple[list[str], list[str]]] = {}
+    for workspace in cargo_workspaces:
+        try:
+            workspace_data = tomllib.loads(workspace.read_text(errors="replace")).get("workspace", {})
+        except (OSError, tomllib.TOMLDecodeError):
+            workspace_data = {}
+        members = workspace_data.get("members", []) if isinstance(workspace_data, dict) else []
+        excludes = workspace_data.get("exclude", []) if isinstance(workspace_data, dict) else []
+        workspace_rules[workspace] = (
+            [item for item in members if isinstance(item, str)],
+            [item for item in excludes if isinstance(item, str)],
+        )
+
+    def covered_by_workspace(path: Path) -> bool:
+        for workspace, (members, excludes) in workspace_rules.items():
+            if workspace.parent not in path.parents:
+                continue
+            relative = path.parent.relative_to(workspace.parent).as_posix()
+            if any(fnmatch.fnmatchcase(relative, pattern) for pattern in excludes):
+                continue
+            if any(fnmatch.fnmatchcase(relative, pattern) for pattern in members):
+                return True
+        return False
+
     cargo_roots = [
-        path
-        for path in cargo_manifests
-        if path in cargo_workspaces
-        or not any(workspace.parent in path.parents for workspace in cargo_workspaces)
+        path for path in cargo_manifests if path in cargo_workspaces or not covered_by_workspace(path)
     ]
     for cargo in cargo_roots:
         cwd = _relative_cwd(root, cargo)

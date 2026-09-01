@@ -165,6 +165,25 @@ class StrictGatePlanTests(unittest.TestCase):
         self.assertEqual(cargo_test_cwds, {"cargo-one", "cargo-two", "cargo-workspace"})
         self.assertEqual(go_test_cwds, {"go-one", "go-two"})
 
+    def test_default_manifest_keeps_packages_excluded_from_ancestor_workspace(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workspace = root / "workspace"
+            for relative in ("app/Cargo.toml", "tools/Cargo.toml"):
+                path = workspace / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("[package]\nname='x'\nversion='0.1.0'\n")
+            (workspace / "Cargo.toml").write_text(
+                "[workspace]\nmembers=['app']\nexclude=['tools']\n"
+            )
+            data = strict_gate.discover_default_manifest(root)
+        cargo_test_cwds = {
+            command["cwd"]
+            for command in data["components"][0]["commands"]
+            if command["name"].startswith("cargo-test")
+        }
+        self.assertEqual(cargo_test_cwds, {"workspace", "workspace/tools"})
+
 
 if __name__ == "__main__":
     unittest.main()
