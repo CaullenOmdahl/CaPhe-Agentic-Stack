@@ -73,6 +73,7 @@ test_parallel_runs_are_ephemeral_and_unique() {
   ln -s "$TMP/external-sensitive.txt" "$project/review-link"
   git -C "$project" add .gitignore review-target.txt review-link
   git -C "$project" commit -qm initial
+  printf '%s\n' "unstaged tracked secret must stay local" > "$project/review-target.txt"
   rm "$project/review-link"
   printf '%s\n' "must not replace indexed symlink" > "$project/review-link"
   gitlink_oid=$(git -C "$project" rev-parse HEAD)
@@ -118,6 +119,8 @@ test_parallel_runs_are_ephemeral_and_unique() {
   grep -q "snapshot: tracked workspace is visible" "$TMP/out-2" || fail "second run peer could not read tracked snapshot"
   ! grep -q "must stay local" "$TMP/out-1" || fail "first run copied an untracked local file"
   ! grep -q "must stay local" "$TMP/out-2" || fail "second run copied an untracked local file"
+  ! grep -q "unstaged tracked secret" "$TMP/out-1" || fail "first run copied unstaged tracked bytes"
+  ! grep -q "unstaged tracked secret" "$TMP/out-2" || fail "second run copied unstaged tracked bytes"
   ! grep -q "must not escape through symlink" "$TMP/out-1" || fail "first run preserved an escaping tracked symlink"
   ! grep -q "must not escape through symlink" "$TMP/out-2" || fail "second run preserved an escaping tracked symlink"
   ! grep -q "must not replace indexed symlink" "$TMP/out-1" || fail "first run trusted a replaced indexed symlink"

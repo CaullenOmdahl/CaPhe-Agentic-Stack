@@ -11,8 +11,8 @@
 # Concurrency: every invocation gets a unique run ID, an ephemeral run root, and per-peer
 # working directories. Peer CLIs run in separate process sessions so timeouts kill their
 # child processes. Set STRICT_CONFER_KEEP_RUN_DIR=1 to preserve the run root for debugging.
-# Git snapshots contain only tracked regular files and staged regular additions; symlinks,
-# gitlinks, and arbitrary untracked local files are not copied. Override reviewer models with
+# Git snapshots materialize only stage-0 regular blobs from the index; unstaged worktree bytes,
+# symlinks, gitlinks, and arbitrary untracked files are not copied. Override reviewer models with
 # STRICT_CONFER_CODEX_MODEL after verifying the requested models with the installed CLIs.
 set -uo pipefail
 
@@ -71,19 +71,23 @@ run_isolated() {
   local peer_cwd
   peer_cwd="$peer_dir/workspace"
   mkdir -p "$peer_cwd" || return 1
-  local file_list
-  file_list="$peer_dir/files.txt"
   git -C "$SOURCE_ROOT" ls-files --stage -z |
     while IFS= read -r -d '' index_entry; do
       index_meta=${index_entry%%$'\t'*}
       tracked_path=${index_entry#*$'\t'}
-      index_mode=${index_meta%% *}
-      case "$index_mode" in 100644|100755) ;; *) continue ;; esac
-      if [ ! -L "$SOURCE_ROOT/$tracked_path" ] && [ -f "$SOURCE_ROOT/$tracked_path" ]; then
-        printf '%s\0' "$tracked_path"
+      read -r index_mode object_id index_stage <<EOF
+$index_meta
+EOF
+      if [ "$index_stage" != "0" ]; then
+        echo "strict-confer refuses an unmerged index entry: $tracked_path" >&2
+        exit 1
       fi
-    done > "$file_list" || return 1
-  rsync -a --from0 --files-from="$file_list" "$SOURCE_ROOT"/ "$peer_cwd"/ || return 1
+      case "$index_mode" in 100644|100755) ;; *) continue ;; esac
+      destination="$peer_cwd/$tracked_path"
+      mkdir -p -- "$(dirname -- "$destination")" || exit 1
+      git -C "$SOURCE_ROOT" cat-file blob "$object_id" > "$destination" || exit 1
+      case "$index_mode" in 100755) chmod 755 "$destination" ;; *) chmod 644 "$destination" ;; esac
+    done || return 1
   STRICT_CONFER_PEER="$peer" \
   STRICT_CONFER_RUN_ID="$RUN_ID" \
   STRICT_CONFER_RUN_ROOT="$RUN_ROOT" \
