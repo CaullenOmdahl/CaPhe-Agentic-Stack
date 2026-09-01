@@ -23,6 +23,17 @@ class MemoryAdapterTests(unittest.TestCase):
         self.assertNotIn(secret, combined)
         self.assertIn("[REDACTED:GITHUB_TOKEN]", combined)
 
+    def test_common_named_and_vendor_credentials_are_redacted(self):
+        credentials = [
+            "AWS_SECRET_ACCESS_KEY=example-secret-value-123456",
+            "SLACK_TOKEN=" + "xoxb-" + "1234567890-abcdefghijklmnop",
+            "NPM_AUTH_TOKEN=" + "npm_" + "abcdefghijklmnopqrstuvwxyz",
+            "AKIA" + "ABCDEFGHIJKLMNOP",
+        ]
+        sanitized = adapter.sanitize_text("\n".join(credentials))
+        for credential in credentials:
+            self.assertNotIn(credential.split("=", 1)[-1], sanitized)
+
     def test_scope_requires_trusted_single_domain_metadata(self):
         mappings = {"project-a": "/work/a", "project-b": "/work/b"}
         self.assertEqual(adapter.resolve_scope("/work/a/src", "/work/a", mappings), "project-a")

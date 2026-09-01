@@ -55,7 +55,17 @@ class ResolvedEvent(NamedTuple):
 SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("PRIVATE_KEY", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.DOTALL)),
     ("GITHUB_TOKEN", re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}")),
+    ("AWS_ACCESS_KEY", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
+    ("SLACK_TOKEN", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
+    ("NPM_TOKEN", re.compile(r"\bnpm_[A-Za-z0-9]{20,}\b")),
     ("AUTH_BEARER", re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{16,}")),
+    (
+        "NAMED_CREDENTIAL",
+        re.compile(
+            r"(?i)\b[A-Z][A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|API_KEY|ACCESS_KEY)[A-Z0-9_]*"
+            r"\s*[:=]\s*['\"]?[^\s'\"]{8,}"
+        ),
+    ),
     ("ASSIGNED_SECRET", re.compile(r"(?i)\b(api[_-]?key|token|secret|password)\s*[:=]\s*['\"]?[^\s'\"]{8,}")),
 )
 

@@ -50,7 +50,10 @@ def safe_source_id(source_root: Path, path: Path) -> str:
 def _validated_domain_root(output_root: Path, domain: str) -> Path:
     if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*", domain) or domain in {".", ".."}:
         raise IsolationError(f"unsafe memory domain name: {domain!r}")
-    domain_root = (output_root / domain).resolve()
+    unresolved_domain_root = output_root / domain
+    if unresolved_domain_root.is_symlink():
+        raise IsolationError(f"memory domain must not be a symlink: {domain!r}")
+    domain_root = unresolved_domain_root.resolve()
     try:
         domain_root.relative_to(output_root.resolve())
     except ValueError as error:

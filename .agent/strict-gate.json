@@ -31,6 +31,13 @@
           ]
         },
         {
+          "name": "strict-confer-isolation",
+          "run": [
+            "bash",
+            "strict-mode/test/strict-confer-isolation-test.sh"
+          ]
+        },
+        {
           "name": "public-safety",
           "run": [
             "bash",

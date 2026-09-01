@@ -323,7 +323,7 @@ def _relative_cwd(root: Path, manifest: Path) -> str:
 def discover_default_manifest(root: Path) -> dict[str, Any]:
     """Create a safe single-component manifest; repositories can later split it for speed."""
     commands: list[dict[str, Any]] = [
-        {"name": "diff-check", "run": ["git", "diff", "--check"]},
+        {"name": "diff-check", "run": ["git", "diff", "--cached", "--check"]},
     ]
     command_names = {"diff-check"}
 

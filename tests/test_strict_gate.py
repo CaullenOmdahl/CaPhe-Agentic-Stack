@@ -123,6 +123,16 @@ class StrictGatePlanTests(unittest.TestCase):
                     os.environ["STRICT_TEST_VALUE"] = old
             self.assertNotEqual(first, second)
 
+    def test_default_manifest_checks_the_staged_diff(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data = strict_gate.discover_default_manifest(Path(tmp))
+        diff_check = next(
+            command
+            for command in data["components"][0]["commands"]
+            if command["name"] == "diff-check"
+        )
+        self.assertEqual(diff_check["run"], ["git", "diff", "--cached", "--check"])
+
 
 if __name__ == "__main__":
     unittest.main()

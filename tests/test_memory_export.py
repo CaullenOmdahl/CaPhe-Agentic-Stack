@@ -96,6 +96,26 @@ class MemoryExportTests(unittest.TestCase):
                 exporter.export_sources([source], {"../escaped": "/workspace/project"}, output, "g")
             self.assertFalse((root / "escaped").exists())
 
+    def test_symlinked_domain_directory_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "sessions"
+            output = root / "pilot"
+            source.mkdir()
+            output.mkdir(mode=0o700)
+            real_domain = output / "domain-b"
+            real_domain.mkdir(mode=0o700)
+            (output / "domain-a").symlink_to(real_domain, target_is_directory=True)
+            events = [
+                {"type": "turn_context", "payload": {"cwd": "/workspace/a"}},
+                {"type": "response_item", "payload": {"type": "message", "role": "user", "content": "question"}},
+                {"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": "answer"}},
+            ]
+            (source / "session.jsonl").write_text("".join(json.dumps(event) + "\n" for event in events))
+            with self.assertRaises(exporter.IsolationError):
+                exporter.export_sources([source], {"domain-a": "/workspace/a"}, output, "g")
+            self.assertFalse((real_domain / "export").exists())
+
     def test_reexport_removes_source_from_previous_or_quarantined_domain(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
