@@ -150,6 +150,29 @@ class MemorySyncTests(unittest.TestCase):
                 set(palaces),
             )
 
+    def test_empty_export_reconciles_retained_generation_without_active_pointer(self):
+        spec = importlib.util.spec_from_file_location("sync_mempalace_no_pointer", MODULE_PATH)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as tmp:
+            domain = Path(tmp) / "project-12345678"
+            (domain / "export").mkdir(parents=True, mode=0o700)
+            palace = domain / "palaces" / "generation-1"
+            palace.mkdir(parents=True, mode=0o700)
+            (palace / ".initialized").write_text("generation-1\n")
+            calls = []
+
+            def fake_run(command, **kwargs):
+                calls.append(command)
+
+            module.sync_domain(domain, generation="generation-2", runner=fake_run)
+            self.assertEqual(len(calls), 1)
+            self.assertIn("sync", calls[0])
+            self.assertEqual(
+                calls[0][calls[0].index("--palace") + 1], str(palace.resolve())
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

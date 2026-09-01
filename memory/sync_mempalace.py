@@ -83,16 +83,21 @@ def sync_domain(
     has_exports = any(export_dir.glob("*.md"))
     selected_generation = generation
     retained_palaces: list[Path] = []
+    has_active_pointer = False
     if not has_exports:
         active_pointer = domain_root / "active-generation"
-        if not active_pointer.is_file():
-            return
-        selected_generation = active_pointer.read_text().strip()
-        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", selected_generation):
-            raise ValueError("active generation is invalid")
+        if active_pointer.is_symlink():
+            raise ValueError("active generation pointer must not be a symlink")
+        has_active_pointer = active_pointer.is_file()
+        if active_pointer.exists() and not has_active_pointer:
+            raise ValueError("active generation pointer is invalid")
         palaces_root = domain_root / "palaces"
-        if palaces_root.is_symlink() or not palaces_root.is_dir():
+        if palaces_root.is_symlink():
             raise ValueError("palaces directory is unavailable")
+        if not palaces_root.is_dir():
+            if has_active_pointer:
+                raise ValueError("palaces directory is unavailable")
+            return
         for retained in sorted(palaces_root.iterdir()):
             if retained.is_symlink():
                 raise ValueError("retained palace must not be a symlink")
@@ -101,10 +106,16 @@ def sync_domain(
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", retained.name):
                 raise ValueError("retained generation is invalid")
             retained_palaces.append(retained)
+        if not retained_palaces:
+            return
+        if has_active_pointer:
+            selected_generation = active_pointer.read_text().strip()
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", selected_generation):
+                raise ValueError("active generation is invalid")
     palace = domain_root / "palaces" / selected_generation
     if has_exports:
         palace.mkdir(mode=0o700, parents=True, exist_ok=True)
-    elif palace.is_symlink() or palace not in retained_palaces:
+    elif has_active_pointer and (palace.is_symlink() or palace not in retained_palaces):
         raise ValueError("active palace is unavailable")
     harden_owner_only_tree(domain_root)
     env = _private_local_env()

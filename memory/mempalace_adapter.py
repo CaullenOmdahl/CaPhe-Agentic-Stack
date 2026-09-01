@@ -13,7 +13,7 @@ import stat
 from typing import Any, Iterable, NamedTuple
 
 
-SANITIZER_VERSION = "sanitize-v6"
+SANITIZER_VERSION = "sanitize-v7"
 CHUNKER_VERSION = "chunk-v2"
 EVIDENCE_TAG = "UNTRUSTED_MEMORY_EVIDENCE"
 
@@ -61,6 +61,12 @@ SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("AWS_ACCESS_KEY", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
     ("SLACK_TOKEN", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
     ("NPM_TOKEN", re.compile(r"\bnpm_[A-Za-z0-9]{20,}\b")),
+    (
+        "OPENAI_API_KEY",
+        re.compile(
+            r"(?<![A-Za-z0-9_-])sk-(?:(?:proj|svcacct)-)?[A-Za-z0-9_-]{20,}(?![A-Za-z0-9_-])"
+        ),
+    ),
     ("AUTH_BEARER", re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{16,}")),
     (
         "QUOTED_CREDENTIAL",

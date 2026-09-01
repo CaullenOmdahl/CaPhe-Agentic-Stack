@@ -32,6 +32,33 @@ class MemoryExportTests(unittest.TestCase):
                 )
             self.assertEqual(sentinel.read_text(), "unchanged")
 
+    def test_symlinked_transcript_candidate_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "sessions"
+            external = root / "external"
+            output = root / "pilot"
+            source.mkdir()
+            external.mkdir()
+            output.mkdir(mode=0o700)
+            events = [
+                {"type": "turn_context", "payload": {"cwd": "/workspace/project"}},
+                {
+                    "type": "response_item",
+                    "payload": {"type": "message", "role": "user", "content": "outside"},
+                },
+            ]
+            target = external / "private.jsonl"
+            target.write_text("".join(json.dumps(event) + "\n" for event in events))
+            (source / "linked.jsonl").symlink_to(target)
+
+            with self.assertRaisesRegex(ValueError, "symlink|source root"):
+                exporter.export_sources(
+                    [source], {"project": "/workspace/project"}, output, "generation-1"
+                )
+
+            self.assertFalse(any(output.rglob("*.md")))
+
     def test_export_is_sanitized_scoped_and_path_private(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -131,6 +158,31 @@ class MemoryExportTests(unittest.TestCase):
             self.assertFalse(any((output / "project" / "export").glob("*.md")))
             self.assertEqual(json.loads((output / "source-catalog.json").read_text()), {})
             self.assertEqual(json.loads((output / "processed-state.json").read_text()), {})
+
+    def test_orphaned_export_without_catalog_state_is_pruned(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "sessions"
+            output = root / "pilot"
+            export = output / "project" / "export"
+            source.mkdir()
+            export.mkdir(parents=True, mode=0o700)
+            output.chmod(0o700)
+            orphan = export / "0123456789abcdefabcd.md"
+            orphan.write_text(
+                "source_id: 0123456789abcdefabcd\n"
+                "source_part: 1/1\n"
+                f"source_sha256: {'a' * 64}\n"
+                "index_generation: generation-1\n"
+                "trust: first-party-conversation\n\n"
+                "[user source_event=1]\ndeleted source\n"
+            )
+
+            exporter.export_sources(
+                [source], {"project": "/workspace/project"}, output, "generation-1"
+            )
+
+            self.assertFalse(orphan.exists())
 
     def test_unsafe_domain_name_is_rejected_before_export(self):
         with tempfile.TemporaryDirectory() as tmp:

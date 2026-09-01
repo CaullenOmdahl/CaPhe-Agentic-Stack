@@ -35,6 +35,12 @@ class MemoryAdapterTests(unittest.TestCase):
         for credential in credentials:
             self.assertNotIn(credential.split("=", 1)[-1], sanitized)
 
+    def test_standalone_openai_project_key_is_redacted(self):
+        credential = "sk-proj-" + "AbCdEf0123456789_-" * 3
+        sanitized = adapter.sanitize_text(f"standalone credential {credential}")
+        self.assertNotIn(credential, sanitized)
+        self.assertIn("[REDACTED:OPENAI_API_KEY]", sanitized)
+
     def test_quoted_credentials_with_whitespace_are_redacted(self):
         credentials = [
             'PASSWORD="correct horse battery staple"',

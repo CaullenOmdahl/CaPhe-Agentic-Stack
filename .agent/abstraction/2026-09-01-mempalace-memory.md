@@ -48,7 +48,8 @@ immutable source records and loading only the evidence relevant to the current t
 - `intended` Summarization may accelerate navigation but never deletes or replaces verbatim source.
 - `intended` Every candidate passes a fail-closed multi-pass secret scan before indexing. Detected
   secrets are replaced by typed placeholders in derived text; source remains in its existing protected
-  location. The pilot forbids remote embeddings. Any future remote path is a separate human-gated ADR.
+  location. Standalone vendor credentials, including OpenAI project keys, are covered by versioned
+  sanitizer patterns. The pilot forbids remote embeddings. Any future remote path is a separate human-gated ADR.
 - `intended` Separate physical palace databases enforce each client/project security domain. Federated
   cross-domain retrieval is explicit, user-authorized, and does not weaken per-palace filters.
 - `intended` Scope derives only from trusted per-turn working-directory metadata resolved inside an
@@ -71,7 +72,8 @@ immutable source records and loading only the evidence relevant to the current t
 - `intended` A secret discovered after indexing tombstones the derived drawer and triggers a sanitized
   rebuild. User-authorized source deletion is followed by deletion verification across every retained
   palace generation and complete reindex. Each sync's complete source-root list is authoritative; sources
-  under retired roots are removed from derived state.
+  under retired roots are removed from derived state. Initialized partial generations without an active
+  pointer and orphan export files without catalog/state entries remain part of deletion reconciliation.
 - `intended` Failure of the derived index falls back to existing source/registry lookup.
 - `legacy` Loading broad manually maintained summaries into every task is reduced to a small identity
   layer plus scoped query-time retrieval.
@@ -86,6 +88,8 @@ immutable source records and loading only the evidence relevant to the current t
 - Inaccessible or corrupt drawers must not be cited.
 - Missing, unreadable, non-searchable, or symlinked canonical source roots fail before export mutation;
   transient source unavailability must not be interpreted as deletion.
+- Transcript files and every path component must resolve beneath the validated source root without a
+  symlink; out-of-root transcript aliases fail the export before reconciliation.
 
 ## Non-functional targets
 

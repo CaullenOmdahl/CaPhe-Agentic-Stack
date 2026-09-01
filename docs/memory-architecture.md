@@ -13,9 +13,9 @@ The stack uses protected source records plus rebuildable local retrieval indexes
 - **Lifecycle:** explicit corrections supersede; default search masks invalid facts. Index generation records
   MemPalace, backend, embedder/dimension, sanitizer, and chunker identity.
 
-The local pilot pins MemPalace 3.9.0 and forbids remote embeddings. Sanitizer v6 starts a fresh index
-generation and redacts standalone fine-grained GitHub tokens in addition to the existing vendor and
-assignment patterns. Adoption requires the privacy,
+The local pilot pins MemPalace 3.9.0 and forbids remote embeddings. Sanitizer v7 starts a fresh index
+generation and redacts standalone OpenAI API keys and fine-grained GitHub tokens in addition to the
+existing vendor and assignment patterns. Adoption requires the privacy,
 isolation, injection, citation, correctness, recall, latency, storage, and token benchmarks in ADR-0002.
 
 MemPalace may create backend files with group/world-readable defaults. After every `init`, `mine`,
@@ -23,13 +23,13 @@ MemPalace may create backend files with group/world-readable defaults. After eve
 `audit_owner_only_tree` to return no paths, and only then permit retrieval. A successful sync writes
 `active-generation` atomically after mining and reconciliation finish; a failed new generation cannot
 replace the last known-good active generation. When the final export leaves a domain, sync reconciles every
-initialized retained palace generation against the empty export directory so stale drawers are removed
-from historical as well as active derived indexes.
+initialized retained palace generation against the empty export directory—even if a failed first sync did
+not create an active pointer—so stale drawers are removed from historical and partial derived indexes.
 
-The 2026-09-01 private five-case BlackSheep v10 pilot retained 5/5 answer and recall-at-5 results while
-reducing observed retrieval input from 9,820 to 3,742 approximate tokens (61.9%). The harness measured
-the slowest end-to-end candidate case at 128,727.67 ms against a 180,000 ms cap and the benchmarked
-owner-only palace at 109,212,400 bytes against a 268,435,456-byte cap. The full local v10 generation
+The 2026-09-02 private five-case BlackSheep v11 pilot retained 5/5 answer and recall-at-5 results while
+reducing observed retrieval input from 9,820 to 3,838 approximate tokens (60.9%). The harness measured
+the slowest end-to-end candidate case at 116,262.45 ms against a 180,000 ms cap and the benchmarked
+owner-only palace at 105,789,010 bytes against a 268,435,456-byte cap. The full local v11 generation
 contains 904 canonical sources across 18 physically isolated mapped domains. Citations resolved, and the secret-canary,
 cross-domain, and injection gates remained at zero. Current benchmark cases require non-empty
 human-authored answer predicate groups plus at least one injection probe. A group may provide narrow semantic
@@ -73,6 +73,9 @@ Every requested source root must exist as a readable, searchable, non-symlink di
 or pruning begins, so a missing or unmounted canonical source cannot be mistaken for intentional deletion.
 The complete source-root list supplied to each run is authoritative: catalog and processed-state entries
 outside that set are retired and their exports are pruned before new sources are processed.
+Every transcript candidate must be a regular non-symlink file whose fully resolved path remains beneath
+its declared root. Reconciliation also enumerates export filenames directly, so a Markdown export written
+before an interrupted catalog/state commit cannot survive after its canonical source disappears.
 During ordinary same-generation sync, a source that becomes unreadable or invalid is pruned from the
 catalog and exports instead of leaving stale retrievable content.
 The exporter records a hash of the trusted domain mapping. Mapping additions, removals, or root changes

@@ -32,7 +32,8 @@ candidate IDs must each exactly match the declared case set before any adoption 
 benchmarks separate search from answering: the harness validates search coordinates against the selected
 export generation, resolves bounded canonical event slices, frames the slices itself, supplies and measures
 that exact context, and requires the answer phase to echo those same citations. Sanitizer behavior changes
-create a new generation; sanitizer v6 explicitly covers standalone fine-grained GitHub tokens.
+create a new generation; sanitizer v7 explicitly covers standalone OpenAI API keys and fine-grained GitHub
+tokens.
 
 Platform scoring:
 
@@ -72,6 +73,10 @@ A subsequent exact-head review found that empty-domain reconciliation touched on
 and that catalog entries under roots removed from `--source-root` survived. Empty-domain sync now
 reconciles every initialized retained generation, and each run treats its complete validated source-root
 set as authoritative for pruning retired derived records.
+The next exact-head review found retained palaces without an active pointer, symlinked transcript escape,
+orphan exports absent from state, and standalone OpenAI project keys. The accepted repair enumerates every
+initialized palace independently of the pointer, requires canonical candidate realpaths to remain inside
+their non-symlink root, derives orphan IDs from export filenames, and advances the sanitizer to v7.
 
 ## Consequences
 

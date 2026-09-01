@@ -83,6 +83,17 @@ def _remove_source_exports(source_id: str, domain_roots: dict[str, Path]) -> Non
                 stale_path.unlink()
 
 
+def _exported_source_ids(domain_roots: dict[str, Path]) -> set[str]:
+    source_ids: set[str] = set()
+    for domain_root in domain_roots.values():
+        export_dir = _validated_export_dir(domain_root)
+        for export_path in export_dir.glob("*.md"):
+            match = re.fullmatch(r"([0-9a-f]{20})(?:-p\d{4})?\.md", export_path.name)
+            if match:
+                source_ids.add(match.group(1))
+    return source_ids
+
+
 def _source_exports_complete(
     source_id: str,
     domain_roots: dict[str, Path],
@@ -188,7 +199,21 @@ def export_sources(
     if max_export_chars <= 0:
         raise ValueError("max_export_chars must be positive")
     stats = {"sessions": 0, "records": 0, "export_files": 0, "quarantined": 0, "invalid": 0}
-    candidates = [(source_root, path) for source_root in source_roots for path in source_root.rglob("*.jsonl")]
+    candidates: list[tuple[Path, Path]] = []
+    for source_root in source_roots:
+        for path in source_root.rglob("*.jsonl"):
+            try:
+                resolved_path = path.resolve(strict=True)
+            except OSError as error:
+                raise ValueError(f"transcript candidate is unavailable: {path}") from error
+            if (
+                path.is_symlink()
+                or resolved_path != path
+                or not resolved_path.is_relative_to(source_root)
+                or not resolved_path.is_file()
+            ):
+                raise ValueError(f"transcript candidate escapes source root or is symlinked: {path}")
+            candidates.append((source_root, resolved_path))
     current_source_ids = {safe_source_id(source_root, path) for source_root, path in candidates}
     if recent_first:
         candidates.sort(key=lambda item: item[1].stat().st_mtime, reverse=True)
@@ -261,6 +286,8 @@ def export_sources(
     for source_id, state in processed_state.items():
         if source_id not in known_source_paths and isinstance(state, dict):
             known_source_paths[source_id] = state.get("source_path")
+    for source_id in _exported_source_ids(all_domain_roots):
+        known_source_paths.setdefault(source_id, None)
     for source_id, source_path_text in known_source_paths.items():
         try:
             source_path = Path(source_path_text).resolve()

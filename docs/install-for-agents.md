@@ -70,7 +70,8 @@ The repository is the distribution source. The local machine is the runtime envi
      authorizes a remote backend.
    - Do not enable automatic ingestion until the private adoption benchmark passes.
    - After a domain passes, use `memory/sync_mempalace.py` for bounded local-only updates. It advances
-     `active-generation` only after the new generation completes successfully. If recurring sync is
+     `active-generation` only after the new generation completes successfully. Empty-domain cleanup still
+     reconciles every initialized retained palace if that pointer was never written. If recurring sync is
      useful, schedule that deterministic command at the OS layer instead of waking a model.
    - A new index generation must rebuild every current export. Use `--limit 0` for that unlimited pass;
      bounded generation transitions fail before changing export state.
