@@ -130,11 +130,37 @@ def validate_path_coverage(data: dict[str, Any], tracked_paths: Iterable[str]) -
         raise ManifestError(f"tracked paths are not covered by the manifest: {preview}")
 
 
-def _verification_proven(component: dict[str, Any], component_count: int) -> bool:
+def _verification_proven(
+    component: dict[str, Any],
+    component_count: int,
+    verified_dependencies: set[str],
+) -> bool:
     kind = component.get("dependency_verification", {}).get("kind", "unverified")
     if kind == "single-component":
         return component_count == 1
-    return kind in {"dart", "node", "cargo", "go", "custom"}
+    return kind == "custom" and component["name"] in verified_dependencies
+
+
+def verify_dependency_completeness(root: Path, data: dict[str, Any]) -> set[str]:
+    """Run declared custom verifiers; labels alone never enable affected scoping."""
+    verified: set[str] = set()
+    for component in data["components"]:
+        verification = component.get("dependency_verification", {})
+        if verification.get("kind") != "custom":
+            continue
+        try:
+            result = subprocess.run(
+                verification["command"],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        except OSError:
+            continue
+        if result.returncode == 0:
+            verified.add(component["name"])
+    return verified
 
 
 def _command_specs(component: dict[str, Any], *, completion: bool) -> list[CommandSpec]:
@@ -155,7 +181,13 @@ def _command_specs(component: dict[str, Any], *, completion: bool) -> list[Comma
     return result
 
 
-def build_plan(data: dict[str, Any], changed_paths: Iterable[str], *, mode: str) -> list[CommandSpec]:
+def build_plan(
+    data: dict[str, Any],
+    changed_paths: Iterable[str],
+    *,
+    mode: str,
+    verified_dependencies: set[str] | None = None,
+) -> list[CommandSpec]:
     validate_manifest(data)
     components = data["components"]
     changed = [path.removeprefix("./") for path in changed_paths]
@@ -164,7 +196,10 @@ def build_plan(data: dict[str, Any], changed_paths: Iterable[str], *, mode: str)
     known_patterns = [pattern for component in components for pattern in component["paths"]]
     if any(not _matches(path, known_patterns) for path in changed if path != MANIFEST_PATH):
         force_full = True
-    if not force_full and not all(_verification_proven(component, len(components)) for component in components):
+    verified_dependencies = verified_dependencies or set()
+    if not force_full and not all(
+        _verification_proven(component, len(components), verified_dependencies) for component in components
+    ):
         force_full = True
 
     selected: set[str]
@@ -395,7 +430,15 @@ def main(argv: list[str] | None = None) -> int:
         validate_path_coverage(data, tracked)
         changed = args.changed or _git_paths(root, "diff", "--cached", "--name-only", "--diff-filter=ACMRD")
         mode = "affected" if args.mode == "plan" else args.mode
-        plan = build_plan(data, changed, mode=mode)
+        verified_dependencies = (
+            verify_dependency_completeness(root, data) if mode == "affected" else set()
+        )
+        plan = build_plan(
+            data,
+            changed,
+            mode=mode,
+            verified_dependencies=verified_dependencies,
+        )
     except (OSError, json.JSONDecodeError, ManifestError, subprocess.CalledProcessError) as error:
         print(f"STRICT GATE CONFIG ERROR: {error}", file=sys.stderr)
         return 2

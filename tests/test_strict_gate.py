@@ -45,6 +45,31 @@ class StrictGatePlanTests(unittest.TestCase):
         plan = strict_gate.build_plan(data, ["a/file.py"], mode="affected")
         self.assertEqual([item.component for item in plan], ["a", "b"])
 
+    def test_custom_dependency_verifier_must_actually_pass_before_scoping(self):
+        a = component("a", ["a/**"], verification="custom")
+        b = component("b", ["b/**"], verification="custom")
+        a["dependency_verification"]["command"] = ["python3", "-c", "raise SystemExit(0)"]
+        b["dependency_verification"]["command"] = ["python3", "-c", "raise SystemExit(0)"]
+        data = manifest([a, b])
+        unverified = strict_gate.build_plan(data, ["a/file.py"], mode="affected")
+        self.assertEqual([item.component for item in unverified], ["a", "b"])
+        verified = strict_gate.build_plan(
+            data,
+            ["a/file.py"],
+            mode="affected",
+            verified_dependencies={"a", "b"},
+        )
+        self.assertEqual([item.component for item in verified], ["a"])
+
+    def test_custom_dependency_verifier_result_is_measured(self):
+        passing = component("passing", ["passing/**"], verification="custom")
+        failing = component("failing", ["failing/**"], verification="custom")
+        passing["dependency_verification"]["command"] = ["python3", "-c", "raise SystemExit(0)"]
+        failing["dependency_verification"]["command"] = ["python3", "-c", "raise SystemExit(1)"]
+        with tempfile.TemporaryDirectory() as tmp:
+            verified = strict_gate.verify_dependency_completeness(Path(tmp), manifest([passing, failing]))
+        self.assertEqual(verified, {"passing"})
+
     def test_affected_mode_propagates_to_consumers(self):
         data = manifest([
             component("core", ["core/**"]),
