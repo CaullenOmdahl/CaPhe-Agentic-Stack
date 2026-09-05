@@ -28,6 +28,33 @@ def component(name, paths, *, depends_on=None, verification="single-component"):
 
 
 class StrictGatePlanTests(unittest.TestCase):
+    def test_child_checks_do_not_inherit_calling_git_hook_repository_state(self):
+        command = strict_gate.CommandSpec(
+            component="a",
+            name="environment",
+            argv=(
+                "python3",
+                "-c",
+                "import os; raise SystemExit(any(name in os.environ for name in "
+                "('GIT_DIR', 'GIT_INDEX_FILE', 'GIT_PREFIX', 'GIT_WORK_TREE')))",
+            ),
+        )
+        inherited = {name: os.environ.get(name) for name in strict_gate.GIT_REPOSITORY_ENV}
+        try:
+            for name in strict_gate.GIT_REPOSITORY_ENV:
+                os.environ[name] = f"inherited-{name.lower()}"
+            with tempfile.TemporaryDirectory() as tmp:
+                _, returncode, output, _ = strict_gate._run_one(
+                    Path(tmp), command, "manifest", Path(tmp) / "cache"
+                )
+        finally:
+            for name, value in inherited.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
+        self.assertEqual(returncode, 0, output)
+
     def test_completion_always_runs_every_command_uncached(self):
         data = manifest([
             component("a", ["a/**"]),

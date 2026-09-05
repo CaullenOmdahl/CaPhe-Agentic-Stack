@@ -19,6 +19,7 @@ from typing import Any, Iterable, NamedTuple
 
 
 MANIFEST_PATH = ".agent/strict-gate.json"
+GIT_REPOSITORY_ENV = ("GIT_DIR", "GIT_INDEX_FILE", "GIT_PREFIX", "GIT_WORK_TREE")
 
 
 class ManifestError(ValueError):
@@ -34,6 +35,14 @@ class CommandSpec(NamedTuple):
     cache_inputs: tuple[str, ...] = ()
     cache_env: tuple[str, ...] = ()
     toolchain: tuple[tuple[str, ...], ...] = ()
+
+
+def command_environment() -> dict[str, str]:
+    """Return a child-check environment without the calling Git hook's repository state."""
+    environment = os.environ.copy()
+    for name in GIT_REPOSITORY_ENV:
+        environment.pop(name, None)
+    return environment
 
 
 def _require_string_list(value: Any, label: str, *, nonempty: bool = False) -> list[str]:
@@ -255,7 +264,14 @@ def cache_key(root: Path, command: CommandSpec, manifest_identity: str) -> str:
         digest.update(name.encode())
         digest.update(os.environ.get(name, "<unset>").encode())
     for probe in command.toolchain:
-        result = subprocess.run(probe, cwd=root, text=True, capture_output=True, check=False)
+        result = subprocess.run(
+            probe,
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=command_environment(),
+        )
         digest.update(json.dumps(probe).encode())
         digest.update(str(result.returncode).encode())
         digest.update(result.stdout.encode())
@@ -270,7 +286,14 @@ def _run_one(root: Path, command: CommandSpec, manifest_identity: str, cache_dir
         cache_file = cache_dir / f"{key}.ok"
         if cache_file.is_file():
             return command, 0, "", True
-    result = subprocess.run(command.argv, cwd=root / command.cwd, text=True, capture_output=True, check=False)
+    result = subprocess.run(
+        command.argv,
+        cwd=root / command.cwd,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=command_environment(),
+    )
     output = result.stdout + result.stderr
     if result.returncode == 0 and cache_file is not None:
         cache_file.parent.mkdir(parents=True, exist_ok=True)

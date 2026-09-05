@@ -13,8 +13,8 @@
 # child processes. Set STRICT_CONFER_KEEP_RUN_DIR=1 to preserve the run root for debugging.
 # Git snapshots materialize only stage-0 regular blobs from the index; unstaged worktree bytes,
 # symlinks, gitlinks, and arbitrary untracked files are not copied. The peer additionally runs behind
-# a fail-closed OS filesystem boundary that hides the source worktree. Override reviewer models with
-# STRICT_CONFER_CODEX_MODEL after verifying the requested models with the installed CLIs.
+# a fail-closed OS filesystem boundary that hides the source worktree. Reviewer models come from explicit
+# environment overrides or the private per-machine model config after verification with that installed CLI.
 set -uo pipefail
 
 HOST="${1:-}"; shift || true
@@ -29,11 +29,19 @@ done
 PROMPT="${ADV}${*:-}"
 { [ -z "$HOST" ] || [ -z "${*:-}" ]; } && { echo "usage: strict-confer.sh <claude|codex|agy> [--adversarial] [--save <label>] \"<task>\"" >&2; exit 2; }
 PEER_TIMEOUT_SECONDS="${STRICT_CONFER_TIMEOUT_SECONDS:-600}"
-AGY_MODEL="${STRICT_CONFER_AGY_MODEL:-gemini-3.7-flash-high}"
-CODEX_MODEL="${STRICT_CONFER_CODEX_MODEL:-gpt-5.4}"
+AGY_MODEL="${STRICT_CONFER_AGY_MODEL:-}"
+CODEX_MODEL="${STRICT_CONFER_CODEX_MODEL:-}"
+CLAUDE_MODEL="${STRICT_CONFER_CLAUDE_MODEL:-}"
 RUN_ID="${STRICT_CONFER_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$$-$RANDOM}"
 SOURCE_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 ORIGINAL_HOME="${HOME:?strict-confer requires HOME}"
+MODEL_CONFIG="${STRICT_CONFER_MODEL_CONFIG:-$ORIGINAL_HOME/.config/caphe/review-models.conf}"
+
+configured_review_model() {
+  local key="$1"
+  [ -f "$MODEL_CONFIG" ] && [ ! -L "$MODEL_CONFIG" ] || return 1
+  awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "$MODEL_CONFIG"
+}
 if [ "${STRICT_CONFER_NO_SNAPSHOT:-0}" = "1" ]; then
   echo "strict-confer refuses live-workspace review; stage deliberate inputs for a bounded snapshot" >&2
   exit 2
@@ -317,45 +325,83 @@ PY
 run_claude() {
   command -v claude >/dev/null 2>&1 || return 1
   mkdir -p "$RUN_ROOT/claude" || return 1
-  local o status
-  o=$(run_isolated claude claude --safe-mode -p --no-session-persistence "$1" 2>"$RUN_ROOT/claude/stderr.txt")
+  local o status selected_model version
+  selected_model="$CLAUDE_MODEL"
+  if [ -z "$selected_model" ]; then
+    selected_model=$(configured_review_model STRICT_CONFER_CLAUDE_MODEL) || return 1
+    case "$selected_model" in claude-sonnet-*|claude-opus-*) ;; *) echo "strict-confer claude refuses unclassified review model: $selected_model" >&2; return 1 ;; esac
+  fi
+  o=$(run_isolated claude claude --model "$selected_model" --safe-mode -p --no-session-persistence "$1" 2>"$RUN_ROOT/claude/stderr.txt")
   status=$?
   if [ "$status" -ne 0 ]; then
     cat "$RUN_ROOT/claude/stderr.txt" >&2
     echo "strict-confer claude boundary exit: $status" >&2
     return 1
   fi
-  [ -n "$o" ] && printf '%s\n' "$o" || return 1
+  [ -n "$o" ] || return 1
+  version=$(run_isolated claude claude --version 2>"$RUN_ROOT/claude/version-stderr.txt") || return 1
+  printf 'reviewer-metadata: claude model=%s version=%s\n' "$selected_model" "$(printf '%s\n' "$version" | head -1)"
+  printf '%s\n' "$o"
 }
 run_codex() {
   command -v codex >/dev/null 2>&1 || return 1
   mkdir -p "$RUN_ROOT/codex" || return 1
-  local o status
+  local o status selected_model version
+  selected_model="$CODEX_MODEL"
+  if [ -z "$selected_model" ]; then
+    selected_model=$(configured_review_model STRICT_CONFER_CODEX_MODEL) || return 1
+    case "$selected_model" in
+      *mini*|*spark*|*nano*|*flash*|"")
+        echo "strict-confer codex requires a configured review-grade model or a live-verified STRICT_CONFER_CODEX_MODEL override" >&2
+        return 1
+        ;;
+      gpt-[5-9].*) ;;
+      *)
+        echo "strict-confer codex refuses unclassified configured model: $selected_model" >&2
+        return 1
+        ;;
+    esac
+  fi
+  local -a command=(codex exec -m "$selected_model")
+  command+=(--ephemeral --skip-git-repo-check --sandbox danger-full-access)
   # The outer default-deny OS boundary is authoritative. Avoid nesting Codex's own
   # Seatbelt inside it; nested macOS sandboxes can block even read-only inspection.
-  o=$(run_isolated codex codex exec -m "$CODEX_MODEL" --ephemeral --skip-git-repo-check --sandbox danger-full-access "$1" 2>"$RUN_ROOT/codex/stderr.txt")
+  o=$(run_isolated codex "${command[@]}" "$1" 2>"$RUN_ROOT/codex/stderr.txt")
   status=$?
   if [ "$status" -ne 0 ]; then
     cat "$RUN_ROOT/codex/stderr.txt" >&2
     echo "strict-confer codex boundary exit: $status" >&2
     return 1
   fi
-  [ -n "$o" ] && printf '%s\n' "$o" || return 1
+  [ -n "$o" ] || return 1
+  version=$(run_isolated codex codex --version 2>"$RUN_ROOT/codex/version-stderr.txt") || return 1
+  printf 'reviewer-metadata: codex model=%s version=%s\n' "$selected_model" "$(printf '%s\n' "$version" | head -1)"
+  printf '%s\n' "$o"
 }
 # agy headless mode cannot prompt for repository-mandated reads. Auto-approval is bounded by
 # both plan mode and the bounded tracked-file snapshot above.
 run_agy() {
   command -v agy >/dev/null 2>&1 || return 1
   mkdir -p "$RUN_ROOT/agy" || return 1
-  local o status
-  o=$(run_isolated agy agy --sandbox --mode plan --dangerously-skip-permissions --model "$AGY_MODEL" --effort high --print="$1" 2>"$RUN_ROOT/agy/stderr.txt")
+  local o status selected_model version
+  selected_model="$AGY_MODEL"
+  if [ -z "$selected_model" ]; then
+    selected_model=$(configured_review_model STRICT_CONFER_AGY_MODEL) || return 1
+    case "$selected_model" in gemini-*-pro-high) ;; *) echo "strict-confer agy refuses unclassified review model: $selected_model" >&2; return 1 ;; esac
+  fi
+  local -a command=(agy --sandbox --mode plan --dangerously-skip-permissions --model "$selected_model")
+  command+=(--effort high --print="$1")
+  o=$(run_isolated agy "${command[@]}" 2>"$RUN_ROOT/agy/stderr.txt")
   status=$?
   if [ "$status" -ne 0 ]; then
     cat "$RUN_ROOT/agy/stderr.txt" >&2
     echo "strict-confer agy boundary exit: $status" >&2
     return 1
   fi
-  [ -n "$o" ] && printf '%s\n' "$o" || return 1
+  [ -n "$o" ] || return 1
+  version=$(run_isolated agy agy --version 2>"$RUN_ROOT/agy/version-stderr.txt") || return 1
+  printf 'reviewer-metadata: agy model=%s version=%s\n' "$selected_model" "$(printf '%s\n' "$version" | head -1)"
+  printf '%s\n' "$o"
 }
 
 case "$HOST" in
