@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import functools
 import fnmatch
 import hashlib
 import json
@@ -19,7 +20,23 @@ from typing import Any, Iterable, NamedTuple
 
 
 MANIFEST_PATH = ".agent/strict-gate.json"
-GIT_REPOSITORY_ENV = ("GIT_DIR", "GIT_INDEX_FILE", "GIT_PREFIX", "GIT_WORK_TREE")
+GIT_REPOSITORY_ENV_FALLBACK = (
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_CONFIG",
+    "GIT_CONFIG_COUNT",
+    "GIT_CONFIG_PARAMETERS",
+    "GIT_DIR",
+    "GIT_GRAFT_FILE",
+    "GIT_IMPLICIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_NO_REPLACE_OBJECTS",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_PREFIX",
+    "GIT_REPLACE_REF_BASE",
+    "GIT_SHALLOW_FILE",
+    "GIT_WORK_TREE",
+)
 
 
 class ManifestError(ValueError):
@@ -37,10 +54,28 @@ class CommandSpec(NamedTuple):
     toolchain: tuple[tuple[str, ...], ...] = ()
 
 
+@functools.lru_cache(maxsize=1)
+def git_repository_environment_names() -> tuple[str, ...]:
+    """Ask the active Git client for repository-local variables, with a portable fallback."""
+    names = set(GIT_REPOSITORY_ENV_FALLBACK)
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--local-env-vars"],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        return tuple(sorted(names))
+    if result.returncode == 0:
+        names.update(result.stdout.split())
+    return tuple(sorted(names))
+
+
 def command_environment() -> dict[str, str]:
     """Return a child-check environment without the calling Git hook's repository state."""
     environment = os.environ.copy()
-    for name in GIT_REPOSITORY_ENV:
+    for name in git_repository_environment_names():
         environment.pop(name, None)
     return environment
 
@@ -165,6 +200,7 @@ def verify_dependency_completeness(root: Path, data: dict[str, Any]) -> set[str]
                 text=True,
                 capture_output=True,
                 check=False,
+                env=command_environment(),
             )
         except OSError:
             continue

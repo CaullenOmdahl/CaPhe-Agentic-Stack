@@ -329,8 +329,8 @@ run_claude() {
   selected_model="$CLAUDE_MODEL"
   if [ -z "$selected_model" ]; then
     selected_model=$(configured_review_model STRICT_CONFER_CLAUDE_MODEL) || return 1
-    case "$selected_model" in claude-sonnet-*|claude-opus-*) ;; *) echo "strict-confer claude refuses unclassified review model: $selected_model" >&2; return 1 ;; esac
   fi
+  case "$selected_model" in claude-sonnet-*|claude-opus-*) ;; *) echo "strict-confer claude refuses unclassified review model: $selected_model" >&2; return 1 ;; esac
   o=$(run_isolated claude claude --model "$selected_model" --safe-mode -p --no-session-persistence "$1" 2>"$RUN_ROOT/claude/stderr.txt")
   status=$?
   if [ "$status" -ne 0 ]; then
@@ -350,18 +350,18 @@ run_codex() {
   selected_model="$CODEX_MODEL"
   if [ -z "$selected_model" ]; then
     selected_model=$(configured_review_model STRICT_CONFER_CODEX_MODEL) || return 1
-    case "$selected_model" in
-      *mini*|*spark*|*nano*|*flash*|"")
-        echo "strict-confer codex requires a configured review-grade model or a live-verified STRICT_CONFER_CODEX_MODEL override" >&2
-        return 1
-        ;;
-      gpt-[5-9].*) ;;
-      *)
-        echo "strict-confer codex refuses unclassified configured model: $selected_model" >&2
-        return 1
-        ;;
-    esac
   fi
+  case "$selected_model" in
+    *mini*|*spark*|*nano*|*flash*|"")
+      echo "strict-confer codex requires a review-grade model" >&2
+      return 1
+      ;;
+    gpt-[5-9].*) ;;
+    *)
+      echo "strict-confer codex refuses unclassified model: $selected_model" >&2
+      return 1
+      ;;
+  esac
   local -a command=(codex exec -m "$selected_model")
   command+=(--ephemeral --skip-git-repo-check --sandbox danger-full-access)
   # The outer default-deny OS boundary is authoritative. Avoid nesting Codex's own
@@ -387,8 +387,8 @@ run_agy() {
   selected_model="$AGY_MODEL"
   if [ -z "$selected_model" ]; then
     selected_model=$(configured_review_model STRICT_CONFER_AGY_MODEL) || return 1
-    case "$selected_model" in gemini-*-pro-high) ;; *) echo "strict-confer agy refuses unclassified review model: $selected_model" >&2; return 1 ;; esac
   fi
+  case "$selected_model" in gemini-*-pro-high) ;; *) echo "strict-confer agy refuses unclassified review model: $selected_model" >&2; return 1 ;; esac
   local -a command=(agy --sandbox --mode plan --dangerously-skip-permissions --model "$selected_model")
   command+=(--effort high --print="$1")
   o=$(run_isolated agy "${command[@]}" 2>"$RUN_ROOT/agy/stderr.txt")

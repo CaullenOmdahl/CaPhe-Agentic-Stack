@@ -39,9 +39,10 @@ class StrictGatePlanTests(unittest.TestCase):
                 "('GIT_DIR', 'GIT_INDEX_FILE', 'GIT_PREFIX', 'GIT_WORK_TREE')))",
             ),
         )
-        inherited = {name: os.environ.get(name) for name in strict_gate.GIT_REPOSITORY_ENV}
+        names = strict_gate.git_repository_environment_names()
+        inherited = {name: os.environ.get(name) for name in names}
         try:
-            for name in strict_gate.GIT_REPOSITORY_ENV:
+            for name in names:
                 os.environ[name] = f"inherited-{name.lower()}"
             with tempfile.TemporaryDirectory() as tmp:
                 _, returncode, output, _ = strict_gate._run_one(
@@ -96,6 +97,25 @@ class StrictGatePlanTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             verified = strict_gate.verify_dependency_completeness(Path(tmp), manifest([passing, failing]))
         self.assertEqual(verified, {"passing"})
+
+    def test_custom_dependency_verifier_does_not_inherit_calling_git_state(self):
+        checked = component("checked", ["checked/**"], verification="custom")
+        checked["dependency_verification"]["command"] = [
+            "python3",
+            "-c",
+            "import os; raise SystemExit('GIT_INDEX_FILE' in os.environ)",
+        ]
+        old = os.environ.get("GIT_INDEX_FILE")
+        try:
+            os.environ["GIT_INDEX_FILE"] = ".git/caller-index"
+            with tempfile.TemporaryDirectory() as tmp:
+                verified = strict_gate.verify_dependency_completeness(Path(tmp), manifest([checked]))
+        finally:
+            if old is None:
+                os.environ.pop("GIT_INDEX_FILE", None)
+            else:
+                os.environ["GIT_INDEX_FILE"] = old
+        self.assertEqual(verified, {"checked"})
 
     def test_affected_mode_propagates_to_consumers(self):
         data = manifest([

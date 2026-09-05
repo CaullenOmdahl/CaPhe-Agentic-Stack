@@ -3,9 +3,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/strict-confer-test.XXXXXX")"
-export STRICT_CONFER_CODEX_MODEL="${STRICT_CONFER_CODEX_MODEL:-test-codex}"
-export STRICT_CONFER_AGY_MODEL="${STRICT_CONFER_AGY_MODEL:-test-gemini}"
-export STRICT_CONFER_CLAUDE_MODEL="${STRICT_CONFER_CLAUDE_MODEL:-test-claude}"
+export STRICT_CONFER_CODEX_MODEL="${STRICT_CONFER_CODEX_MODEL:-gpt-5.6-test}"
+export STRICT_CONFER_AGY_MODEL="${STRICT_CONFER_AGY_MODEL:-gemini-test-pro-high}"
+export STRICT_CONFER_CLAUDE_MODEL="${STRICT_CONFER_CLAUDE_MODEL:-claude-sonnet-test}"
 cleanup() {
   rm -rf "$TMP"
 }
@@ -284,16 +284,29 @@ test_current_peer_cli_invocations() {
   (
     cd "$project"
     PATH="$mockbin:$PATH" \
-    STRICT_CONFER_AGY_MODEL="test-gemini" \
-    STRICT_CONFER_CODEX_MODEL="test-codex" \
+    STRICT_CONFER_AGY_MODEL="gemini-override-pro-high" \
+    STRICT_CONFER_CODEX_MODEL="gpt-5.6-override" \
       "$ROOT/bin/strict-confer.sh" claude "review prompt" \
       > "$TMP/args-override-out" 2> "$TMP/args-override-err"
   )
 
-  grep -q -- "agy args: --sandbox --mode plan --dangerously-skip-permissions --model test-gemini --effort high --print=review prompt" "$TMP/args-override-out" || \
+  grep -q -- "agy args: --sandbox --mode plan --dangerously-skip-permissions --model gemini-override-pro-high --effort high --print=review prompt" "$TMP/args-override-out" || \
     fail "agy was not invoked with the verified headless read-only command"
-  grep -q -- "codex args: exec -m test-codex --ephemeral --skip-git-repo-check --sandbox danger-full-access review prompt" "$TMP/args-override-out" || \
+  grep -q -- "codex args: exec -m gpt-5.6-override --ephemeral --skip-git-repo-check --sandbox danger-full-access review prompt" "$TMP/args-override-out" || \
     fail "codex model override was not honored"
+
+  if (
+    cd "$project"
+    PATH="$mockbin:$PATH" \
+    STRICT_CONFER_AGY_MODEL="gemini-3.1-flash-high" \
+    STRICT_CONFER_CODEX_MODEL="gpt-5.6-mini" \
+      "$ROOT/bin/strict-confer.sh" claude "reject lightweight overrides" \
+      > "$TMP/args-lightweight-out" 2> "$TMP/args-lightweight-err"
+  ); then
+    fail "lightweight model overrides bypassed the capability floor"
+  fi
+  grep -q 'requires a review-grade model\|refuses unclassified review model' "$TMP/args-lightweight-err" || \
+    fail "lightweight override rejection was not explained"
 }
 
 test_peer_credentials_are_not_copied() {
