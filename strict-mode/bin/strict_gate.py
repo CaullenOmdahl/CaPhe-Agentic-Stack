@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import functools
 import fnmatch
 import hashlib
 import json
@@ -19,6 +20,23 @@ from typing import Any, Iterable, NamedTuple
 
 
 MANIFEST_PATH = ".agent/strict-gate.json"
+GIT_REPOSITORY_ENV_FALLBACK = (
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_CONFIG",
+    "GIT_CONFIG_COUNT",
+    "GIT_CONFIG_PARAMETERS",
+    "GIT_DIR",
+    "GIT_GRAFT_FILE",
+    "GIT_IMPLICIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_NO_REPLACE_OBJECTS",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_PREFIX",
+    "GIT_REPLACE_REF_BASE",
+    "GIT_SHALLOW_FILE",
+    "GIT_WORK_TREE",
+)
 
 
 class ManifestError(ValueError):
@@ -34,6 +52,32 @@ class CommandSpec(NamedTuple):
     cache_inputs: tuple[str, ...] = ()
     cache_env: tuple[str, ...] = ()
     toolchain: tuple[tuple[str, ...], ...] = ()
+
+
+@functools.lru_cache(maxsize=1)
+def git_repository_environment_names() -> tuple[str, ...]:
+    """Ask the active Git client for repository-local variables, with a portable fallback."""
+    names = set(GIT_REPOSITORY_ENV_FALLBACK)
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--local-env-vars"],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        return tuple(sorted(names))
+    if result.returncode == 0:
+        names.update(result.stdout.split())
+    return tuple(sorted(names))
+
+
+def command_environment() -> dict[str, str]:
+    """Return a child-check environment without the calling Git hook's repository state."""
+    environment = os.environ.copy()
+    for name in git_repository_environment_names():
+        environment.pop(name, None)
+    return environment
 
 
 def _require_string_list(value: Any, label: str, *, nonempty: bool = False) -> list[str]:
@@ -156,6 +200,7 @@ def verify_dependency_completeness(root: Path, data: dict[str, Any]) -> set[str]
                 text=True,
                 capture_output=True,
                 check=False,
+                env=command_environment(),
             )
         except OSError:
             continue
@@ -255,7 +300,14 @@ def cache_key(root: Path, command: CommandSpec, manifest_identity: str) -> str:
         digest.update(name.encode())
         digest.update(os.environ.get(name, "<unset>").encode())
     for probe in command.toolchain:
-        result = subprocess.run(probe, cwd=root, text=True, capture_output=True, check=False)
+        result = subprocess.run(
+            probe,
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=command_environment(),
+        )
         digest.update(json.dumps(probe).encode())
         digest.update(str(result.returncode).encode())
         digest.update(result.stdout.encode())
@@ -270,7 +322,14 @@ def _run_one(root: Path, command: CommandSpec, manifest_identity: str, cache_dir
         cache_file = cache_dir / f"{key}.ok"
         if cache_file.is_file():
             return command, 0, "", True
-    result = subprocess.run(command.argv, cwd=root / command.cwd, text=True, capture_output=True, check=False)
+    result = subprocess.run(
+        command.argv,
+        cwd=root / command.cwd,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=command_environment(),
+    )
     output = result.stdout + result.stderr
     if result.returncode == 0 and cache_file is not None:
         cache_file.parent.mkdir(parents=True, exist_ok=True)

@@ -1,0 +1,16 @@
+{
+  "approval": "Caullen Omdahl, 2026-09-05",
+  "decision": "ADR-0003",
+  "id": "review-tool-capability-parity",
+  "lane": "full-risk",
+  "review": "pending pull request",
+  "status": "implementation-review-pending",
+  "tests": [
+    "bash strict-mode/test/strict-confer-isolation-test.sh",
+    "pre-commit child checks isolate calling Git repository environment",
+    "uv run --with pyyaml python quick_validate.py skills/second-opinion",
+    "uv run --with pyyaml python quick_validate.py skills/codex-review",
+    "bash strict-mode/bin/strict-green-gate.sh --mode completion",
+    "authenticated headless reviewer probes on Mac and Fedora"
+  ]
+}

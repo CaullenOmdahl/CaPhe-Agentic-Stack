@@ -13,10 +13,11 @@ Mandatory explicit approval (record approver + date in the ADR):
 
 **Approver(s):** Caullen Omdahl
 
-## Lower-risk → tri-AI agreement
-May proceed on agreement of the three agents (author + adversarial review by the other
-two); any dissent escalates to the human approver:
-- Routine ADRs, refactors, tests, docs, dependency bumps
+## Lower-risk behavioral work
+
+May proceed after independent pull-request review of the actual diff and the full completion gate.
+Local peer review may prepare a design or be recorded as a fallback, but it is not implementation-review
+approval. Any material dissent escalates to the human approver.
 
 ## Notes
 - Approvals are per-decision and recorded in the ADR `Approver` + `Status` fields.

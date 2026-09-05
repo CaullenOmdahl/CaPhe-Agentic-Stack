@@ -52,6 +52,12 @@ The repository is the distribution source. The local machine is the runtime envi
    - Preserve subdirectories such as `references/` because skills may link to them.
    - Install only skills that are useful for that machine and agent into their respective skill directories, such as `~/.codex/skills/`, `~/.claude/skills/`, `~/.gemini/skills/`, or `~/.agents/skills/`.
    - Rewrite installed skill canon references from `docs/canon.md` to the machine-level canon path.
+   - When installing the review workflow for Codex, keep `strict-mode`, `gh-review-certify-loop`,
+     `second-opinion`, and `codex-review` together. Install them from this repository into Codex's
+     normal skill directory; if a machine also exposes a shared `~/.agents/skills` directory, keep any
+     duplicate review-skill copies byte-identical so discovery order cannot resurrect stale commands.
+   - Do not copy a reviewer's observed availability from one machine to another. Verify executable,
+     version, authentication, and non-empty headless output separately on every destination.
 
 6. Install strict-mode source when selected.
    - Copy the checked-in `strict-mode/` tree to the machine's deployed strict-mode location.
