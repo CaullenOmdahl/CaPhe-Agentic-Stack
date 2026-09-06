@@ -3,6 +3,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/strict-confer-test.XXXXXX")"
+export STRICT_CONFER_CODEX_MODEL="${STRICT_CONFER_CODEX_MODEL:-gpt-5.6-test}"
+export STRICT_CONFER_AGY_MODEL="${STRICT_CONFER_AGY_MODEL:-gemini-test-pro-high}"
+export STRICT_CONFER_CLAUDE_MODEL="${STRICT_CONFER_CLAUDE_MODEL:-claude-sonnet-test}"
 cleanup() {
   rm -rf "$TMP"
 }
@@ -253,20 +256,57 @@ test_current_peer_cli_invocations() {
   make_arg_logging_peer "$mockbin/agy" "agy"
   make_arg_logging_peer "$mockbin/codex" "codex"
   make_mock_boundaries "$mockbin"
+  local default_home="$TMP/args-home"
+  mkdir -p "$default_home/.config/caphe"
+  printf '%s\n' \
+    'STRICT_CONFER_CLAUDE_MODEL=claude-sonnet-4-6' \
+    'STRICT_CONFER_AGY_MODEL=gemini-3.1-pro-high' \
+    'STRICT_CONFER_CODEX_MODEL=gpt-5.6-sol' \
+    > "$default_home/.config/caphe/review-models.conf"
+
+  (
+    cd "$project"
+    env -u STRICT_CONFER_CLAUDE_MODEL -u STRICT_CONFER_AGY_MODEL -u STRICT_CONFER_CODEX_MODEL \
+      HOME="$default_home" PATH="$mockbin:$PATH" \
+      "$ROOT/bin/strict-confer.sh" claude "default review prompt" \
+      > "$TMP/args-default-out" 2> "$TMP/args-default-err"
+  )
+
+  grep -q -- "agy args: --sandbox --mode plan --dangerously-skip-permissions --model gemini-3.1-pro-high --effort high --print=default review prompt" "$TMP/args-default-out" || \
+    fail "agy default invocation did not use the verified machine model"
+  grep -q -- "codex args: exec -m gpt-5.6-sol --ephemeral --skip-git-repo-check --sandbox danger-full-access default review prompt" "$TMP/args-default-out" || \
+    fail "codex default invocation did not use the configured review-grade model"
+  grep -q -- "reviewer-metadata: agy model=gemini-3.1-pro-high" "$TMP/args-default-out" || \
+    fail "agy review did not record its resolved model"
+  grep -q -- "reviewer-metadata: codex model=gpt-5.6-sol" "$TMP/args-default-out" || \
+    fail "codex review did not record its resolved model"
 
   (
     cd "$project"
     PATH="$mockbin:$PATH" \
-    STRICT_CONFER_AGY_MODEL="test-gemini" \
-    STRICT_CONFER_CODEX_MODEL="test-codex" \
+    STRICT_CONFER_AGY_MODEL="gemini-override-pro-high" \
+    STRICT_CONFER_CODEX_MODEL="gpt-5.6-override" \
       "$ROOT/bin/strict-confer.sh" claude "review prompt" \
-      > "$TMP/args-out" 2> "$TMP/args-err"
+      > "$TMP/args-override-out" 2> "$TMP/args-override-err"
   )
 
-  grep -q -- "agy args: --sandbox --mode plan --dangerously-skip-permissions --model test-gemini --effort high --print=review prompt" "$TMP/args-out" || \
+  grep -q -- "agy args: --sandbox --mode plan --dangerously-skip-permissions --model gemini-override-pro-high --effort high --print=review prompt" "$TMP/args-override-out" || \
     fail "agy was not invoked with the verified headless read-only command"
-  grep -q -- "codex args: exec -m test-codex --ephemeral --skip-git-repo-check --sandbox danger-full-access review prompt" "$TMP/args-out" || \
+  grep -q -- "codex args: exec -m gpt-5.6-override --ephemeral --skip-git-repo-check --sandbox danger-full-access review prompt" "$TMP/args-override-out" || \
     fail "codex model override was not honored"
+
+  if (
+    cd "$project"
+    PATH="$mockbin:$PATH" \
+    STRICT_CONFER_AGY_MODEL="gemini-3.1-flash-high" \
+    STRICT_CONFER_CODEX_MODEL="gpt-5.6-mini" \
+      "$ROOT/bin/strict-confer.sh" claude "reject lightweight overrides" \
+      > "$TMP/args-lightweight-out" 2> "$TMP/args-lightweight-err"
+  ); then
+    fail "lightweight model overrides bypassed the capability floor"
+  fi
+  grep -q 'requires a review-grade model\|refuses unclassified review model' "$TMP/args-lightweight-err" || \
+    fail "lightweight override rejection was not explained"
 }
 
 test_peer_credentials_are_not_copied() {

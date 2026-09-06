@@ -33,9 +33,13 @@ Only generic, reusable, public-safe skills should be promoted into this reposito
 ## Public Skills In This Repository
 
 - `skills/code-refactor-review`: local review lens for reuse, consistency, composition, and slop detection.
+- `skills/codex-review`: capability-probed Codex CLI review for non-Codex authors or explicitly labeled
+  same-family audits, without treating it as independent PR evidence.
 - `skills/gh-review-certify-loop`: active-reviewer discovery plus thread-aware pull-request certification.
 - `skills/intended-behavior`: behavior-contract workflow for inferring product behavior, UI placement, recurrence, and ask-versus-infer thresholds before implementation.
 - `skills/prepare-branch-context`: read-only branch and PR orientation before follow-up work.
+- `skills/second-opinion`: machine-local, live-probed routing to Claude Code, agy, or a labeled same-family
+  fallback without stale model pins.
 - `skills/strict-mode`: evidence-preserving work lanes, named gates, PR review, and full completion checks.
 - `skills/memory-palace-recall`: scoped local recall with sanitized exact-source evidence.
 - `skills/ux-flow-plan`: UX-first flow mapping before implementation planning.

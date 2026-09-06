@@ -61,7 +61,10 @@ explicitly recorded fallback when PR review is genuinely unavailable. Reviewing 
 implementation. At most two revise-and-re-review rounds are allowed before human tie-break.
 
 The packaged `strict-confer` peers are Claude Code, agy (Gemini-family), and Codex; direct Gemini CLI is
-not assumed equivalent. Reviewer-model overrides require client verification. Confer snapshots include
+not assumed equivalent. Reviewer models come from an owner-only per-machine configuration: agy requires a
+Gemini Pro High tier, Codex a non-lightweight current GPT tier, and Claude Sonnet or Opus. Overrides require
+a successful compatibility probe with that same client. Reviewer availability is machine-local and requires
+a successful authenticated headless invocation with recorded client version and resolved model. Confer snapshots include
 stage-0 regular blobs from the Git index only; they omit unstaged worktree bytes, symlinks, gitlinks,
 arbitrary untracked state, and the live source-root environment, and refuse non-Git or unmerged roots.
 The peer process also runs behind a fail-closed, default-deny host filesystem boundary with a scrubbed

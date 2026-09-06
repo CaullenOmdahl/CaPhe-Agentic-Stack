@@ -21,7 +21,9 @@ and also discover Dart, Node, Cargo, and Go roots.
 `strict-confer` is for design/ADR review or an explicitly recorded fallback when PR review is genuinely
 unavailable; it is not normal implementation-review evidence. Its local peer set is Claude Code, agy
 (Gemini-family), and Codex. A direct Gemini CLI install is not automatically equivalent to agy. The
-wrapper pins reviewer models that may be overridden only after the installed clients verify them.
+wrapper resolves and records review-grade models from the owner-only per-machine
+`~/.config/caphe/review-models.conf`. Optional environment overrides are valid only after that exact client
+verifies them with a successful authenticated headless invocation.
 
 Confer snapshots materialize stage-0 regular blobs directly from the Git index. They omit unstaged
 worktree bytes, symlinks, gitlinks, and every arbitrary untracked file, even when it is not ignored;

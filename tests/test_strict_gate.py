@@ -28,6 +28,34 @@ def component(name, paths, *, depends_on=None, verification="single-component"):
 
 
 class StrictGatePlanTests(unittest.TestCase):
+    def test_child_checks_do_not_inherit_calling_git_hook_repository_state(self):
+        command = strict_gate.CommandSpec(
+            component="a",
+            name="environment",
+            argv=(
+                "python3",
+                "-c",
+                "import os; raise SystemExit(any(name in os.environ for name in "
+                "('GIT_DIR', 'GIT_INDEX_FILE', 'GIT_PREFIX', 'GIT_WORK_TREE')))",
+            ),
+        )
+        names = strict_gate.git_repository_environment_names()
+        inherited = {name: os.environ.get(name) for name in names}
+        try:
+            for name in names:
+                os.environ[name] = f"inherited-{name.lower()}"
+            with tempfile.TemporaryDirectory() as tmp:
+                _, returncode, output, _ = strict_gate._run_one(
+                    Path(tmp), command, "manifest", Path(tmp) / "cache"
+                )
+        finally:
+            for name, value in inherited.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
+        self.assertEqual(returncode, 0, output)
+
     def test_completion_always_runs_every_command_uncached(self):
         data = manifest([
             component("a", ["a/**"]),
@@ -69,6 +97,25 @@ class StrictGatePlanTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             verified = strict_gate.verify_dependency_completeness(Path(tmp), manifest([passing, failing]))
         self.assertEqual(verified, {"passing"})
+
+    def test_custom_dependency_verifier_does_not_inherit_calling_git_state(self):
+        checked = component("checked", ["checked/**"], verification="custom")
+        checked["dependency_verification"]["command"] = [
+            "python3",
+            "-c",
+            "import os; raise SystemExit('GIT_INDEX_FILE' in os.environ)",
+        ]
+        old = os.environ.get("GIT_INDEX_FILE")
+        try:
+            os.environ["GIT_INDEX_FILE"] = ".git/caller-index"
+            with tempfile.TemporaryDirectory() as tmp:
+                verified = strict_gate.verify_dependency_completeness(Path(tmp), manifest([checked]))
+        finally:
+            if old is None:
+                os.environ.pop("GIT_INDEX_FILE", None)
+            else:
+                os.environ["GIT_INDEX_FILE"] = old
+        self.assertEqual(verified, {"checked"})
 
     def test_affected_mode_propagates_to_consumers(self):
         data = manifest([
