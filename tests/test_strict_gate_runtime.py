@@ -195,6 +195,52 @@ class RuntimeTests(unittest.TestCase):
             (root / 'module' / 'tracked.txt').write_text('still executed')
             self.assertNotEqual(deleted['snapshot_digest'], gate.snapshot_identity(root)['snapshot_digest'])
 
+    def test_staged_gitlink_replacement_with_regular_file_binds_file_contents(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repository(root)
+            module = self.add_gitlink(root)
+            subprocess.run(['git', 'commit', '-qm', 'gitlink'], cwd=root, check=True)
+            shutil.rmtree(module)
+            module.write_text('replacement A')
+            subprocess.run(['git', 'add', 'module'], cwd=root, check=True)
+            before = gate.snapshot_identity(root)
+            module.write_text('replacement B')
+            self.assertNotEqual(before['snapshot_digest'], gate.snapshot_identity(root)['snapshot_digest'])
+
+    def test_staged_gitlink_replacement_with_directory_binds_tracked_descendants(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repository(root)
+            module = self.add_gitlink(root)
+            subprocess.run(['git', 'commit', '-qm', 'gitlink'], cwd=root, check=True)
+            shutil.rmtree(module)
+            module.mkdir()
+            (module / 'source.txt').write_text('replacement A')
+            subprocess.run(['git', 'update-index', '--force-remove', 'module'], cwd=root, check=True)
+            subprocess.run(['git', 'add', 'module'], cwd=root, check=True)
+            before = gate.snapshot_identity(root)
+            (module / 'source.txt').write_text('replacement B')
+            self.assertNotEqual(before['snapshot_digest'], gate.snapshot_identity(root)['snapshot_digest'])
+
+    def test_staged_gitlink_replacement_with_symlink_binds_target_without_following_it(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as outside:
+            root = Path(tmp)
+            repository(root)
+            module = self.add_gitlink(root)
+            subprocess.run(['git', 'commit', '-qm', 'gitlink'], cwd=root, check=True)
+            shutil.rmtree(module)
+            target = Path(outside)
+            (target / 'private.txt').write_text('outside A')
+            module.symlink_to(target, target_is_directory=True)
+            subprocess.run(['git', 'add', 'module'], cwd=root, check=True)
+            before = gate.snapshot_identity(root)
+            (target / 'private.txt').write_text('outside B')
+            self.assertEqual(before, gate.snapshot_identity(root))
+            module.unlink()
+            module.symlink_to(root, target_is_directory=True)
+            self.assertNotEqual(before['snapshot_digest'], gate.snapshot_identity(root)['snapshot_digest'])
+
     def test_uninitialized_empty_gitlink_is_distinct_from_absent_and_nonempty_invalid(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

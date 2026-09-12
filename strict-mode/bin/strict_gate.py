@@ -463,7 +463,10 @@ def _snapshot_identity(root: Path, ancestors: tuple[Path, ...]) -> dict[str, Any
     revision = _git_bytes(root, "rev-parse", "--verify", "HEAD", check=False).decode().strip() or None
     if revision:
         tree = _git_bytes(root, "ls-tree", "-r", "-z", "HEAD").split(b"\0")
-        gitlinks.update(os.fsdecode(record.split(b"\t", 1)[1]) for record in tree if record.startswith(b"160000 "))
+        head_gitlinks = {os.fsdecode(record.split(b"\t", 1)[1]) for record in tree if record.startswith(b"160000 ")}
+        # Retain deleted checkouts, but let indexed replacements define their new type.
+        gitlinks.update(link for link in head_gitlinks
+                        if not any(path == link or path.startswith(link + "/") for path in tracked))
     digest = hashlib.sha256(b"caphe-working-snapshot-v2\0")
     digest.update((revision or "unborn").encode())
     index_bytes = b"\0".join(index)

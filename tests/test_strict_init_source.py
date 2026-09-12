@@ -1,6 +1,8 @@
 from pathlib import Path
 import importlib.util
 import os
+import json
+import hashlib
 import shutil
 import subprocess
 import tempfile
@@ -137,6 +139,89 @@ class StrictInitSourceTests(unittest.TestCase):
             hookdir = Path(git(repo, "config", "core.hooksPath"))
             self.assertIn(str(hooks / "pre-commit"), (hookdir / ".caphe-chain.sh").read_text())
             self.assertEqual((repo / ".agent/.strict-version").read_text(), "3\n")
+
+    def test_refresh_rejects_changed_chain_before_any_write(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); repo = self.repo(root)
+            original = repo / ".git/hooks/pre-commit"
+            original.write_text("#!/bin/sh\nexit 0\n"); original.chmod(0o755)
+            initializer.initialize(ROOT / "strict-mode", repo)
+            hooks = Path(git(repo, "config", "core.hooksPath"))
+            (hooks / ".caphe-chain.sh").write_text("CAPHE_PREVIOUS_HOOK=''\ntouch never-execute-this\n")
+            before = {str(p): p.read_bytes() for p in repo.rglob("*") if p.is_file()}
+            with self.assertRaises(initializer.InitError): initializer.initialize(ROOT / "strict-mode", repo)
+            self.assertEqual({str(p): p.read_bytes() for p in repo.rglob("*") if p.is_file()}, before)
+
+    def test_chain_preserves_stdin_and_refresh_rejects_noncanonical_shell_even_with_updated_digest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); repo = self.repo(root)
+            original = repo / ".git/hooks/pre-commit"
+            original.write_text('#!/bin/sh\ncat > original-stdin\nprintf "%s\\n" "$@" > original-arguments\n')
+            original.chmod(0o755)
+            initializer.initialize(ROOT / "strict-mode", repo)
+            hookdir = Path(git(repo, "config", "core.hooksPath"))
+            run = subprocess.run([str(hookdir / "pre-commit"), "one two", "three"], cwd=repo, input="stdin canary\n", text=True, capture_output=True)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual((repo / "original-stdin").read_text(), "stdin canary\n")
+            self.assertEqual((repo / "original-arguments").read_text().splitlines(), ["one two", "three"])
+            chain = hookdir / ".caphe-chain.sh"
+            chain.write_text(chain.read_text() + "touch never-execute-this\n")
+            metadata = hookdir / ".caphe-activation.json"
+            record = json.loads(metadata.read_text()); record["chain_sha256"] = hashlib.sha256(chain.read_bytes()).hexdigest()
+            metadata.write_text(json.dumps(record))
+            with self.assertRaises(initializer.InitError): initializer.initialize(ROOT / "strict-mode", repo)
+            self.assertFalse((repo / "never-execute-this").exists())
+
+    def test_refresh_rejects_missing_or_open_metadata(self):
+        for mutation in ("missing", "extra-field", "duplicate-field", "target-change"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve(); repo = self.repo(root)
+                original = repo / ".git/hooks/pre-commit"
+                original.write_text("#!/bin/sh\nexit 0\n"); original.chmod(0o755)
+                initializer.initialize(ROOT / "strict-mode", repo)
+                metadata = Path(git(repo, "config", "core.hooksPath")) / ".caphe-activation.json"
+                if mutation == "missing": metadata.unlink()
+                elif mutation == "extra-field":
+                    value = json.loads(metadata.read_text()); value["untrusted"] = True; metadata.write_text(json.dumps(value))
+                elif mutation == "duplicate-field":
+                    metadata.write_text(metadata.read_text().replace('{', '{"schema":1,', 1))
+                else: original.write_text("#!/bin/sh\nexit 2\n")
+                before = {str(p): p.read_bytes() for p in repo.rglob("*") if p.is_file()}
+                with self.assertRaises(initializer.InitError): initializer.initialize(ROOT / "strict-mode", repo)
+                self.assertEqual({str(p): p.read_bytes() for p in repo.rglob("*") if p.is_file()}, before)
+
+    def test_only_exact_known_framework_wrapper_is_not_chained(self):
+        wrapper = b'#!/usr/bin/env bash\nset -euo pipefail\nexec "$HOME/strict-mode/bin/strict-green-gate.sh" --mode affected\n'
+        self.assertEqual(len(wrapper), 104)
+        self.assertEqual(hashlib.sha256(wrapper).hexdigest(), initializer.LEGACY_WRAPPER_SHA256)
+        for suffix in (b"", b"# custom comment\n", b"echo custom command\n", b"# STRICT-MODE:MANAGED-HOOK v3\n"):
+            with self.subTest(suffix=suffix), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve(); repo = self.repo(root)
+                original = repo / ".git/hooks/pre-commit"
+                original.write_bytes(wrapper + suffix); original.chmod(0o755)
+                initializer.initialize(ROOT / "strict-mode", repo)
+                metadata = Path(git(repo, "config", "core.hooksPath")) / ".caphe-activation.json"
+                record = json.loads(metadata.read_text())
+                self.assertEqual(record["previous_hook"] is not None, bool(suffix))
+                self.assertEqual(original.read_bytes(), wrapper + suffix)
+
+    def test_accepted_custom_hook_update_reconciles_via_original_directory_and_normal_init(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); repo = self.repo(root)
+            original = repo / ".git/hooks/pre-commit"
+            original.write_text("#!/bin/sh\nexit 0\n"); original.chmod(0o755)
+            initializer.initialize(ROOT / "strict-mode", repo)
+            managed = Path(git(repo, "config", "core.hooksPath"))
+            record = json.loads((managed / initializer.ACTIVATION_FILE).read_text())
+            original.write_text("#!/bin/sh\n# accepted custom update\nexit 0\n")
+            with self.assertRaises(initializer.InitError): initializer.initialize(ROOT / "strict-mode", repo)
+            # Explicitly select the recorded original directory after reviewing the change.
+            original_directory = str(Path(record["previous_hook"]["path"]).parent)
+            git(repo, "config", "--worktree", "core.hooksPath", original_directory)
+            initializer.initialize(ROOT / "strict-mode", repo)
+            refreshed = initializer.read_activation(repo, managed, canon=ROOT / "strict-mode")
+            self.assertEqual(refreshed["previous_hook"]["sha256"], hashlib.sha256(original.read_bytes()).hexdigest())
+            self.assertIn("accepted custom update", original.read_text())
 
 
 if __name__ == "__main__":
