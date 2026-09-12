@@ -820,3 +820,46 @@ class InstallContracts(unittest.TestCase):
                 for relative in (".CODEX/MEMORIES/install", ".CoDeX/SeSsIoNs/install"):
                     with self.subTest(relative=relative), self.assertRaisesRegex(installer.InstallError, "canonical"):
                         installer._private_preflight(home / relative, source, root / "target")
+
+    def test_return_to_previous_payload_keeps_transition_receipts_immutable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); source = self.fixture_source(root); target = root / "runtime"; private = root / "private"
+            def select(name):
+                for prior in ("a", "b", "c"):
+                    relative = "tools/release-" + prior + ".py"
+                    if (source / relative).exists():
+                        subprocess.run(["git", "-C", str(source), "rm", "-q", "--cached", relative], check=True)
+                        (source / relative).unlink()
+                (source / ("tools/release-" + name + ".py")).write_text(name + "\n")
+                subprocess.run(["git", "-C", str(source), "add", "."], check=True)
+                return installer.plan_runtime_install(source, target)
+            def receipts():
+                return {p.name: (p.read_bytes(), p.stat().st_mode, p.stat().st_ino) for p in private.glob("runtime-*.json")}
+            for version in ("a", "b", "c"):
+                plan = select(version)
+                installer.apply_runtime_plan(plan, inventory_root=private)
+            before = receipts(); self.assertEqual(len(before), 3)
+            previous_runtime = self.snapshot(target)
+            plan = select("b")
+            supplementary = installer.runtime_receipt_path(private, plan["source_digest"], target,
+                                                           retired_files=["tools/release-c.py"])
+            supplementary.write_text("unrelated private bytes\n"); supplementary.chmod(0o600)
+            with self.assertRaisesRegex(installer.InstallError, "private receipt collision"):
+                installer.apply_runtime_plan(plan, inventory_root=private)
+            self.assertEqual(supplementary.read_text(), "unrelated private bytes\n")
+            self.assertEqual(self.snapshot(target), previous_runtime)
+            supplementary.unlink()  # Remove only this disposable collision fixture.
+            with self.assertRaisesRegex(installer.InstallError, "injected receipt failure"):
+                installer.apply_runtime_plan(plan, inventory_root=private, fail_after=len(plan["payload"]) + 3)
+            self.assertEqual(receipts(), before)
+            self.assertEqual(self.snapshot(target), previous_runtime)
+            result = installer.apply_runtime_plan(plan, inventory_root=private)
+            self.assertEqual(result["retired_files"], ["tools/release-c.py"])
+            self.assertTrue(installer.verify_runtime_plan(plan))
+            returned = receipts(); self.assertEqual(len(returned), 4)
+            self.assertEqual({name: returned[name] for name in before}, before)
+            installer.apply_runtime_plan(plan, inventory_root=private)
+            installer.apply_runtime_plan(installer.plan_runtime_install(source, target), inventory_root=private)
+            self.assertEqual(receipts(), returned)
+            self.assertTrue((target / "tools/release-b.py").is_file())
+            self.assertFalse((target / "tools/release-c.py").exists())

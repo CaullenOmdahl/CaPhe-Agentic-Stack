@@ -247,13 +247,19 @@ def verify_runtime_plan(plan):
             and _metadata_matches(target, plan["payload"]))
 
 
-def runtime_receipt_path(inventory, source_digest, target):
-    """Each canonical target has its own immutable receipt for a source payload.
+def runtime_receipt_path(inventory, source_digest, target, *, retired_files=None):
+    """Retain the original payload receipt; optionally name a retirement transition.
 
-    Legacy source-only receipts are left untouched; they cannot name multiple
-    targets and are not adopted as ownership claims for this namespace.
+    Three-argument callers retain their existing source/target path. A supplemental
+    receipt binds differing retirement data without replacing any prior evidence.
     """
-    identity = json.dumps([source_digest, str(_safe_path(target))], separators=(",", ":"))
+    fields = [source_digest, str(_safe_path(target))]
+    if retired_files is not None:
+        if (not isinstance(retired_files, list) or not all(_public(name) for name in retired_files)
+                or retired_files != sorted(set(retired_files))):
+            raise InstallError("invalid receipt retirement inventory")
+        fields.extend(["retirement-v1", retired_files])
+    identity = json.dumps(fields, separators=(",", ":"))
     key = hashlib.sha256(identity.encode()).hexdigest()
     return Path(inventory) / ("runtime-" + key + ".json")
 
@@ -297,22 +303,35 @@ def apply_runtime_plan(plan, *, inventory_root, fail_after=None):
         raise InstallError("runtime metadata differs from installed format")
     receipt = {"action": "install-runtime", "source_digest": plan["source_digest"], "target": str(target), "verified": True, "retired_files": [item[0] for item in retired]}
     receipt_data = (json.dumps(receipt, sort_keys=True) + "\n").encode()
-    _safe_path(receipt_path)
-    if receipt_path.exists():
-        if not receipt_path.is_file():
+    transition_path = runtime_receipt_path(inventory, plan["source_digest"], target, retired_files=receipt["retired_files"])
+    for candidate in (receipt_path, transition_path):
+        _safe_path(candidate)
+        if not candidate.exists():
+            receipt_path = candidate
+            break
+        if not candidate.is_file():
             raise InstallError("private receipt must be a regular file")
         try:
-            receipt_bytes = receipt_path.read_bytes()
+            receipt_bytes = candidate.read_bytes()
             existing = json.loads(receipt_bytes, object_pairs_hook=_unique_json_object)
             known = (isinstance(existing, dict) and set(existing) == set(receipt)
                      and all(existing[key] == receipt[key] for key in receipt if key != "retired_files")
                      and existing["verified"] is True and isinstance(existing["retired_files"], list)
                      and all(_public(name) for name in existing["retired_files"])
                      and existing["retired_files"] == sorted(set(existing["retired_files"]))
-                     and installed == plan["payload"]
                      and receipt_bytes == (json.dumps(existing, sort_keys=True) + "\n").encode())
-            if stat.S_IMODE(receipt_path.stat().st_mode) != 0o600 or (receipt_bytes != receipt_data and not known):
+            if stat.S_IMODE(candidate.stat().st_mode) != 0o600 or not known:
                 raise ValueError("unowned receipt")
+            if receipt_bytes == receipt_data:
+                receipt_path = candidate
+                break
+            if candidate == transition_path:
+                raise ValueError("transition receipt differs from its bound retirement data")
+            # Replanning an already installed payload needs no new receipt. An
+            # actual return from another payload records its differing retirement.
+            if installed == plan["payload"] and not transition_path.exists():
+                receipt_path = candidate
+                break
         except (ValueError, TypeError, OSError) as error:
             raise InstallError("private receipt collision") from error
     if any(parent.exists() and not parent.is_dir() for parent in receipt_path.parents):
