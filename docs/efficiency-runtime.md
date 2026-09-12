@@ -44,7 +44,10 @@ Context snapshot v3 streams tracked worktree bytes, modes, and symlink targets d
 normalized Git diff cannot establish freshness. This adds file-reading cost even in a clean checkout.
 The completion gate separately binds initialized nested Git repositories recursively, including their working changes.
 Absent and empty uninitialized gitlinks have explicit identities; required checks still determine
-whether their contents are needed. Nonempty invalid checkouts and hidden index flags fail closed.
+whether their contents are needed. Unstaged gitlink replacements bind their actual file type and
+visible contents; symlink leaves bind the link target without following it. Embedded repositories
+inside parent-tracked directories bind their own HEAD and index. Malformed present Git metadata and
+hidden index flags fail closed.
 
 For history, feed `project_history_envelope` only caller-sanitized excerpts with source ID, coordinate,
 and digest. It rejects raw tool/reasoning records and malformed envelopes. Pattern redaction is a second

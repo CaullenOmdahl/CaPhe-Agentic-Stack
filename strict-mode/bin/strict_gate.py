@@ -424,16 +424,78 @@ def _git_bytes(root: Path, *args: str, check: bool = True) -> bytes:
     return result.stdout
 
 
+def _symlink_gitlinks(root: Path) -> set[str]:
+    records = _git_bytes(root, "ls-files", "--stage", "-z").split(b"\0")
+    return {os.fsdecode(record.split(b"\t", 1)[1]) for record in records
+            if record.startswith(b"160000 ")
+            and (root / os.fsdecode(record.split(b"\t", 1)[1])).is_symlink()}
+
+
+def _diff_pathspec(excluded: set[str]) -> tuple[str, ...]:
+    # Git refuses to diff an indexed gitlink replaced by a symlink. Its leaf is
+    # bound directly by the snapshot and explicitly included in changed paths.
+    return ("--", ".", *(f":(top,exclude,literal){path}" for path in sorted(excluded))) if excluded else ()
+
+
 def changed_paths(root: Path) -> list[str]:
     """Cover the actual working state that checks execute, including unstaged and new paths."""
-    paths = set(_git_paths(root, "diff", "--cached", "--ignore-submodules=none", "--no-renames", "--name-only"))
-    paths.update(_git_paths(root, "diff", "--ignore-submodules=none", "--no-renames", "--name-only"))
+    paths = _symlink_gitlinks(root)
+    pathspec = _diff_pathspec(paths)
+    paths.update(_git_paths(root, "diff", "--cached", "--ignore-submodules=none", "--no-renames", "--name-only", *pathspec))
+    paths.update(_git_paths(root, "diff", "--ignore-submodules=none", "--no-renames", "--name-only", *pathspec))
     paths.update(_git_paths(root, "ls-files", "--others", "--exclude-standard"))
     return sorted(paths)
 
 
 def snapshot_identity(root: Path) -> dict[str, Any]:
     return _snapshot_identity(root.absolute(), ())
+
+
+def _replacement_paths(root: Path, directories: set[str]) -> set[str]:
+    """List ordinary gitlink replacements using Git ignore rules, without changing its index."""
+    if not directories:
+        return set()
+    # The real index still labels these paths as gitlinks, which suppresses their children.
+    # An absent private index makes only this read treat them as ordinary untracked trees.
+    with tempfile.TemporaryDirectory(prefix="caphe-snapshot-index-") as temporary:
+        env = command_environment()
+        env.update(GIT_INDEX_FILE=str(Path(temporary) / "absent-index"), GIT_OPTIONAL_LOCKS="0")
+        try:
+            result = subprocess.run(
+                ["git", "ls-files", "--others", "--exclude-standard", "-z", "--",
+                 *(f":(top,literal){path}" for path in sorted(directories))],
+                cwd=root, capture_output=True, check=True, env=env, timeout=30,
+            )
+        except (OSError, subprocess.SubprocessError):
+            raise ManifestError("snapshot replacement inventory could not complete") from None
+    return {os.fsdecode(path).rstrip("/") for path in result.stdout.split(b"\0") if path}
+
+
+def _snapshot_paths(root: Path, tracked: set[str], gitlinks: set[str], others: set[str]) -> set[str]:
+    paths = tracked | gitlinks | others
+    visited = set()
+    def inspect_parents(entries):
+        parents = {parent for relative in entries for parent in Path(relative).parents if str(parent) != "."}
+        for parent in sorted(parents - visited, key=lambda value: (len(value.parts), str(value))):
+            path = root / parent
+            if path.is_symlink():
+                raise ManifestError("snapshot path has a symlinked parent")
+            marker = path / ".git"
+            if path.is_file() or (path.is_dir() and (marker.exists() or marker.is_symlink())):
+                paths.add(str(parent))
+            visited.add(parent)
+
+    # Check ancestors before probing replacement directories or their Git metadata.
+    inspect_parents(paths)
+    replacements = {relative for relative in gitlinks
+                    if not (root / relative).is_symlink() and (root / relative).is_dir()
+                    and not ((root / relative / ".git").exists() or (root / relative / ".git").is_symlink())}
+    descendants = _replacement_paths(root, replacements)
+    paths.update(descendants)
+    # Git inventories files, so an embedded root beneath a parent-tracked directory
+    # might never appear as an entry of its own. Inspect each candidate parent once.
+    inspect_parents(descendants)
+    return paths
 
 
 def _snapshot_identity(root: Path, ancestors: tuple[Path, ...]) -> dict[str, Any]:
@@ -473,7 +535,7 @@ def _snapshot_identity(root: Path, ancestors: tuple[Path, ...]) -> dict[str, Any
     digest.update(len(index_bytes).to_bytes(8, "big") + index_bytes)
     others = {path.rstrip("/") for path in _git_paths(root, "ls-files", "--others", "--exclude-standard")}
     dirty = False
-    for relative in sorted(tracked | gitlinks | others):
+    for relative in sorted(_snapshot_paths(root, tracked, gitlinks, others)):
         path = root / relative
         for parent in path.parents:
             if parent == root:
@@ -486,18 +548,15 @@ def _snapshot_identity(root: Path, ancestors: tuple[Path, ...]) -> dict[str, Any
         directory = not path.is_symlink() and path.is_dir()
         git_marker = path / ".git"
         embedded_git = directory and (git_marker.exists() or git_marker.is_symlink())
-        if relative in gitlinks or embedded_git:
-            if path.is_symlink():
-                raise ManifestError("snapshot Git checkout must not be a symlink")
-            if relative in gitlinks and not path.exists():
-                digest.update(b"gitlink:absent\0")
-            elif relative in gitlinks and path.is_dir() and next(path.iterdir(), None) is None:
-                digest.update(b"gitlink:uninitialized-empty\0")
-            else:
-                nested = _snapshot_identity(path, ancestors)
-                payload = json.dumps(nested, sort_keys=True).encode()
-                digest.update(b"git-checkout\0" + len(payload).to_bytes(8, "big") + payload)
-                dirty = dirty or nested["dirty"]
+        if embedded_git:
+            nested = _snapshot_identity(path, ancestors)
+            payload = json.dumps(nested, sort_keys=True).encode()
+            digest.update(b"git-checkout\0" + len(payload).to_bytes(8, "big") + payload)
+            dirty = dirty or nested["dirty"]
+        elif relative in gitlinks and not path.is_symlink() and not path.exists():
+            digest.update(b"gitlink:absent\0")
+        elif relative in gitlinks and directory and next(path.iterdir(), None) is None:
+            digest.update(b"gitlink:uninitialized-empty\0")
         elif directory:
             # A tracked file may now be a directory; Git lists its visible children separately.
             digest.update(f"directory:{path.lstat().st_mode & 0o777}\0".encode())
@@ -520,11 +579,12 @@ def _snapshot_identity(root: Path, ancestors: tuple[Path, ...]) -> dict[str, Any
                     raise ManifestError("snapshot path changed during hashing")
         else:
             raise ManifestError(f"snapshot path changed or has unsupported type: {relative}")
+    pathspec = _diff_pathspec(_symlink_gitlinks(root))
     for args in (
         ("diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "--ignore-submodules=none", "--submodule=short"),
         ("diff", "--binary", "--no-ext-diff", "--no-textconv", "--ignore-submodules=none", "--submodule=short"),
     ):
-        payload = _git_bytes(root, *args)
+        payload = _git_bytes(root, *args, *pathspec)
         digest.update(len(payload).to_bytes(8, "big"))
         digest.update(payload)
     dirty = dirty or bool(changed_paths(root))
@@ -643,7 +703,7 @@ def execute_plan(
 
 
 def _git_paths(root: Path, *args: str) -> list[str]:
-    return [os.fsdecode(path) for path in _git_bytes(root, *args, "-z").split(b"\0") if path]
+    return [os.fsdecode(path) for path in _git_bytes(root, args[0], "-z", *args[1:]).split(b"\0") if path]
 
 
 def _relative_cwd(root: Path, manifest: Path) -> str:
