@@ -6,6 +6,11 @@ import tempfile
 import unittest
 import subprocess
 import json
+import hashlib
+import signal
+import sys
+import time
+from unittest import mock
 
 
 PATH = Path(__file__).parents[1] / "tools" / "stack_prepare.py"
@@ -30,6 +35,86 @@ class PrepareContracts(unittest.TestCase):
         return subprocess.run(['python3',str(PATH),'--root',str(root),'--manifest',str(manifest_path),
                                '--receipt-root',str(private),'--check-receipt',str(receipt)],
                               capture_output=True,text=True,timeout=3)
+
+    def detached_writer(self):
+        writer = ("import os,time\nfrom pathlib import Path\ndeadline=time.monotonic()+2\n"
+                  "while time.monotonic()<deadline:\n"
+                  " try:\n  os.write(1,b'x'*4096)\n except BrokenPipeError:\n"
+                  "  Path('writer-closed').write_text('closed'); break\n"
+                  " time.sleep(.005)\n")
+        parent = ("import subprocess,sys,time\nfrom pathlib import Path\n"
+                  "child=subprocess.Popen([sys.executable,'-c'," + repr(writer) + "],start_new_session=True)\n"
+                  "Path('detached.pid').write_text(str(child.pid))\n"
+                  "Path('output').write_text('partial output')\ntime.sleep(3)\n")
+        return [sys.executable, '-c', parent]
+
+    def cleanup_writer(self, root):
+        path = root / 'detached.pid'
+        if path.exists():
+            try:
+                os.kill(int(path.read_text()), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+    def test_runner_hashes_complete_merged_multimegabyte_binary_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            first, second = b'A' * 2_097_152 + b'\x00\xff', b'B' * 1_048_576 + b'\xfe'
+            script = ("import os\nfor fd,data in ((1,b'A'*2097152+b'\\x00\\xff'),(2,b'B'*1048576+b'\\xfe')):\n"
+                      " remaining=memoryview(data)\n while remaining:\n  count=os.write(fd,remaining); remaining=remaining[count:]\n")
+            result = prepare._run([sys.executable, '-c', script], root, os.environ.copy(), 3)
+            self.assertEqual(result, {'exit_code': 0, 'output_digest': hashlib.sha256(first + second).hexdigest()})
+
+    @unittest.skipUnless(os.name == 'posix', 'fixture requires detached POSIX sessions')
+    def test_timeout_closes_detached_writer_pipe_and_failure_receipt_is_not_fresh(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp).resolve(); root, private, _, manifest, _ = self.receipt_fixture(base)
+            manifest.update(argv=self.detached_writer(), timeout_seconds=.3)
+            try:
+                start = time.monotonic()
+                receipt = prepare.run_prepare(root, manifest, receipt_root=private)
+                elapsed = time.monotonic() - start
+                self.assertEqual(receipt['outcome']['exit_code'], 124)
+                self.assertLess(elapsed, 1.3)
+                self.assertFalse(receipt['success'])
+                self.assertFalse(prepare.is_fresh(root, manifest, receipt))
+                self.assertTrue(Path(receipt['receipt_path']).is_file())
+                limit = time.monotonic() + .6
+                while not (root / 'writer-closed').exists() and time.monotonic() < limit:
+                    time.sleep(.01)
+                self.assertTrue((root / 'writer-closed').exists(), 'escaped writer kept its output destination writable after timeout')
+            finally:
+                self.cleanup_writer(root)
+
+    def test_deadline_includes_process_wait_after_output_closes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            start = time.monotonic()
+            result = prepare._run([sys.executable, '-c', 'import os,time; os.close(1); os.close(2); time.sleep(3)'],
+                                  Path(tmp), os.environ.copy(), .1)
+            self.assertEqual(result['exit_code'], 124)
+            self.assertLess(time.monotonic() - start, 1)
+
+    def test_failed_probe_keeps_failed_receipt_and_never_runs_generator(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, private, _, manifest, _ = self.receipt_fixture(Path(tmp).resolve())
+            manifest['toolchain'] = [[sys.executable, '-c', 'import os; os.write(2,b"bad probe\\xff"); raise SystemExit(7)']]
+            manifest['argv'] = [sys.executable, '-c', "from pathlib import Path; Path('generator-ran').touch()"]
+            receipt = prepare.run_prepare(root, manifest, receipt_root=private)
+            self.assertFalse(receipt['success'])
+            self.assertFalse(prepare.is_fresh(root, manifest, receipt))
+            self.assertFalse((root / 'generator-ran').exists())
+            self.assertTrue(Path(receipt['receipt_path']).is_file())
+
+    def test_native_nonposix_execution_rejects_before_launch_or_receipt_creation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); private = root / 'private'
+            with mock.patch.object(prepare.os, 'name', 'nt'), mock.patch.object(prepare.subprocess, 'Popen') as launch:
+                with self.assertRaisesRegex(prepare.PrepareError, 'POSIX.*WSL'):
+                    prepare._run(['not-run'], root, {}, 1)
+                with self.assertRaisesRegex(prepare.PrepareError, 'POSIX.*WSL'):
+                    prepare.run_prepare(root, {}, receipt_root=private)
+                launch.assert_not_called()
+            self.assertFalse(private.exists())
 
     def test_cli_rejects_fabricated_checkout_receipt_before_identity_probes(self):
         with tempfile.TemporaryDirectory() as tmp:

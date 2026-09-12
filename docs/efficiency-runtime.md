@@ -105,6 +105,10 @@ the same private-storage boundary as writing; this is local provenance, not exec
 The freshness check exits nonzero on missing or stale evidence. Never
 skip required completion checks because preparation was fresh.
 
+Preparation commands run on POSIX hosts. Their merged stdout/stderr is hashed incrementally through
+a pipe; the deadline covers output collection and process completion. Failed runs retain unsuccessful
+diagnostic receipts and never count as fresh preparation.
+
 The gate includes staged, unstaged, and non-ignored untracked changes because checks execute the working
 checkout. Commands in a component run in declared order by default. `parallel_safe: true` is an explicit
 independence claim; use it only for checks that do not share installation or generation state. Failed
@@ -113,10 +117,13 @@ commands uncached, and a source change during checks requires a rerun against th
 
 Gate process execution supports POSIX hosts; this distribution is verified on macOS and Linux.
 Native Windows execution fails before launching checks; use a Linux environment such as WSL.
-After a timeout, the gate kills the original process group and gives output collection a bounded
-grace period. It retains available failure output and closes inherited output pipes if descendants
+After a check or dependency-verifier timeout, the gate kills the original process group and gives
+output collection a bounded grace period. It retains available failure output and closes inherited output pipes if descendants
 keep them open. This bounds collection; it does not establish containment of detached descendants.
 Ordinary completed commands retain their full output.
+Custom dependency verifiers must leave the source snapshot unchanged; mutation rejects planning and
+execution before narrower checks can run. Generated unittest manifests include both root modules and
+`tests/` when present, with independently scheduled nested projects excluded from parent discovery.
 
 ```bash
 bash "$CAPHE_RUNTIME/strict-mode/bin/strict-green-gate.sh" --mode affected
@@ -217,6 +224,12 @@ hook target, including forwarded hooks, without executing that chain. These loca
 they are not signed attestation. Older records without forwarded-target identities require reconciliation
 through the original hook directory before doctor can verify them.
 Global installation and project activation are distinct results.
+
+Git resolves [relative hook paths](https://git-scm.com/docs/git-config#Documentation/git-config.txt-corehooksPath)
+from the hook's execution directory; [receive hooks run from the Git directory](https://git-scm.com/docs/githooks#_description).
+The initializer rejects receive-sensitive hooks with relative invocations before changing files or
+configuration, including such invocations in existing managed records. Reconcile and verify an absolute
+original hook directory before retrying initialization.
 
 If an original custom hook intentionally changes, verify and record that accepted change, restore
 `core.hooksPath` in the worktree configuration to the recorded original hook directory, and rerun the

@@ -9,6 +9,7 @@ import math
 import os
 from pathlib import Path
 import re
+import selectors
 import signal
 import stat
 import subprocess
@@ -28,6 +29,12 @@ class PrepareError(ValueError):
 
 
 _REQUIRED = {"argv", "cwd", "inputs", "outputs", "toolchain", "env"}
+PROCESS_PLATFORM_ERROR = 'Preparation process execution requires macOS or Linux/POSIX; use Linux under WSL on Windows.'
+
+
+def _require_posix():
+    if os.name != 'posix':
+        raise PrepareError(PROCESS_PLATFORM_ERROR)
 
 
 def _argv(value):
@@ -110,30 +117,52 @@ def _environment(manifest):
 
 
 def _run(argv, cwd, environment, timeout):
-    # Spool output privately so a noisy generator cannot fill the coordinator context or memory.
-    with tempfile.TemporaryFile() as output:
-        try:
-            process = subprocess.Popen(argv, cwd=cwd, env=environment, stdout=output,
-                                       stderr=subprocess.STDOUT, start_new_session=(os.name == 'posix'))
-        except OSError:
-            return {'exit_code': 127, 'output_digest': None}
-        try:
-            code = process.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
+    _require_posix()
+    deadline = time.monotonic() + timeout
+    try:
+        process = subprocess.Popen(argv, cwd=cwd, env=environment, stdout=subprocess.PIPE,
+                                   stderr=subprocess.STDOUT, bufsize=0, start_new_session=True)
+    except OSError:
+        return {'exit_code': 127, 'output_digest': None}
+    digest = hashlib.sha256()
+    try:
+        os.set_blocking(process.stdout.fileno(), False)
+        with selectors.DefaultSelector() as selector:
+            selector.register(process.stdout, selectors.EVENT_READ)
+            while selector.get_map():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise subprocess.TimeoutExpired(argv, timeout)
+                for key, _ in selector.select(remaining):
+                    try:
+                        block = os.read(key.fd, 65_536)
+                    except BlockingIOError:
+                        continue
+                    if block:
+                        digest.update(block)
+                    else:
+                        selector.unregister(key.fileobj)
+        # EOF can arrive before the child exits; both belong to the same deadline.
+        code = process.wait(timeout=max(0, deadline - time.monotonic()))
+    except subprocess.TimeoutExpired:
+        code = 124
+    finally:
+        # Escaped descendants must lose their reader, not inherit an ever-growing spool.
+        process.stdout.close()
+        if process.returncode is None:
             try:
-                os.killpg(process.pid, signal.SIGKILL) if os.name == 'posix' else process.kill()
+                os.killpg(process.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
-            process.wait()
-            code = 124
-        output.seek(0)
-        digest = hashlib.sha256()
-        for block in iter(lambda: output.read(1048576), b''):
-            digest.update(block)
-        return {'exit_code': code, 'output_digest': digest.hexdigest()}
+            try:
+                process.wait(timeout=.2)
+            except subprocess.TimeoutExpired:
+                pass
+    return {'exit_code': code, 'output_digest': digest.hexdigest()}
 
 
 def _identity(root, manifest):
+    _require_posix()
     validate_manifest(manifest)
     cwd = _path(root, manifest['cwd'])
     if not cwd.is_dir():
@@ -212,6 +241,7 @@ def read_receipt(root, receipt_path, *, receipt_root):
 
 
 def run_prepare(root: Path | str, manifest: Mapping[str, Any], *, receipt_root: Path | str) -> dict:
+    _require_posix()
     root = Path(root).resolve(strict=True)
     directory = _receipt_directory(root, receipt_root)
     original_directory = directory.stat()
@@ -264,6 +294,8 @@ def main(argv=None):
     parser.add_argument('--receipt-root', required=True)
     parser.add_argument('--check-receipt', help='Check freshness without running the preparation command')
     args = parser.parse_args(argv)
+    if os.name != 'posix':
+        parser.exit(2, PROCESS_PLATFORM_ERROR + '\n')
     try:
         manifest = json.loads(Path(args.manifest).read_text(), object_pairs_hook=_json_object)
         if args.check_receipt:

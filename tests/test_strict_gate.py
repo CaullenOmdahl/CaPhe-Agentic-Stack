@@ -2,6 +2,7 @@ import importlib.util
 import json
 import os
 import signal
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -179,6 +180,70 @@ class StrictGatePlanTests(unittest.TestCase):
             self.assertIn('failure detail', output)
             self.assertEqual(output, ("x" * 2097152) + "failure detail\n")
 
+    def test_dependency_verifiers_cannot_mutate_source_before_scoped_execution(self):
+        for mode in ('affected', 'plan'):
+            for mutate in (False, True):
+                with self.subTest(mode=mode, mutate=mutate), tempfile.TemporaryDirectory() as temporary:
+                    base = Path(temporary).resolve(); root = base / 'repo'; root.mkdir()
+                    (root / '.agent').mkdir()
+                    (root / 'a.txt').write_text('a'); (root / 'b.txt').write_text('b')
+                    a = component('a', ['a.txt', '.agent/**'], verification='custom')
+                    b = component('b', ['b.txt'], verification='custom')
+                    a['dependency_verification']['command'] = [sys.executable, '-c', 'pass']
+                    b['dependency_verification']['command'] = [sys.executable, '-c',
+                        "from pathlib import Path; Path('b.txt').write_text('changed')" if mutate else 'pass']
+                    for item in (a, b):
+                        item['commands'][0]['run'] = [sys.executable, '-c',
+                            "from pathlib import Path; Path(" + repr(str(base / (item['name'] + '-ran'))) + ").write_text('ran')"]
+                    (root / '.agent/strict-gate.json').write_text(json.dumps(manifest([a, b])))
+                    environment = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
+                    for args in (('init', '-q'), ('config', 'user.name', 'Fixture'),
+                                 ('config', 'user.email', 'fixture@example.invalid'),
+                                 ('config', 'core.hooksPath', '/dev/null'), ('config', 'gc.auto', '0'),
+                                 ('config', 'maintenance.auto', 'false'), ('add', '.'), ('commit', '-qm', 'fixture')):
+                        subprocess.run(['git', *args], cwd=root, env=environment, check=True, capture_output=True)
+                    (root / 'a.txt').write_text('changed')
+                    result = subprocess.run([sys.executable, '-I', str(MODULE_PATH), '--mode', mode], cwd=root,
+                                            env=environment, capture_output=True, text=True, timeout=5)
+                    if mutate:
+                        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                        self.assertIn('source changed during dependency verification', result.stderr)
+                        self.assertNotIn('GREEN', result.stdout)
+                        self.assertFalse((base / 'a-ran').exists())
+                        self.assertFalse((base / 'b-ran').exists())
+                        self.assertEqual((root / 'b.txt').read_text(), 'changed')
+                    else:
+                        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                        self.assertEqual((base / 'a-ran').exists(), mode == 'affected')
+                        self.assertFalse((base / 'b-ran').exists())
+
+    def test_mixed_unittest_locations_run_once_and_root_failure_is_not_skipped(self):
+        for packaged_tests in (False, True):
+            with self.subTest(packaged_tests=packaged_tests), tempfile.TemporaryDirectory() as temporary:
+                base = Path(temporary).resolve(); root = base / 'repo'; root.mkdir()
+                child = root / 'child'; child.mkdir()
+                for project in (root, child):
+                    (project / 'pyproject.toml').write_text("[project]\nname='fixture'\nversion='0.1.0'\n")
+                    (project / 'tests').mkdir()
+                    if packaged_tests: (project / 'tests/__init__.py').write_text('')
+                (child / '__init__.py').write_text("import os; from pathlib import Path; Path(os.environ['IMPORT_LOG']).write_text('unexpected parent import')")
+                for directory, label, passing in ((root, 'root', False), (root / 'tests', 'suite', True),
+                                                  (child, 'child', True), (child / 'tests', 'child-suite', True)):
+                    # Same basename in both locations also exercises separate import namespaces.
+                    (directory / 'test_shared.py').write_text(
+                        "import os, unittest\nclass Fixture(unittest.TestCase):\n"
+                        "    def test_run(self):\n"
+                        "        with open(os.environ['RUN_LOG'],'a') as log: log.write(" + repr(label + '\n') + ")\n"
+                        "        self.assertTrue(" + str(passing) + ")\n")
+                data = strict_gate.discover_default_manifest(root); strict_gate.validate_manifest(data)
+                commands = [item for item in data['components'][0]['commands'] if item['name'].startswith('python-')]
+                environment = {**os.environ, 'RUN_LOG': str(base / 'runs'), 'IMPORT_LOG': str(base / 'imports')}
+                codes = [subprocess.run(item['run'], cwd=root / item.get('cwd', '.'), env=environment,
+                                        capture_output=True, text=True, timeout=5).returncode for item in commands]
+                self.assertEqual(codes.count(1), 1, 'root test failure must make its command fail')
+                self.assertEqual(sorted((base / 'runs').read_text().splitlines()), ['child', 'child-suite', 'root', 'suite'])
+                self.assertFalse((base / 'imports').exists())
+
     def test_completion_always_runs_every_command_uncached(self):
         data = manifest([
             component("a", ["a/**"]),
@@ -292,6 +357,32 @@ class StrictGatePlanTests(unittest.TestCase):
                 else:
                     os.environ["STRICT_TEST_VALUE"] = old
             self.assertNotEqual(first, second)
+
+    @unittest.skipUnless(os.name == 'posix', 'fixture requires detached POSIX sessions')
+    def test_cache_probe_timeout_cannot_wait_for_detached_output_writer(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'input').write_text('input')
+            probe = self.detached_writer(root)
+            command = strict_gate.CommandSpec('fixture', 'cached',
+                (sys.executable, '-c', "from pathlib import Path; Path('command-ran').write_text('ran')"),
+                cache_allowed=True, cache_inputs=('input',), toolchain=(probe,))
+            original_run = strict_gate.subprocess.run
+            def short_probe(argv, **kwargs):
+                if tuple(argv) == probe:
+                    self.assertEqual(kwargs['timeout'], 10)
+                    kwargs['timeout'] = 0.3
+                return original_run(argv, **kwargs)
+            try:
+                with mock.patch.object(strict_gate.subprocess, 'run', side_effect=short_probe):
+                    started = time.monotonic()
+                    with self.assertRaisesRegex(strict_gate.ManifestError, 'toolchain'):
+                        strict_gate._run_one(root, command, 'manifest', root / 'cache')
+                    self.assertLess(time.monotonic() - started, 1.3)
+                self.assertFalse((root / 'cache').exists())
+                self.assertFalse((root / 'command-ran').exists())
+            finally:
+                self.cleanup_detached_writer(root)
 
     def test_default_manifest_checks_the_staged_diff(self):
         with tempfile.TemporaryDirectory() as tmp:
