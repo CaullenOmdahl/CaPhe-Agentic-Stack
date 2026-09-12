@@ -52,6 +52,12 @@ def _safe_digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _version(path):
+    if not _safe_digest(path):
+        return None
+    return {b"1": "1", b"2": "2", b"3": "3"}.get(path.read_bytes().strip(), "invalid")
+
+
 def _instructions(repo, runtime):
     begin = b"<!-- STRICT-MODE:BEGIN (managed by strict-mode; edit the canon, not this marker) -->"
     end = b"<!-- STRICT-MODE:END -->"
@@ -103,9 +109,7 @@ def inspect(repo, *, runtime, git_config=None):
     if not runtime.is_dir():
         unresolved.append("runtime_missing")
     version_file = runtime / "VERSION"
-    version = version_file.read_text().strip() if _safe_digest(version_file) else None
-    if version not in (None, "1", "2", "3"):
-        version = "invalid"
+    version = _version(version_file)
     if (runtime / ".caphe-runtime.json").exists() and version != "3":
         unresolved.append("runtime_version_mismatch")
     config = git_config or (lambda key: _git(repo, "config", "--get", key))
@@ -128,10 +132,8 @@ def inspect(repo, *, runtime, git_config=None):
         unresolved.append("hook_chain_mismatch")
     verified = verified and chain["verified"]
     marker = repo / ".agent/.strict-version"
-    marked = bool(_safe_digest(marker))
-    marker_version = marker.read_text().strip() if marked else None
-    if marker_version not in (None, "1", "2", "3"):
-        marker_version = "invalid"
+    marker_version = _version(marker)
+    marked = marker_version is not None
     if not verified:
         unresolved.append("effective_gate_mismatch")
     if not marked:

@@ -138,6 +138,27 @@ class DoctorContracts(unittest.TestCase):
             self.assertNotIn("SECRET_CANARY", str(result))
             self.assertFalse(result["project"]["managed"])
 
+    def test_invalid_utf8_version_markers_produce_structured_diagnostics(self):
+        for malformed in ("runtime", "project"):
+            with self.subTest(malformed=malformed), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve(); runtime = root / "runtime"; repo = root / "repo"
+                runtime.mkdir(); (repo / ".agent").mkdir(parents=True)
+                versions = {"runtime": runtime / "VERSION", "project": repo / ".agent/.strict-version"}
+                (runtime / ".caphe-runtime.json").write_text("{}")
+                for path in versions.values():
+                    path.write_bytes(b"3\n")
+                versions[malformed].write_bytes(b"\xffSECRET_CANARY\n")
+                before = {path: path.read_bytes() for path in versions.values()}
+                report = doctor.inspect(repo, runtime=runtime)
+                field = "version" if malformed == "runtime" else "managed_version"
+                self.assertEqual(report[malformed][field], "invalid")
+                self.assertIn(malformed + "_version_mismatch", report["unresolved"])
+                self.assertFalse(report["project"]["managed"])
+                self.assertNotIn("SECRET_CANARY", str(report))
+                self.assertEqual({path: path.read_bytes() for path in versions.values()}, before)
+                versions[malformed].write_bytes(b"3\r\n")
+                self.assertEqual(doctor.inspect(repo, runtime=runtime)[malformed][field], "3")
+
     def test_effective_git_hooks_ignore_inherited_foreign_repository_environment(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve(); repo = root / "repo"; wrong = root / "wrong"; runtime = root / "runtime"

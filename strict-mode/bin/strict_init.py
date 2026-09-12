@@ -273,7 +273,7 @@ def initialize(canon, root, *, fail_probe=False):
             except (OSError, ValueError) as error:
                 raise InitError("instruction symlink target is missing or outside the repository") from error
         safe(path)
-        text = path.read_text() if path.exists() else ""
+        text = path.read_bytes().decode("utf-8") if path.exists() else ""
         span = markers(text)
         if span:
             lines = text.splitlines(keepends=True)

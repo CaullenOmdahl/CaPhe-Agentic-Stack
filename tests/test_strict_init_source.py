@@ -37,6 +37,40 @@ class StrictInitSourceTests(unittest.TestCase):
         git(repo, "add", "."); git(repo, "commit", "-qm", "initial")
         return repo
 
+    def test_instruction_insertion_preserves_custom_crlf_and_cr_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); repo = self.repo(root)
+            template = (ROOT / "strict-mode/templates/instruction-section.md").read_bytes().rstrip(b"\n")
+            originals = {
+                "AGENTS.md": b"# Custom rules\r\nPreserve Windows lines.\r\n",
+                "CLAUDE.md": b"# Custom rules\rPreserve classic Mac lines.\r",
+                "GEMINI.md": b"# Custom rules\r\nMixed lines.\rLast line without newline",
+            }
+            for name, content in originals.items():
+                (repo / name).write_bytes(content)
+            initializer.initialize(ROOT / "strict-mode", repo)
+            for name, content in originals.items():
+                self.assertEqual((repo / name).read_bytes(), content + b"\n" + template + b"\n\n")
+            before = {name: (repo / name).read_bytes() for name in originals}
+            initializer.initialize(ROOT / "strict-mode", repo)
+            self.assertEqual({name: (repo / name).read_bytes() for name in originals}, before)
+
+    def test_managed_instruction_replacement_preserves_custom_crlf_and_cr_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); repo = self.repo(root)
+            prefix = b"# Custom prefix\r\nKeep this exact line ending.\r"
+            suffix = b"\r\n# Custom suffix\rKeep this too.\r\n"
+            old = initializer.BEGIN.encode() + b"\r\nOld managed text.\r\n" + initializer.END.encode() + b"\r\n"
+            template = (ROOT / "strict-mode/templates/instruction-section.md").read_bytes().rstrip(b"\n")
+            for name in ("AGENTS.md", "CLAUDE.md", "GEMINI.md"):
+                (repo / name).write_bytes(prefix + old + suffix)
+            initializer.initialize(ROOT / "strict-mode", repo)
+            for name in ("AGENTS.md", "CLAUDE.md", "GEMINI.md"):
+                self.assertEqual((repo / name).read_bytes(), prefix + template + b"\n" + suffix)
+            initializer.initialize(ROOT / "strict-mode", repo)
+            for name in ("AGENTS.md", "CLAUDE.md", "GEMINI.md"):
+                self.assertEqual((repo / name).read_bytes(), prefix + template + b"\n" + suffix)
+
     def test_linked_worktree_migrates_config_and_preserves_main_effective_hook(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve(); main = self.repo(root); child = root / "child"
