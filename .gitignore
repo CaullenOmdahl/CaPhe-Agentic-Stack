@@ -17,3 +17,8 @@ tmp/
 *.pyc
 mempalace-data/
 memory-pilot/
+
+# Per-checkout activation state; source integrity is verified by the runtime.
+.agent/.strict-version
+.agent/evidence/.write.lock
+.agent/evidence/.pending-*

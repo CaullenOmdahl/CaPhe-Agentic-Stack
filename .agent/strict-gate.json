@@ -21,28 +21,36 @@
             "-s",
             "tests",
             "-v"
-          ]
+          ],
+          "parallel_safe": true,
+          "timeout_seconds": 600
         },
         {
           "name": "shell-syntax",
           "run": [
             "bash",
             "strict-mode/test/shell-syntax-test.sh"
-          ]
+          ],
+          "parallel_safe": true,
+          "timeout_seconds": 180
         },
         {
           "name": "strict-confer-isolation",
           "run": [
             "bash",
             "strict-mode/test/strict-confer-isolation-test.sh"
-          ]
+          ],
+          "parallel_safe": true,
+          "timeout_seconds": 180
         },
         {
           "name": "public-safety",
           "run": [
             "bash",
             "test/public-safety-test.sh"
-          ]
+          ],
+          "parallel_safe": true,
+          "timeout_seconds": 180
         }
       ]
     }

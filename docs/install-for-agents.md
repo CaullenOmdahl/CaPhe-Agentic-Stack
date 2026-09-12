@@ -32,7 +32,7 @@ The repository is the distribution source. The local machine is the runtime envi
    - Read existing target files before replacing them, and merge user-specific instructions instead of blindly overwriting.
    - If replacement is necessary, keep a temporary rollback copy only for the install operation.
    - Remove temporary rollback copies and install staging once verification passes unless the user explicitly asks to keep rollback artifacts.
-   - The normal final state is active installed files in agent config locations, with no backup canons or copied stack trees.
+   - The normal final state is active installed files in agent config locations, with no backup canons or runtime Git checkouts. A minimal installed tool payload is allowed.
 
 3. Install the shared canon.
    - Copy `docs/canon.md` to the machine-level canon location, usually `~/AGENTS_GLOBAL.md`.
@@ -59,11 +59,16 @@ The repository is the distribution source. The local machine is the runtime envi
    - Do not copy a reviewer's observed availability from one machine to another. Verify executable,
      version, authentication, and non-empty headless output separately on every destination.
 
-6. Install strict-mode source when selected.
+6. Install and verify the workflow runtime and strict-mode source when selected.
+   - Follow `docs/efficiency-runtime.md`; use `tools/stack_install.py` to plan an explicit payload before applying it.
+   - The normal standalone destination is `~/.local/share/caphe/runtime`; it contains tools and required support files, without Git metadata or machine state.
+   - Preserve the existing `~/strict-mode` deployment path or intentionally repoint it to the installed strict-mode subtree after verification.
+   - Keep plans, rollback journals, and resulting inventory outside Git in owner-only private storage.
+   - Treat source hashes and an effective hook probe as activation evidence; a version marker alone is insufficient.
    - Copy the checked-in `strict-mode/` tree to the machine's deployed strict-mode location.
    - Preserve executable modes under `strict-mode/bin/` and `strict-mode/test/`.
-   - Run `strict-init.sh` only for repositories whose scaffold is absent or on an older
-     `.agent/.strict-version`; ordinary skill invocation should not refresh files repeatedly.
+   - Run `strict-init.sh` only for repositories whose scaffold is absent, on an older
+     `.agent/.strict-version`, or has verified hook/source drift; ordinary skill invocation should not refresh files repeatedly.
    - Treat `FAST GREEN` as focused feedback. Completion requires `--mode completion`.
 
 7. Configure local memory retrieval only when requested.
