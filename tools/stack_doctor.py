@@ -38,7 +38,11 @@ def find_duplicate_skills(roots):
 
 
 def _git(repo, *args):
-    result = subprocess.run(["git", "-C", str(repo), *args], text=True, capture_output=True, env=_installer()._git_env())
+    try:
+        result = subprocess.run(["git", "-C", str(repo), *args], text=True, capture_output=True,
+                                env=_installer()._git_env(), timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
     return result.stdout.strip() if result.returncode == 0 and result.stdout.strip() else None
 
 
@@ -90,6 +94,11 @@ def _chain_status(repo, hookdir, runtime):
 def inspect(repo, *, runtime, git_config=None):
     repo, runtime = Path(repo).absolute(), Path(runtime).absolute()
     unresolved = []
+    top = _git(repo, "rev-parse", "--show-toplevel")
+    if top:
+        repo = Path(top).absolute()
+    else:
+        unresolved.append("project_not_git")
     if not runtime.is_dir():
         unresolved.append("runtime_missing")
     version_file = runtime / "VERSION"
@@ -137,7 +146,7 @@ def inspect(repo, *, runtime, git_config=None):
     result = {
         "runtime": {"path": str(runtime), "version": version, "source_digest": digest},
         "hooks": {"effective_path": str(hookdir) if hookdir else None, "configured": hook_path is not None, "verified": verified, "chain": chain, "files": comparisons, "hook_digest": comparisons["pre-commit"]["actual"], "gate_digest": comparisons["strict-green-gate.sh"]["actual"]},
-        "project": {"path": str(repo), "managed": bool(marked and marker_version == "3" and verified and instructions["verified"]), "marker_present": marked, "managed_version": marker_version},
+        "project": {"path": str(repo), "managed": bool(top and marked and marker_version == "3" and verified and instructions["verified"]), "marker_present": marked, "managed_version": marker_version},
         "instructions": instructions,
         "duplicate_skills": find_duplicate_skills([runtime / "skills", repo / ".codex/skills", repo / ".claude/skills"]),
         "unresolved": unresolved,

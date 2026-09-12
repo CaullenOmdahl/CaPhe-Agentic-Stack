@@ -208,6 +208,14 @@ def _quality(trials, incumbent):
         return {'status': 'inconclusive', 'reason': 'paired incumbent and candidate runs are required'}
     if any(not trial['complete'] for trial in trials.values()):
         return {'status': 'inconclusive', 'reason': 'request/task closure is incomplete'}
+    # A config label alone cannot bind a composite workflow policy. Include
+    # retries and children so route changes cannot hide behind a stable final root.
+    routes = defaultdict(set)
+    for (config, _, _), trial in trials.items():
+        for event in trial['events']:
+            routes[config].add((event['model'], event['effort'], event['service_tier']))
+    if any(len(values) != 1 for values in routes.values()):
+        return {'status': 'inconclusive', 'reason': 'mixed_config_routes'}
     acceptance_by_task = {}
     for (_, task, _), trial in trials.items():
         digest = trial['final']['acceptance_digest']

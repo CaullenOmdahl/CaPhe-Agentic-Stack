@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 
 MODULE = Path(__file__).parents[1] / 'tools' / 'stack_state.py'
@@ -119,6 +120,35 @@ class PrivateStateTests(unittest.TestCase):
         unsafe.mkdir(mode=0o755)
         with self.assertRaises(self.module.StateError):
             self.store(unsafe)
+
+    def test_malformed_other_repository_config_cannot_hide_private_state_boundary(self):
+        other = self.root / 'other'
+        subprocess.run(['git', 'init', '-q', str(other)], check=True)
+        nested = other / 'nested'; nested.mkdir()
+        config = other / '.git/config'; config.write_text(config.read_text() + '\n[malformed\n')
+        before = {str(path.relative_to(other)): (path.read_bytes(), path.stat().st_mode)
+                  for path in other.rglob('*') if path.is_file()}
+        with self.assertRaises(self.module.StateError):
+            self.store(nested / 'private').write_task('task-1', {'private_fixture': 'preserve'})
+        self.assertFalse((nested / 'private').exists())
+        self.assertEqual({str(path.relative_to(other)): (path.read_bytes(), path.stat().st_mode)
+                          for path in other.rglob('*') if path.is_file()}, before)
+
+    def test_unknown_discovery_errors_fail_closed_without_creating_private_state(self):
+        for code, stderr in ((128, 'fatal: bad config line 1 in file fixture\n'),
+                             (128, 'fatal: detected dubious ownership in repository\n'),
+                             (129, 'unexpected Git error\n')):
+            with self.subTest(code=code, stderr=stderr):
+                result = subprocess.CompletedProcess([], code, stdout='', stderr=stderr)
+                with mock.patch.object(self.module.subprocess, 'run', return_value=result) as probe:
+                    with self.assertRaises(self.module.StateError): self.store()
+                    self.assertEqual(probe.call_args.kwargs['env']['LC_ALL'], 'C')
+                self.assertFalse((self.root / 'private').exists())
+        with mock.patch.object(self.module.subprocess, 'run', side_effect=OSError('unavailable')):
+            with self.assertRaises(self.module.StateError): self.store()
+        self.assertFalse((self.root / 'private').exists())
+        # The same location is valid once a genuine nonrepository probe succeeds.
+        self.store().write_task('task-1', {'next_action': 'ordinary outside-Git state'})
 
 
 if __name__ == '__main__':

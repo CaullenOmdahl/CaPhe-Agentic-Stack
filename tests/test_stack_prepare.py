@@ -194,3 +194,18 @@ class PrepareContracts(unittest.TestCase):
         result = subprocess.run(['python3', str(PATH), '--manifest', 'missing-token=ERROR_CANARY', '--receipt-root', '.'], capture_output=True, text=True)
         self.assertEqual(result.returncode, 2)
         self.assertNotIn('ERROR_CANARY', result.stdout + result.stderr)
+
+    def test_malformed_destination_repository_rejects_before_preparation_command(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp).resolve(); root, _, _, manifest, _ = self.receipt_fixture(base)
+            other = base / 'other-repo'
+            subprocess.run(['git', 'init', '-q', str(other)], check=True)
+            nested = other / 'nested'; nested.mkdir()
+            config = other / '.git/config'; config.write_text(config.read_text() + '\n[malformed\n')
+            manifest['argv'] = ['python3', '-c', "from pathlib import Path; Path('command-ran').write_text('ran'); Path('output').write_text('new output')"]
+            before = (root / 'output').read_bytes()
+            with self.assertRaises(prepare.PrepareError):
+                prepare.run_prepare(root, manifest, receipt_root=nested / 'receipts')
+            self.assertFalse((root / 'command-ran').exists())
+            self.assertFalse((nested / 'receipts').exists())
+            self.assertEqual((root / 'output').read_bytes(), before)
