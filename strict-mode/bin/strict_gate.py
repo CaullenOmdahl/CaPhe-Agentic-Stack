@@ -483,7 +483,10 @@ def _snapshot_identity(root: Path, ancestors: tuple[Path, ...]) -> dict[str, Any
         name = os.fsencode(relative)
         digest.update(len(name).to_bytes(8, "big"))
         digest.update(name)
-        if relative in gitlinks or (not path.is_symlink() and path.is_dir()):
+        directory = not path.is_symlink() and path.is_dir()
+        git_marker = path / ".git"
+        embedded_git = directory and (git_marker.exists() or git_marker.is_symlink())
+        if relative in gitlinks or embedded_git:
             if path.is_symlink():
                 raise ManifestError("snapshot Git checkout must not be a symlink")
             if relative in gitlinks and not path.exists():
@@ -495,6 +498,9 @@ def _snapshot_identity(root: Path, ancestors: tuple[Path, ...]) -> dict[str, Any
                 payload = json.dumps(nested, sort_keys=True).encode()
                 digest.update(b"git-checkout\0" + len(payload).to_bytes(8, "big") + payload)
                 dirty = dirty or nested["dirty"]
+        elif directory:
+            # A tracked file may now be a directory; Git lists its visible children separately.
+            digest.update(f"directory:{path.lstat().st_mode & 0o777}\0".encode())
         elif path.is_symlink():
             target = os.fsencode(os.readlink(path))
             digest.update(b"link\0" + len(target).to_bytes(8, "big") + target)

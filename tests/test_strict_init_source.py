@@ -223,6 +223,84 @@ class StrictInitSourceTests(unittest.TestCase):
             self.assertEqual(refreshed["previous_hook"]["sha256"], hashlib.sha256(original.read_bytes()).hexdigest())
             self.assertIn("accepted custom update", original.read_text())
 
+    def test_inactive_hook_destination_collisions_preserve_all_bytes_and_modes(self):
+        for name in (*initializer.HOOK_FILES, initializer.CHAIN_FILE, initializer.ACTIVATION_FILE, 'post-commit'):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                root=Path(tmp).resolve(); repo=self.repo(root)
+                if name=='post-commit':
+                    original=repo/'.git/hooks/post-commit'; original.write_text('#!/bin/sh\nexit 0\n'); original.chmod(0o755)
+                path=repo/'.git/caphe-hooks'/name; path.parent.mkdir(); path.write_text('unowned content\n'); path.chmod(0o640)
+                before={str(p.relative_to(root)):(p.read_bytes(),p.stat().st_mode & 0o777) for p in root.rglob('*') if p.is_file()}
+                with self.assertRaises(initializer.InitError): initializer.initialize(ROOT/'strict-mode',repo)
+                self.assertEqual({str(p.relative_to(root)):(p.read_bytes(),p.stat().st_mode & 0o777) for p in root.rglob('*') if p.is_file()},before)
+                self.assertFalse((repo/'.agent').exists())
 
-if __name__ == "__main__":
+    def hook_snapshot(self, root):
+        return {str(p.relative_to(root)): ('directory' if p.is_dir() else p.read_bytes(), p.stat().st_mode & 0o777)
+                for p in root.rglob('*')}
+
+    def test_owned_inactive_hooks_reactivate_and_failed_probe_restores_forwarders(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp).resolve(); repo=self.repo(root)
+            old=repo/'.git/hooks/post-commit'; old.write_text('#!/bin/sh\ncat > post-input\nprintf "%s\\n" "$@" >> post-input\n'); old.chmod(0o755)
+            initializer.initialize(ROOT/'strict-mode',repo)
+            managed=Path(git(repo,'config','core.hooksPath'))
+            (managed/'private-note').write_text('preserve unrelated bytes\n')
+            record=initializer.read_activation(repo,managed)
+            self.assertEqual(set(record['forwarded_hooks']),{'post-commit'})
+            git(repo,'config','--worktree','core.hooksPath','.git/hooks')
+            before=self.hook_snapshot(root)
+            with self.assertRaises(initializer.InitError): initializer.initialize(ROOT/'strict-mode',repo,fail_probe=True)
+            self.assertEqual(self.hook_snapshot(root),before)
+            initializer.initialize(ROOT/'strict-mode',repo)
+            initializer.initialize(ROOT/'strict-mode',repo)
+            result=subprocess.run([str(managed/'post-commit'),'argument with spaces'],cwd=repo,input='stdin preserved\n',text=True,capture_output=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual((repo/'post-input').read_text(),'stdin preserved\nargument with spaces\n')
+            self.assertEqual((managed/'private-note').read_text(),'preserve unrelated bytes\n')
+
+    def test_valid_legacy_metadata_never_adopts_unrecorded_forwarded_collision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp).resolve(); repo=self.repo(root)
+            initializer.initialize(ROOT/'strict-mode',repo)
+            managed=Path(git(repo,'config','core.hooksPath')); metadata=managed/initializer.ACTIVATION_FILE
+            record=json.loads(metadata.read_text()); record.pop('forwarded_hooks'); metadata.write_text(json.dumps(record))
+            initializer.initialize(ROOT/'strict-mode',repo)  # Closed legacy record still refreshes.
+            old=repo/'.git/hooks/post-commit'; old.write_text('#!/bin/sh\nexit 0\n'); old.chmod(0o755)
+            collision=managed/'post-commit'; collision.write_text('unowned custom destination\n'); collision.chmod(0o640)
+            git(repo,'config','--worktree','core.hooksPath','.git/hooks')
+            before=self.hook_snapshot(root)
+            with self.assertRaisesRegex(initializer.InitError,'unowned hook destination'):
+                initializer.initialize(ROOT/'strict-mode',repo)
+            self.assertEqual(self.hook_snapshot(root),before)
+
+    def test_managed_runtime_and_forwarded_drift_reject_active_and_inactive_refresh(self):
+        for active in (True,False):
+            for name, mode in (('pre-commit',False),('post-commit',False),('post-commit',True)):
+                with self.subTest(active=active,name=name,mode=mode), tempfile.TemporaryDirectory() as tmp:
+                    root=Path(tmp).resolve(); repo=self.repo(root)
+                    old=repo/'.git/hooks/post-commit'; old.write_text('#!/bin/sh\nexit 0\n'); old.chmod(0o755)
+                    initializer.initialize(ROOT/'strict-mode',repo)
+                    managed=Path(git(repo,'config','core.hooksPath'))
+                    if mode: (managed/name).chmod(0o700)
+                    else: (managed/name).write_text('modified owned hook\n')
+                    if not active: git(repo,'config','--worktree','core.hooksPath','.git/hooks')
+                    before=self.hook_snapshot(root)
+                    with self.assertRaises(initializer.InitError): initializer.initialize(ROOT/'strict-mode',repo)
+                    self.assertEqual(self.hook_snapshot(root),before)
+
+    def test_forwarded_inventory_is_closed_and_cannot_authorize_path_escape(self):
+        for forwarded in ({'../outside':'0'*64},{'post-commit':True},[],{'pre-commit':'0'*64}):
+            with self.subTest(forwarded=forwarded), tempfile.TemporaryDirectory() as tmp:
+                root=Path(tmp).resolve(); repo=self.repo(root)
+                initializer.initialize(ROOT/'strict-mode',repo)
+                managed=Path(git(repo,'config','core.hooksPath')); metadata=managed/initializer.ACTIVATION_FILE
+                record=json.loads(metadata.read_text()); record['forwarded_hooks']=forwarded; metadata.write_text(json.dumps(record))
+                git(repo,'config','--worktree','core.hooksPath','.git/hooks')
+                before=self.hook_snapshot(root)
+                with self.assertRaises(initializer.InitError): initializer.initialize(ROOT/'strict-mode',repo)
+                self.assertEqual(self.hook_snapshot(root),before)
+
+
+if __name__ == '__main__':
     unittest.main()

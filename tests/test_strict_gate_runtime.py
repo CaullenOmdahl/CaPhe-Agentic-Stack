@@ -195,6 +195,71 @@ class RuntimeTests(unittest.TestCase):
             (root / 'module' / 'tracked.txt').write_text('still executed')
             self.assertNotEqual(deleted['snapshot_digest'], gate.snapshot_identity(root)['snapshot_digest'])
 
+    def test_unstaged_file_directory_replacement_binds_presence_contents_and_reversal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repository(root)
+            path = root / 'tracked.txt'
+            original = gate.snapshot_identity(root)
+            path.unlink()
+            absent = gate.snapshot_identity(root)
+            path.mkdir()
+            empty = gate.snapshot_identity(root)
+            self.assertNotEqual(absent['snapshot_digest'], empty['snapshot_digest'])
+            (path / 'source.txt').write_text('source A')
+            populated = gate.snapshot_identity(root)
+            (path / 'source.txt').write_text('source B')
+            edited = gate.snapshot_identity(root)
+            self.assertNotEqual(empty['snapshot_digest'], populated['snapshot_digest'])
+            self.assertNotEqual(populated['snapshot_digest'], edited['snapshot_digest'])
+            shutil.rmtree(path)
+            path.write_text('baseline')
+            self.assertEqual(original, gate.snapshot_identity(root))
+            subprocess.run(['git', 'update-index', '--force-remove', 'tracked.txt'], cwd=root, check=True)
+            path.unlink()
+            path.mkdir()
+            (path / 'source.txt').write_text('tracked child')
+            subprocess.run(['git', 'add', 'tracked.txt'], cwd=root, check=True)
+            subprocess.run(['git', 'commit', '-qm', 'directory'], cwd=root, check=True)
+            directory = gate.snapshot_identity(root)
+            shutil.rmtree(path)
+            path.write_text('replacement file')
+            file = gate.snapshot_identity(root)
+            self.assertNotEqual(directory['snapshot_digest'], file['snapshot_digest'])
+            path.write_text('edited replacement file')
+            self.assertNotEqual(file['snapshot_digest'], gate.snapshot_identity(root)['snapshot_digest'])
+
+    def test_unstaged_file_directory_replacement_preserves_ignored_content_boundary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repository(root)
+            (root / '.gitignore').write_text('.env\nignored/\n')
+            path = root / 'tracked.txt'
+            path.unlink()
+            path.mkdir()
+            empty = gate.snapshot_identity(root)
+            (path / '.env').write_text('ignored A')
+            (path / 'ignored').mkdir()
+            (path / 'ignored' / 'local.txt').write_text('local A')
+            self.assertEqual(empty, gate.snapshot_identity(root))
+            (path / '.env').write_text('ignored B')
+            self.assertEqual(empty, gate.snapshot_identity(root))
+            (path / 'source.txt').write_text('executed')
+            self.assertNotEqual(empty['snapshot_digest'], gate.snapshot_identity(root)['snapshot_digest'])
+
+    def test_unstaged_file_directory_replacement_nested_mutation_blocks_green(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repository(root)
+            path = root / 'tracked.txt'
+            path.unlink()
+            path.mkdir()
+            (path / 'source.txt').write_text('before')
+            command = gate.CommandSpec('fixture', 'mutates', (sys.executable, '-c',
+                "from pathlib import Path; Path('tracked.txt/source.txt').write_text('after')"))
+            self.assertEqual(gate.execute_plan(root, [command], 'manifest', 1, mode='completion'), 1)
+            self.assertEqual((path / 'source.txt').read_text(), 'after')
+
     def test_staged_gitlink_replacement_with_regular_file_binds_file_contents(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

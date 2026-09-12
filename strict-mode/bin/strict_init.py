@@ -15,6 +15,7 @@ import tempfile
 BEGIN = "<!-- STRICT-MODE:BEGIN (managed by strict-mode; edit the canon, not this marker) -->"
 END = "<!-- STRICT-MODE:END -->"
 HOOK_FILES = ("pre-commit", "strict-green-gate.sh", "strict_gate.py")
+FORWARDED_HOOKS = {"applypatch-msg", "pre-applypatch", "post-applypatch", "pre-merge-commit", "prepare-commit-msg", "commit-msg", "post-commit", "pre-rebase", "post-checkout", "post-merge", "pre-push", "pre-receive", "update", "proc-receive", "post-receive", "post-update", "reference-transaction", "push-to-checkout", "pre-auto-gc", "post-rewrite", "sendemail-validate", "fsmonitor-watchman", "p4-changelist", "p4-prepare-changelist", "p4-post-changelist", "p4-pre-submit", "post-index-change"}
 CHAIN_FILE = ".caphe-chain.sh"
 ACTIVATION_FILE = ".caphe-activation.json"
 # Exact historical framework wrapper; similar custom scripts must still be chained.
@@ -77,13 +78,13 @@ def chain_bytes(previous):
     return ("CAPHE_PREVIOUS_HOOK=" + shlex.quote(previous["path"] if previous else "") + "\n").encode()
 
 
-def activation_record(root, hookdir, canon, previous):
+def activation_record(root, hookdir, canon, previous, forwarded=None):
     original = _original_hook(root, hookdir, previous) if previous else None
     return {"schema": 1, "source_files": {name: _sha((canon / "bin" / name).read_bytes()) for name in HOOK_FILES},
-            "chain_sha256": _sha(chain_bytes(original)), "previous_hook": original}
+            "chain_sha256": _sha(chain_bytes(original)), "previous_hook": original, "forwarded_hooks": dict(forwarded or {})}
 
 
-def read_activation(root, hookdir, *, canon=None):
+def read_activation(root, hookdir, *, canon=None, verify_previous=True):
     """Detect local drift using declarative metadata; this is not signed attestation.
 
     No shell is sourced. A writer able to replace both metadata and managed files can
@@ -107,23 +108,35 @@ def read_activation(root, hookdir, *, canon=None):
     except (ValueError, UnicodeError) as error:
         raise InitError("malformed hook activation metadata") from error
     digest = lambda value: isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
-    if (not isinstance(record, dict) or set(record) != {"schema", "source_files", "chain_sha256", "previous_hook"}
+    if (not isinstance(record, dict) or set(record) not in ({"schema", "source_files", "chain_sha256", "previous_hook"},
+                                                        {"schema", "source_files", "chain_sha256", "previous_hook", "forwarded_hooks"})
             or type(record["schema"]) is not int or record["schema"] != 1
             or not isinstance(record["source_files"], dict) or set(record["source_files"]) != set(HOOK_FILES)
             or not all(digest(value) for value in record["source_files"].values()) or not digest(record["chain_sha256"])):
         raise InitError("invalid hook activation schema")
+    forwarded = record.get("forwarded_hooks", {})
+    if (not isinstance(forwarded, dict) or not set(forwarded).issubset(FORWARDED_HOOKS)
+            or not all(digest(value) for value in forwarded.values())):
+        raise InitError("invalid forwarded-hook inventory")
+    for name, expected_hash in {**record["source_files"], **forwarded}.items():
+        path = hookdir / name
+        safe(path)
+        if not path.is_file() or _sha(path.read_bytes()) != expected_hash or stat.S_IMODE(path.stat().st_mode) != 0o755:
+            raise InitError("managed hook differs from activation inventory: " + name)
     previous = record["previous_hook"]
     if previous is not None:
         if (not isinstance(previous, dict) or set(previous) != {"path", "resolved", "sha256", "mode"}
-                or not isinstance(previous["resolved"], str) or not Path(previous["resolved"]).is_absolute()
+                or not isinstance(previous["path"], str) or not previous["path"] or "\0" in previous["path"]
+                or Path(previous["path"]).name != "pre-commit" or not isinstance(previous["resolved"], str) or not Path(previous["resolved"]).is_absolute()
                 or not digest(previous["sha256"]) or type(previous["mode"]) is not int or not 0 <= previous["mode"] <= 0o777):
             raise InitError("invalid original-hook record")
-        try:
-            actual_previous = _original_hook(root, hookdir, previous["path"])
-        except (OSError, ValueError, RuntimeError) as error:
-            raise InitError("original hook cannot be verified") from error
-        if actual_previous != previous:
-            raise InitError("original hook changed since activation")
+        if verify_previous:
+            try:
+                actual_previous = _original_hook(root, hookdir, previous["path"])
+            except (OSError, ValueError, RuntimeError) as error:
+                raise InitError("original hook cannot be verified") from error
+            if actual_previous != previous:
+                raise InitError("original hook changed since activation")
     actual_chain = chain.read_bytes()
     if actual_chain != chain_bytes(previous) or _sha(actual_chain) != record["chain_sha256"]:
         raise InitError("hook chain differs from its declarative activation record")
@@ -267,9 +280,16 @@ def initialize(canon, root, *, fail_probe=False):
         effective_value = Path(git(root, "rev-parse", "--git-path", "hooks"))
         effective = effective_value if effective_value.is_absolute() else root / effective_value
         chain = hookdir / CHAIN_FILE
-        if effective.resolve() == hookdir:
+        active = effective.resolve() == hookdir
+        existing = None
+        # An inactive namespace is not ours merely because its name is caphe-hooks.
+        # On deliberate reconciliation, validate the managed files while allowing
+        # the selected original custom hook to have an accepted update.
+        if active or any((hookdir / name).exists() for name in (*HOOK_FILES, CHAIN_FILE, ACTIVATION_FILE)):
+            existing = read_activation(root, hookdir, verify_previous=active)
+        forwarded = dict(existing.get("forwarded_hooks", {})) if existing else {}
+        if active:
             # Never adopt shell text from an unverified old chain during refresh.
-            existing = read_activation(root, hookdir)
             previous = existing["previous_hook"]["path"] if existing["previous_hook"] else None
         else:
             old = effective / "pre-commit"
@@ -280,9 +300,16 @@ def initialize(canon, root, *, fail_probe=False):
                 for old in effective.iterdir():
                     if old.name != "pre-commit" and old.is_file() and os.access(old, os.X_OK):
                         # Only real Git hook names are dispatched; never overwrite runtime payload.
-                        if old.name in {"applypatch-msg", "pre-applypatch", "post-applypatch", "pre-merge-commit", "prepare-commit-msg", "commit-msg", "post-commit", "pre-rebase", "post-checkout", "post-merge", "pre-push", "pre-receive", "update", "proc-receive", "post-receive", "post-update", "reference-transaction", "push-to-checkout", "pre-auto-gc", "post-rewrite", "sendemail-validate", "fsmonitor-watchman", "p4-changelist", "p4-prepare-changelist", "p4-post-changelist", "p4-pre-submit", "post-index-change"}:
+                        if old.name in FORWARDED_HOOKS:
                             writes[hookdir / old.name] = "#!/usr/bin/env bash\n" + shlex.quote(str(effective_value / old.name)) + ' "$@"\n'
-        record = activation_record(root, hookdir, canon, previous)
+        owned = set(HOOK_FILES) | {CHAIN_FILE, ACTIVATION_FILE} | set(forwarded) if existing else set()
+        for path, content in writes.items():
+            if path.parent == hookdir:
+                safe(path)
+                if path.exists() and path.name not in owned:
+                    raise InitError("unowned hook destination collision: " + path.name)
+                forwarded[path.name] = _sha(content.encode() if isinstance(content, str) else content)
+        record = activation_record(root, hookdir, canon, previous, forwarded)
         writes[chain] = chain_bytes(record["previous_hook"])
         writes[hookdir / ACTIVATION_FILE] = json.dumps(record, sort_keys=True) + "\n"
         for name in HOOK_FILES:
