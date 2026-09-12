@@ -3,6 +3,7 @@ from pathlib import Path
 import tempfile
 import unittest
 import os
+import json
 import subprocess
 from unittest import mock
 
@@ -12,6 +13,17 @@ SPEC = importlib.util.spec_from_file_location("stack_doctor", PATH)
 doctor = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(doctor)
+
+
+ACTIVATION_SPEC = importlib.util.spec_from_file_location("doctor_chain_fixture", PATH.parents[1] / "strict-mode/bin/strict_init.py")
+activation = importlib.util.module_from_spec(ACTIVATION_SPEC)
+ACTIVATION_SPEC.loader.exec_module(activation)
+
+
+def install_empty_chain(repo, hooks, runtime):
+    record = activation.activation_record(repo, hooks, runtime / "strict-mode", None)
+    (hooks / activation.CHAIN_FILE).write_bytes(activation.chain_bytes(None))
+    (hooks / activation.ACTIVATION_FILE).write_text(json.dumps(record))
 
 
 class DoctorContracts(unittest.TestCase):
@@ -60,6 +72,7 @@ class DoctorContracts(unittest.TestCase):
                 (canonical / name).write_text("expected-" + name)
                 (hooks / name).write_text("expected-" + name)
                 (hooks / name).chmod(0o755)
+            install_empty_chain(repo, hooks, runtime)
             report = lambda: doctor.inspect(repo, runtime=runtime, git_config=lambda key: "relative-hooks")
             self.assertTrue(report()["hooks"]["verified"])
             self.assertFalse(report()["project"]["managed"])
@@ -94,6 +107,7 @@ class DoctorContracts(unittest.TestCase):
             for name in doctor.HOOK_FILES:
                 canonical = runtime / "strict-mode/bin" / name; canonical.parent.mkdir(parents=True, exist_ok=True)
                 canonical.write_text(name); (hooks / name).write_text(name); (hooks / name).chmod(0o755)
+            install_empty_chain(repo, hooks, runtime)
             env = {"GIT_DIR": str(wrong / ".git"), "GIT_WORK_TREE": str(wrong), "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "core.hooksPath", "GIT_CONFIG_VALUE_0": "/must-not-use"}
             with mock.patch.dict(os.environ, env):
                 report = doctor.inspect(repo, runtime=runtime)
@@ -113,6 +127,7 @@ class DoctorContracts(unittest.TestCase):
                 source.write_text(name); (hooks / name).write_text(name); (hooks / name).chmod(0o755)
             for name in ("AGENTS.md", "CLAUDE.md", "GEMINI.md"):
                 (repo / name).write_text("Custom rule preserved.\n" + template)
+            install_empty_chain(repo, hooks, runtime)
             report = lambda: doctor.inspect(repo, runtime=runtime, git_config=lambda key: "hooks")
             self.assertIn("project_version_missing", report()["unresolved"])
             (repo / ".agent").mkdir(); (repo / ".agent/.strict-version").write_text("3\n")
@@ -126,3 +141,30 @@ class DoctorContracts(unittest.TestCase):
             outside = root / "outside"; outside.write_text(template)
             (repo / "CLAUDE.md").unlink(); (repo / "CLAUDE.md").symlink_to(outside)
             self.assertFalse(report()["instructions"]["verified"])
+
+    def test_real_activation_requires_intact_chain_metadata_and_original_hook(self):
+        spec = importlib.util.spec_from_file_location("chain_initializer", PATH.parents[1] / "strict-mode/bin/strict_init.py")
+        init = importlib.util.module_from_spec(spec); spec.loader.exec_module(init)
+        for change in ("missing-chain", "changed-chain", "missing-metadata", "changed-original"):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as tmp:
+                repo = Path(tmp).resolve() / "repo"; repo.mkdir()
+                subprocess.run(["git", "init", "-q", str(repo)], check=True)
+                original = repo / ".git/hooks/pre-commit"
+                original.write_text("#!/bin/sh\nexit 0\n"); original.chmod(0o755)
+                init.initialize(PATH.parents[1] / "strict-mode", repo)
+                hookdir = Path(subprocess.check_output(["git", "-C", str(repo), "config", "core.hooksPath"], text=True).strip())
+                self.assertTrue(doctor.inspect(repo, runtime=PATH.parents[1])["hooks"]["verified"])
+                if change == "missing-chain":
+                    (hookdir / ".caphe-chain.sh").unlink()
+                elif change == "changed-chain":
+                    (hookdir / ".caphe-chain.sh").write_text("CAPHE_PREVIOUS_HOOK=''\ntouch should-never-exist\n")
+                elif change == "missing-metadata":
+                    (hookdir / ".caphe-activation.json").unlink(missing_ok=True)
+                else:
+                    original.write_text("#!/bin/sh\nexit 7\n")
+                before = {str(p): p.read_bytes() for p in repo.rglob("*") if p.is_file()}
+                report = doctor.inspect(repo, runtime=PATH.parents[1])
+                self.assertFalse(report["hooks"]["verified"])
+                self.assertFalse(report["project"]["managed"])
+                self.assertIn("hook_chain_mismatch", report["unresolved"])
+                self.assertEqual({str(p): p.read_bytes() for p in repo.rglob("*") if p.is_file()}, before)

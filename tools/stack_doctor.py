@@ -72,6 +72,21 @@ def _instructions(repo, runtime):
     return {"verified": all(item["matches"] for item in comparisons.values()), "files": comparisons}
 
 
+def _chain_status(repo, hookdir, runtime):
+    if hookdir is None:
+        return {"verified": False, "reason": "effective hook directory is missing"}
+    try:
+        # Use the doctor's bundled validator, never execute a target chain or metadata.
+        path = Path(__file__).parents[1] / "strict-mode/bin/strict_init.py"
+        spec = importlib.util.spec_from_file_location("caphe_activation_doctor", path)
+        validator = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(validator)
+        record = validator.read_activation(repo, hookdir, canon=runtime / "strict-mode")
+        return {"verified": True, "chain_sha256": record["chain_sha256"], "original_hook_present": record["previous_hook"] is not None}
+    except (OSError, ValueError, RuntimeError) as error:
+        return {"verified": False, "reason": str(error)}
+
+
 def inspect(repo, *, runtime, git_config=None):
     repo, runtime = Path(repo).absolute(), Path(runtime).absolute()
     unresolved = []
@@ -98,6 +113,10 @@ def inspect(repo, *, runtime, git_config=None):
         expected = _safe_digest(runtime / "strict-mode/bin" / name)
         comparisons[name] = {"actual": actual, "expected": expected, "matches": bool(actual and expected and actual == expected)}
     verified = all(item["matches"] for item in comparisons.values()) and all(os.access(hookdir / name, os.X_OK) for name in HOOK_FILES[:2])
+    chain = _chain_status(repo, hookdir, runtime)
+    if not chain["verified"]:
+        unresolved.append("hook_chain_mismatch")
+    verified = verified and chain["verified"]
     marker = repo / ".agent/.strict-version"
     marked = bool(_safe_digest(marker))
     marker_version = marker.read_text().strip() if marked else None
@@ -117,7 +136,7 @@ def inspect(repo, *, runtime, git_config=None):
         unresolved.append("runtime_inventory_invalid")
     result = {
         "runtime": {"path": str(runtime), "version": version, "source_digest": digest},
-        "hooks": {"effective_path": str(hookdir) if hookdir else None, "configured": hook_path is not None, "verified": verified, "files": comparisons, "hook_digest": comparisons["pre-commit"]["actual"], "gate_digest": comparisons["strict-green-gate.sh"]["actual"]},
+        "hooks": {"effective_path": str(hookdir) if hookdir else None, "configured": hook_path is not None, "verified": verified, "chain": chain, "files": comparisons, "hook_digest": comparisons["pre-commit"]["actual"], "gate_digest": comparisons["strict-green-gate.sh"]["actual"]},
         "project": {"path": str(repo), "managed": bool(marked and marker_version == "3" and verified and instructions["verified"]), "marker_present": marked, "managed_version": marker_version},
         "instructions": instructions,
         "duplicate_skills": find_duplicate_skills([runtime / "skills", repo / ".codex/skills", repo / ".claude/skills"]),

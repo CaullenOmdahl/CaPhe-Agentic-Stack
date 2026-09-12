@@ -181,7 +181,15 @@ Then merge global canon/skill updates while preserving user-specific authorizati
 and operational instructions. Keep duplicate discovered skill copies consistent. Refresh project markers
 and effective hooks using the new initializer; preserve dirty/staged/untracked work, custom hooks,
 manifests, symlinked instruction aliases, and explicit disable. Verify every target with doctor and a
-side-effect-free hook probe. Global installation and project activation are distinct results.
+side-effect-free hook probe. Activation also records and checks the generated hook chain and the original
+hook target without executing that chain. These local records detect drift; they are not signed attestation.
+Global installation and project activation are distinct results.
+
+If an original custom hook intentionally changes, verify and record that accepted change, restore
+`core.hooksPath` in the worktree configuration to the recorded original hook directory, and rerun the
+normal initializer followed by doctor. Save the managed hook path first and restore it if reconciliation
+fails. Do not edit generated activation metadata merely to silence a
+mismatch. Preserve the original hook and its arguments/stdin behavior throughout reconciliation.
 
 A project without a proven affected graph retains its full checks. Do not replace a carefully maintained
 manifest with a generated default. A machine update does not claim application release, hardware
