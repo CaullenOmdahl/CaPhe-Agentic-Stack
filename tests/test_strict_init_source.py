@@ -28,6 +28,9 @@ class StrictInitSourceTests(unittest.TestCase):
     def repo(self, root):
         repo = root / "repo"; repo.mkdir()
         git(repo, "init", "-q")
+        # Initial commits must not leave background writers racing preservation snapshots.
+        git(repo, "config", "--local", "maintenance.auto", "false")
+        git(repo, "config", "--local", "gc.auto", "0")
         git(repo, "config", "user.name", "Test")
         git(repo, "config", "user.email", "test@example.invalid")
         (repo / "README.md").write_text("test")
