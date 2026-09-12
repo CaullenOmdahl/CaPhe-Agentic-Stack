@@ -33,16 +33,10 @@ class InitError(RuntimeError):
 
 # This entry point is also distributed alone as ~/strict-mode.
 def _git_env():
-    """Keep user/global configuration while removing the caller's repository selection."""
-    local = {
-        "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS",
-        "GIT_CONFIG_COUNT", "GIT_OBJECT_DIRECTORY", "GIT_DIR", "GIT_WORK_TREE",
-        "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE", "GIT_INDEX_FILE",
-        "GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE", "GIT_PREFIX",
-        "GIT_SHALLOW_FILE", "GIT_COMMON_DIR",
-    }
+    """Keep global config choices; discard inherited discovery and repository overrides."""
+    allowed = {"GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_NOSYSTEM"}
     return {key: value for key, value in os.environ.items()
-            if key not in local and not key.startswith(("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_"))}
+            if not key.startswith("GIT_") or key in allowed}
 
 
 def git(root, *args, check=True):
@@ -50,6 +44,20 @@ def git(root, *args, check=True):
     if check and result.returncode:
         raise InitError(result.stderr.strip() or "Git command failed")
     return result.stdout.strip() if result.returncode == 0 else None
+
+
+def _repository_root(root):
+    environment = _git_env()
+    environment["LC_ALL"] = "C"
+    result = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+                            text=True, capture_output=True, env=environment)
+    if result.returncode == 0:
+        return result.stdout.strip()
+    markers = any((parent / ".git").exists() or (parent / ".git").is_symlink()
+                  for parent in (root, *root.parents))
+    if not markers and result.returncode == 128 and result.stderr.startswith("fatal: not a git repository (or any"):
+        return None
+    raise InitError("Git repository discovery failed: " + result.stderr.strip())
 
 
 def safe(path):
@@ -211,7 +219,7 @@ class Transaction:
 
 def initialize(canon, root, *, fail_probe=False):
     canon, root = Path(canon).resolve(), Path(root).resolve()
-    top = git(root, "rev-parse", "--show-toplevel", check=False)
+    top = _repository_root(root)
     is_git = top is not None
     if is_git:
         root = Path(top).resolve()

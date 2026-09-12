@@ -143,6 +143,34 @@ class StrictInitSourceTests(unittest.TestCase):
             self.assertIn(str(hooks / "pre-commit"), (hookdir / ".caphe-chain.sh").read_text())
             self.assertEqual((repo / ".agent/.strict-version").read_text(), "3\n")
 
+    def test_discovery_overrides_do_not_initialize_a_repository_subdirectory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); repo = self.repo(root)
+            child = repo / "nested" / "source"; child.mkdir(parents=True)
+            environment = {"GIT_CEILING_DIRECTORIES": str(repo), "GIT_DISCOVERY_ACROSS_FILESYSTEM": "0"}
+            with mock.patch.dict(os.environ, environment):
+                initializer.initialize(ROOT / "strict-mode", child)
+            self.assertTrue((repo / "AGENTS.md").is_file())
+            self.assertEqual((repo / ".agent/.strict-version").read_text(), "3\n")
+            self.assertFalse((child / ".agent").exists())
+            self.assertFalse((child / "AGENTS.md").exists())
+            hookdir = Path(git(repo, "config", "core.hooksPath"))
+            self.assertTrue((hookdir / "pre-commit").is_file())
+            initializer.read_activation(repo, hookdir, canon=ROOT / "strict-mode")
+
+    def test_failed_git_discovery_cannot_report_activation_or_write_managed_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); repo = self.repo(root)
+            child = repo / "nested"; child.mkdir()
+            invalid_config = root / "invalid-config"; invalid_config.write_text("[invalid\n")
+            config_before = (repo / ".git/config").read_bytes()
+            with mock.patch.dict(os.environ, {"GIT_CONFIG_GLOBAL": str(invalid_config)}):
+                with self.assertRaises(initializer.InitError):
+                    initializer.initialize(ROOT / "strict-mode", child)
+            self.assertEqual((repo / ".git/config").read_bytes(), config_before)
+            self.assertFalse((repo / ".agent").exists())
+            self.assertEqual(list(child.iterdir()), [])
+
     def test_refresh_rejects_changed_chain_before_any_write(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve(); repo = self.repo(root)

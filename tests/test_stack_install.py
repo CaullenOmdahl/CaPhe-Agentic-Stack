@@ -497,3 +497,63 @@ class InstallContracts(unittest.TestCase):
             self.assertEqual((legacy.read_bytes(),legacy.stat().st_mode,legacy.stat().st_ino),before)
             self.assertEqual(len(list(private.glob('runtime-*.json'))),2)
             self.assertTrue(installer.verify_runtime_plan(plan))
+
+    def test_git_ceiling_cannot_hide_repository_contained_runtime_or_inventory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp).resolve(); source=self.fixture_source(root); repo=root/'other-repo'
+            subprocess.run(['git','init','-q',str(repo)],check=True)
+            nested=repo/'nested'; nested.mkdir()
+            runtime=nested/'runtime'; inventory=nested/'private'
+            outside=root/'outside-runtime'
+            plan=installer.plan_runtime_install(source,outside)
+            before=self.snapshot(repo)
+            with mock.patch.dict(os.environ,{'GIT_CEILING_DIRECTORIES':str(repo)}):
+                with self.subTest(destination='runtime'), self.assertRaises(installer.InstallError):
+                    installer.plan_runtime_install(source,runtime)
+                with self.subTest(destination='inventory'), self.assertRaises(installer.InstallError):
+                    installer.apply_runtime_plan(plan,inventory_root=inventory)
+            self.assertEqual(self.snapshot(repo),before)
+            self.assertFalse(outside.exists())
+
+    def test_git_environment_allowlist_retains_user_config_without_discovery_overrides(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp).resolve(); global_config=root/'global-config'; system_config=root/'system-config'
+            global_config.write_text('[user]\n\tname = Fixture global identity\n')
+            system_config.write_text('')
+            chosen = {'GIT_CONFIG_GLOBAL': str(global_config), 'GIT_CONFIG_SYSTEM': str(system_config), 'GIT_CONFIG_NOSYSTEM': '1'}
+            injected = {**chosen, 'GIT_CEILING_DIRECTORIES': str(root), 'GIT_DISCOVERY_ACROSS_FILESYSTEM': '1',
+                        'GIT_NAMESPACE': 'foreign', 'GIT_CONFIG_PARAMETERS': 'invalid inherited config',
+                        'GIT_CONFIG_COUNT': '1', 'GIT_CONFIG_KEY_0': 'core.hooksPath', 'GIT_CONFIG_VALUE_0': '/foreign',
+                        'GIT_FUTURE_DISCOVERY_OVERRIDE': 'must not propagate', 'CAPHE_FIXTURE_SETTING': 'preserved'}
+            with mock.patch.dict(os.environ, injected):
+                environment = installer._git_env()
+                self.assertEqual({key: value for key, value in environment.items() if key.startswith('GIT_')}, chosen)
+                self.assertEqual(environment['CAPHE_FIXTURE_SETTING'], 'preserved')
+                result = subprocess.run(['git', 'config', '--global', '--get', 'user.name'],
+                                        env=environment, capture_output=True, text=True, check=True)
+                self.assertEqual(result.stdout.strip(), 'Fixture global identity')
+
+    def test_malformed_global_config_cannot_hide_physical_git_ancestors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp).resolve(); source=self.fixture_source(root); repo=root/'other-repo'
+            subprocess.run(['git','init','-q',str(repo)],check=True)
+            nested=repo/'nested'; nested.mkdir()
+            config=root/'malformed-global'; config.write_text('[malformed\n')
+            before=self.snapshot(repo)
+            with mock.patch.dict(os.environ,{'GIT_CONFIG_GLOBAL':str(config)}):
+                with self.subTest(destination='runtime'), self.assertRaises(installer.InstallError):
+                    installer._outside_git(nested/'runtime')
+                with self.subTest(destination='inventory'), self.assertRaises(installer.InstallError):
+                    installer._private_preflight(nested/'private',source,root/'runtime')
+            self.assertEqual(self.snapshot(repo),before)
+
+    def test_unknown_git_discovery_under_malformed_global_config_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp).resolve(); source=self.fixture_source(root)
+            config=root/'malformed-global'; config.write_text('[malformed\n')
+            with mock.patch.dict(os.environ,{'GIT_CONFIG_GLOBAL':str(config), 'LC_ALL':'fr_FR.UTF-8'}):
+                with self.subTest(destination='runtime'), self.assertRaises(installer.InstallError):
+                    installer._outside_git(root/'runtime')
+                with self.subTest(destination='inventory'), self.assertRaises(installer.InstallError):
+                    installer._private_preflight(root/'private',source,root/'runtime')
+            self.assertFalse((root/'runtime').exists()); self.assertFalse((root/'private').exists())
