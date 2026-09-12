@@ -79,6 +79,49 @@ class StrictEvidenceTests(unittest.TestCase):
             with self.subTest(summary=summary), self.assertRaises(strict_evidence.EvidenceError):
                 strict_evidence.validate_record(record(summary=summary))
 
+    def test_absolute_paths_in_prose_and_criteria_are_rejected_before_public_write(self):
+        paths = ('/root/customer/project', '/workspace/private-client/result',
+                 '/container-client/result', '//mounted-client/result',
+                 '/var/customer/result', '%2Fworkspace%2Fclient%2Fresult')
+        for path in paths:
+            for field in ('summary', 'reason', 'criterion'):
+                with self.subTest(path=path, field=field), tempfile.TemporaryDirectory() as tmp:
+                    item = record()
+                    text = 'Observed output at `' + path + '`'
+                    if field == 'summary':
+                        item['summary'] = text
+                    elif field == 'reason':
+                        item['states']['validation']['reason'] = text
+                    else:
+                        item['artifact'] = {'sha256': 'b' * 64, 'reference': 'artifacts/render.png'}
+                        item['semantic_acceptance'] = {
+                            'schema_version': 1, 'source': item['source'], 'artifact': item['artifact'],
+                            'display_contract': {'intended': 'Label fits', 'criteria': [text]},
+                            'scope': {'kind': 'visual', 'viewport': {'width': 1280, 'height': 720}},
+                            'observations': [{'kind': 'file', 'reference': 'artifacts/render.png'}],
+                        }
+                    root = Path(tmp).resolve()
+                    with self.assertRaises(strict_evidence.EvidenceError):
+                        strict_evidence.write_record(root, item)
+                    self.assertFalse((root / '.agent').exists())
+
+    def test_relative_paths_and_public_https_urls_remain_valid_in_prose(self):
+        for summary in ('Read docs/plan.md and tests/test_example.py', 'Read docs/(public)/result.md',
+                        'Compare pass/fail and 1/2 acceptance',
+                        'Review https://github.com/example/project/pull/7',
+                        'See https://example.org/reports/(public)/result'):
+            with self.subTest(summary=summary):
+                strict_evidence.validate_record(record(summary=summary))
+
+    def test_absolute_path_delimiters_and_unsafe_url_spans_are_not_exempt(self):
+        for summary in ('path=/opt/client', 'Output:/custom-client/result', '(/srv/client)',
+                        '///mounted-client/result', 'See https://localhost/client/result',
+                        'See https://[malformed/client/result',
+                        'See [report](https://example.org/checks)(/root/customer/project)',
+                        "See 'https://example.org/checks',/workspace/private-client/result"):
+            with self.subTest(summary=summary), self.assertRaises(strict_evidence.EvidenceError):
+                strict_evidence.validate_record(record(summary=summary))
+
     def test_encoded_file_credentials_cannot_enter_evidence_or_artifact_references(self):
         reference = 'tests/%61pi_key%3Dsk%2D' + 'a' * 20
         cases = [record(evidence=[{'kind': 'file', 'reference': reference}]),
