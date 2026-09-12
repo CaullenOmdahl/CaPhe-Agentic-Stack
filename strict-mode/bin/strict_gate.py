@@ -1230,7 +1230,9 @@ def main(argv: list[str] | None = None) -> int:
     if os.name != "posix":
         print(PROCESS_PLATFORM_ERROR, file=sys.stderr)
         return 127
-    root = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
+    root = Path(subprocess.check_output(
+        ["git", "rev-parse", "--show-toplevel"], text=True, env=command_environment(),
+    ).strip())
     manifest_path = root / args.manifest
     if args.write_default_manifest:
         if manifest_path.exists():

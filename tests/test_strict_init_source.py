@@ -595,6 +595,38 @@ class StrictInitSourceTests(unittest.TestCase):
                 self.assertEqual((repo/'custom-hook-ran').exists(),change=='custom-command')
                 self.assertEqual(old.read_bytes(),expected)
 
+    def test_refresh_rejects_unrecorded_executable_git_hooks_without_mutation(self):
+        for name, symlink in (("commit-msg", False), ("pre-push", True)):
+            with self.subTest(name=name, symlink=symlink), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve(); repo = self.repo(root)
+                initializer.initialize(ROOT / "strict-mode", repo)
+                hookdir = Path(git(repo, "config", "core.hooksPath"))
+                hook = hookdir / name
+                if symlink:
+                    target = root / "custom-hook"
+                    target.write_text("#!/bin/sh\nexit 17\n"); target.chmod(0o755)
+                    hook.symlink_to(target)
+                else:
+                    hook.write_text("#!/bin/sh\nexit 17\n"); hook.chmod(0o755)
+                before = self.hook_snapshot(root)
+                with self.assertRaisesRegex(initializer.InitError, "unrecorded executable Git hook"):
+                    initializer.initialize(ROOT / "strict-mode", repo)
+                self.assertEqual(self.hook_snapshot(root), before)
+                if symlink:
+                    self.assertEqual(hook.readlink(), target)
+
+    def test_refresh_preserves_nonexecuting_hook_extras(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); repo = self.repo(root)
+            initializer.initialize(ROOT / "strict-mode", repo)
+            hookdir = Path(git(repo, "config", "core.hooksPath"))
+            extras = {"commit-msg": 0o644, "commit-msg.sample": 0o755, "private-note": 0o755}
+            for name, mode in extras.items():
+                path = hookdir / name; path.write_text("preserve custom bytes\n"); path.chmod(mode)
+            before = self.hook_snapshot(root)
+            initializer.initialize(ROOT / "strict-mode", repo)
+            self.assertEqual(self.hook_snapshot(root), before)
+
 
 if __name__ == '__main__':
     unittest.main()

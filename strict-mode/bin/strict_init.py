@@ -144,6 +144,10 @@ def read_activation(root, hookdir, *, canon=None, verify_previous=True):
     if (not isinstance(forwarded, dict) or not set(forwarded).issubset(FORWARDED_HOOKS)
             or not all(digest(value) for value in forwarded.values())):
         raise InitError("invalid forwarded-hook inventory")
+    for name in sorted(FORWARDED_HOOKS - set(forwarded)):
+        if os.access(hookdir / name, os.X_OK):
+            raise InitError("unrecorded executable Git hook: " + name +
+                            "; preserve and move it to the original hook directory before explicit reconciliation")
     for name, expected_hash in {**record["source_files"], **forwarded}.items():
         path = hookdir / name
         safe(path)

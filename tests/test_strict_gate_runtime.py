@@ -29,6 +29,32 @@ def repository(path):
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_cli_and_wrapper_bind_invoking_checkout_despite_inherited_git_overrides(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp).resolve()
+            intended, other = base / 'intended', base / 'other'
+            for root, code in ((intended, 7), (other, 0)):
+                root.mkdir(); repository(root); (root / '.agent').mkdir()
+                manifest = {'version': 1, 'components': [{'name': 'fixture', 'paths': ['**'],
+                    'commands': [{'name': 'check', 'run': [sys.executable, '-c', f'raise SystemExit({code})']}]}]}
+                (root / '.agent/strict-gate.json').write_text(json.dumps(manifest))
+            environment = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
+            environment.update(GIT_DIR=str(other / '.git'), GIT_WORK_TREE=str(other),
+                               GIT_INDEX_FILE=str(other / '.git/index'), GIT_CONFIG_GLOBAL=os.devnull,
+                               GIT_CONFIG_NOSYSTEM='1')
+            commands = ((sys.executable, str(ROOT / 'strict-mode/bin/strict_gate.py')),
+                        ('bash', str(ROOT / 'strict-mode/bin/strict-green-gate.sh')))
+            for disabled in (False, True):
+                if disabled:
+                    (other / '.agent/.strict-mode').write_text('off\n')
+                for command in commands:
+                    with self.subTest(command=command[0], other_disabled=disabled):
+                        result = subprocess.run([*command, '--mode', 'completion'], cwd=intended,
+                                                env=environment, capture_output=True, text=True, timeout=15)
+                        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                        self.assertIn('FAIL  fixture:check', result.stderr)
+                        self.assertNotIn('user-disabled', result.stdout)
+
     def test_declared_order_prevents_checks_racing_preparation(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
