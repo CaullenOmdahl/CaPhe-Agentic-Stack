@@ -398,7 +398,7 @@ class InstallContracts(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp).resolve(); source=self.fixture_source(root); target=root/'target'
             plan=installer.plan_runtime_install(source,target); private=root/'private'; private.mkdir(mode=0o700)
-            receipt=private/('runtime-'+plan['source_digest'][:16]+'.json')
+            receipt=installer.runtime_receipt_path(private,plan['source_digest'],target)
             receipt.write_text('unrelated private bytes\n'); receipt.chmod(0o600)
             before=self.snapshot(private)
             with self.assertRaises(installer.InstallError): installer.apply_runtime_plan(plan,inventory_root=private)
@@ -435,7 +435,7 @@ class InstallContracts(unittest.TestCase):
             with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp:
                 root=Path(tmp).resolve(); source=self.fixture_source(root); target=root/'target'
                 plan=installer.plan_runtime_install(source,target); private=root/'private'; private.mkdir(mode=0o700)
-                receipt=private/('runtime-'+plan['source_digest'][:16]+'.json')
+                receipt=installer.runtime_receipt_path(private,plan['source_digest'],target)
                 if kind == 'fifo': os.mkfifo(receipt, 0o600)
                 else: receipt.mkdir(mode=0o700)
                 before=receipt.stat()
@@ -462,3 +462,38 @@ class InstallContracts(unittest.TestCase):
                     installer.apply_runtime_plan(plan,inventory_root=root/'private')
             self.assertEqual(self.snapshot(target),before)
             self.assertEqual(self.snapshot(root/'private'),private_before)
+
+    def test_same_payload_two_targets_share_inventory_without_receipt_collision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp).resolve(); source=self.fixture_source(root); private=root/'private'
+            first=installer.plan_runtime_install(source,root/'first')
+            second=installer.plan_runtime_install(source,root/'second')
+            installer.apply_runtime_plan(first,inventory_root=private)
+            before=self.snapshot(private); first_before=self.snapshot(root/'first')
+            with self.assertRaisesRegex(installer.InstallError,'injected receipt failure'):
+                installer.apply_runtime_plan(second,inventory_root=private,fail_after=len(second['payload'])+3)
+            self.assertEqual(self.snapshot(private),before)
+            self.assertEqual(self.snapshot(root/'first'),first_before)
+            self.assertFalse((root/'second').exists())
+            installer.apply_runtime_plan(second,inventory_root=private)
+            self.assertTrue(installer.verify_runtime_plan(first)); self.assertTrue(installer.verify_runtime_plan(second))
+            receipts=list(private.glob('runtime-*.json'))
+            self.assertEqual(len(receipts),2)
+            self.assertEqual({json.loads(p.read_text())['target'] for p in receipts},{first['target'],second['target']})
+            before=self.snapshot(private)
+            installer.apply_runtime_plan(first,inventory_root=private)
+            alias=installer.plan_runtime_install(source,root/'second/../second')
+            installer.apply_runtime_plan(alias,inventory_root=private)
+            self.assertEqual(self.snapshot(private),before)
+
+    def test_legacy_source_only_receipts_are_preserved_without_target_claim(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp).resolve(); source=self.fixture_source(root); private=root/'private'; private.mkdir(mode=0o700)
+            plan=installer.plan_runtime_install(source,root/'target')
+            legacy=private/('runtime-'+plan['source_digest'][:16]+'.json')
+            legacy.write_text('existing private receipt retained\n'); legacy.chmod(0o600)
+            before=(legacy.read_bytes(),legacy.stat().st_mode,legacy.stat().st_ino)
+            installer.apply_runtime_plan(plan,inventory_root=private)
+            self.assertEqual((legacy.read_bytes(),legacy.stat().st_mode,legacy.stat().st_ino),before)
+            self.assertEqual(len(list(private.glob('runtime-*.json'))),2)
+            self.assertTrue(installer.verify_runtime_plan(plan))

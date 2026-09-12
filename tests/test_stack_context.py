@@ -82,6 +82,42 @@ class ContextContracts(unittest.TestCase):
             fourth = context.collect_repository_context(repo)['identity']['before']['working_snapshot']
             self.assertNotEqual(third, fourth)
 
+    def test_tracked_bytes_and_modes_are_bound_when_git_normalizes_them(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp).resolve()
+            initialize(repo)
+            (repo / '.gitattributes').write_text('tracked filter=constant\n')
+            git(repo, 'config', 'filter.constant.clean', 'cat >/dev/null; printf normalized')
+            git(repo, 'config', 'core.filemode', 'false')
+            (repo / 'tracked').write_text('first')
+            git(repo, 'add', '.')
+            first = context._snapshot_identity(repo)
+            diff = git(repo, 'diff', '--binary', '--no-textconv').stdout
+            (repo / 'tracked').write_text('second')
+            self.assertEqual(git(repo, 'diff', '--binary', '--no-textconv').stdout, diff)
+            second = context._snapshot_identity(repo)
+            self.assertTrue(first['complete'] and second['complete'])
+            self.assertNotEqual(first['working_snapshot'], second['working_snapshot'])
+            (repo / 'tracked').chmod(0o755)
+            self.assertEqual(git(repo, 'diff', '--binary', '--no-textconv').stdout, diff)
+            third = context._snapshot_identity(repo)
+            self.assertTrue(third['complete'])
+            self.assertNotEqual(second['working_snapshot'], third['working_snapshot'])
+
+    def test_tracked_deletion_and_reappearance_have_explicit_identities(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp).resolve()
+            initialize(repo)
+            path = repo / 'tracked'
+            original = context._snapshot_identity(repo)
+            content, mode = path.read_bytes(), path.stat().st_mode & 0o777
+            path.unlink()
+            deleted = context._snapshot_identity(repo)
+            self.assertTrue(deleted['complete'])
+            self.assertNotEqual(original['working_snapshot'], deleted['working_snapshot'])
+            path.write_bytes(content); path.chmod(mode)
+            self.assertEqual(context._snapshot_identity(repo), original)
+
     def test_large_file_hashing_is_streamed_and_symlink_target_is_not_read(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
@@ -90,6 +126,7 @@ class ContextContracts(unittest.TestCase):
                 for _ in range(24):
                     handle.write(b'x' * (1024 * 1024))
             (repo / 'link').symlink_to('missing-target')
+            git(repo, 'add', 'large', 'link')
             tracemalloc.start()
             try:
                 result = context.collect_repository_context(repo)
@@ -111,7 +148,7 @@ class ContextContracts(unittest.TestCase):
                 self.assertTrue(result['identity']['stale'])
                 git(repo, 'update-index', '--no-assume-unchanged', '--no-skip-worktree', 'tracked')
             (repo / 'new').write_text('data')
-            with patch.object(context, '_hash_untracked', side_effect=context.SnapshotFailure('path-unreadable-or-changed')):
+            with patch.object(context, '_hash_worktree_path', side_effect=context.SnapshotFailure('path-unreadable-or-changed')):
                 result = context.collect_repository_context(repo)
             self.assertEqual(result['identity']['before'], result['identity']['after'])
             self.assertTrue(result['identity']['stale'])

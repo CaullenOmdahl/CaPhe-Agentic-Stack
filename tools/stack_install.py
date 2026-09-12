@@ -194,13 +194,24 @@ def verify_runtime_plan(plan):
             and _metadata_matches(target, plan["payload"]))
 
 
+def runtime_receipt_path(inventory, source_digest, target):
+    """Each canonical target has its own immutable receipt for a source payload.
+
+    Legacy source-only receipts are left untouched; they cannot name multiple
+    targets and are not adopted as ownership claims for this namespace.
+    """
+    identity = json.dumps([source_digest, str(_safe_path(target))], separators=(",", ":"))
+    key = hashlib.sha256(identity.encode()).hexdigest()
+    return Path(inventory) / ("runtime-" + key + ".json")
+
+
 def apply_runtime_plan(plan, *, inventory_root, fail_after=None):
     source, target = _validate_plan(plan)
     inventory = _private_preflight(inventory_root, source, target)
     destinations = [target / item[0] for item in plan["payload"]] + [target / _MANIFEST, target / "VERSION"]
     current = {item[0] for item in plan["payload"]}
     retired = [item for item in plan["previous_payload"] if item[0] not in current]
-    receipt_path = inventory / ("runtime-" + plan["source_digest"][:16] + ".json")
+    receipt_path = runtime_receipt_path(inventory, plan["source_digest"], target)
     installed = _payload(target) if (target / _MANIFEST).exists() else []
     owned = {item[0] for item in installed}
     removing = {item[0] for item in retired if item[0] in owned}
