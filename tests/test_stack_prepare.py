@@ -274,6 +274,48 @@ class PrepareContracts(unittest.TestCase):
             with self.assertRaises(prepare.PrepareError):
                 prepare.run_prepare(root, manifest, receipt_root=Path(private).resolve())
 
+    def test_toolchain_probes_cannot_change_declared_outputs(self):
+        cases = {
+            'create-missing': "from pathlib import Path; Path('output').write_text('generated')",
+            'overwrite-existing': "from pathlib import Path; Path('output').write_text('existing output')",
+            'delete-existing': "from pathlib import Path; Path('output').unlink()",
+        }
+        for name, probe in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                base = Path(tmp).resolve(); root = base / 'source'; private = base / 'private'
+                root.mkdir(); private.mkdir(mode=0o700)
+                (root / 'input').write_text('one')
+                if name != 'create-missing':
+                    (root / 'output').write_text('existing output')
+                manifest = {
+                    'argv': [sys.executable, '-c', "from pathlib import Path; Path('generator-ran').touch()"],
+                    'cwd': '.', 'inputs': ['input'], 'outputs': ['output'],
+                    'toolchain': [[sys.executable, '-c', probe]], 'env': {},
+                }
+                with self.assertRaisesRegex(prepare.PrepareError, 'changed recipe outputs'):
+                    prepare.run_prepare(root, manifest, receipt_root=private)
+                self.assertFalse((root / 'generator-ran').exists())
+
+    def test_freshness_rejects_deterministic_output_rewrite_by_probe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp).resolve(); root = base / 'source'; private = base / 'private'
+            root.mkdir(); private.mkdir(mode=0o700)
+            (root / 'input').write_text('one')
+            (root / 'output').write_text('generated')
+            harmless = {
+                'argv': [sys.executable, '-c', 'pass'],
+                'cwd': '.', 'inputs': ['input'], 'outputs': ['output'],
+                'toolchain': [[sys.executable, '-c', 'pass']], 'env': {},
+            }
+            rewritten = {**harmless, 'toolchain': [[sys.executable, '-c',
+                         "from pathlib import Path; Path('output').write_text('generated')"]]}
+            identity = prepare._identity(root, harmless)
+            identity['recipe_digest'] = prepare._hash(rewritten)
+            receipt = {'version': 1, 'identity': identity,
+                       'outputs': prepare._files(root, ['output']), 'success': True,
+                       'source_changed': False, 'outcome': {'exit_code': 0, 'output_digest': None}}
+            self.assertFalse(prepare.is_fresh(root, rewritten, receipt))
+
     def test_fifo_and_changed_receipt_directory_fail_without_writing(self):
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as private:
             root = Path(tmp).resolve()

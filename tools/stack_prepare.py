@@ -109,6 +109,25 @@ def _files(root, names):
     return result
 
 
+def _probe_files(root, names):
+    """Return a transient content-plus-stat snapshot for probe mutation checks."""
+    result = {}
+    for name in names:
+        path = _path(root, name)
+        if not path.exists():
+            result[name] = None
+            continue
+        before = path.stat()
+        file = _files(root, [name])[name]
+        after = path.stat()
+        identity = lambda info: (info.st_dev, info.st_ino, info.st_size,
+                                 info.st_mtime_ns, info.st_ctime_ns)
+        if file is None or identity(before) != identity(after):
+            raise PrepareError('recipe file changed during probe snapshot')
+        result[name] = {'file': file, 'stat': identity(after)}
+    return result
+
+
 def _environment(manifest):
     # Tool discovery, home and temp are the only implicit variables. Values stay hashed in receipts.
     environment = {key: os.environ[key] for key in ('PATH', 'HOME', 'TMPDIR', 'TEMP', 'TMP', 'SYSTEMROOT') if key in os.environ}
@@ -169,9 +188,15 @@ def _identity(root, manifest):
         raise PrepareError('recipe cwd does not exist')
     environment = _environment(manifest)
     inputs = _files(root, manifest['inputs'])
-    toolchain = [_run(command, cwd, environment, 10) for command in manifest['toolchain']]
-    if inputs != _files(root, manifest['inputs']):
-        raise PrepareError('toolchain probe changed recipe inputs')
+    input_snapshot = _probe_files(root, manifest['inputs'])
+    output_snapshot = _probe_files(root, manifest['outputs'])
+    toolchain = []
+    for command in manifest['toolchain']:
+        toolchain.append(_run(command, cwd, environment, 10))
+        if input_snapshot != _probe_files(root, manifest['inputs']):
+            raise PrepareError('toolchain probe changed recipe inputs')
+        if output_snapshot != _probe_files(root, manifest['outputs']):
+            raise PrepareError('toolchain probe changed recipe outputs')
     return {'root_digest': _hash(str(root)), 'recipe_digest': _hash(manifest),
             'inputs': inputs, 'environment_digest': _hash(environment), 'toolchain': toolchain}
 
