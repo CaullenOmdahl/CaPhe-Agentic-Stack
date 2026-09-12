@@ -244,22 +244,29 @@ Implementation:
    specify expiry and resolve it through authenticated provider APIs. Check conclusions alone are not
    a receipt. A missing/expired artifact is unavailable evidence.
 4. Add a receipt validator to existing evidence tooling. Bind the artifact/digest to the trusted
-   repository and run using provider metadata or attestations, and require an approved workflow identity.
-   A PR-modified workflow cannot authorize itself. Validate revision/merge-base semantics, all declared
-   commands, successful conclusions, environment scope, and check URLs. Reject untrusted/partial receipts.
+   repository and run using provider metadata or attestations. Authenticate both the workflow and an
+   independently approved verification policy/manifest identity from a protected base or trusted policy
+   artifact. Neither a PR-modified workflow nor a PR-modified manifest can authorize itself or shrink the
+   required matrix. Execute the trusted baseline requirements, or obtain separate approval for an updated
+   policy before certification. Validate revision/merge-base semantics, every trusted required command,
+   successful conclusions, environment scope, and check URLs. Reject untrusted/partial receipts.
 5. Align canon, methodology, installed skill, and CLI messaging: completion requires every declared
    command covered by either validated authoritative CI evidence or a full uncached local run. Keep
    the existing local completion command exhaustive; put receipt selection in the evidence/orchestration
-   layer. Absence or incomplete coverage falls back to that local command. This is an evidence route,
-   not a completion cache. Never turn a receipt into permission to merge.
+   layer. Absent/incomplete receipts fall back to that local command with the approved matrix. A policy
+   trust failure cannot be repaired by rerunning the same unapproved PR manifest locally; use the trusted
+   requirements or await the policy decision. This is an evidence route, not a completion cache. Never
+   turn a receipt into permission to merge.
 6. Preserve baseline failures as explicit findings with reproduction and ownership. Do not globally
    ignore them or treat disclosure as acceptance. Follow the named exception process where applicable.
 
 Acceptance: a real producer/validator round trip covers the complete matrix; local completion still runs
 all commands uncached. Selective plans detect shared-package regressions and unknown paths. Stale,
-partial, skipped, cancelled, fork-origin, altered-workflow, expired, tampered, and different-platform CI
-receipts cannot certify completion. Add canon/CLI consistency checks to prevent contradictory installation
-output. Compare equal source states before calling two runs redundant.
+partial, skipped, cancelled, fork-origin, altered-workflow, altered-manifest, expired, tampered, and
+different-platform CI receipts cannot certify completion. Specifically test command removal/weakening
+in a PR manifest, including an attempted local fallback using that same manifest. Add canon/CLI
+consistency checks to prevent contradictory installation output. Compare equal source states before
+calling two runs redundant.
 
 ### 5. Bounded delegation with model-and-effort routing — priority P1, effort M–L
 
