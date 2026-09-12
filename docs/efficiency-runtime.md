@@ -93,8 +93,10 @@ python3 "$CAPHE_RUNTIME/tools/stack_prepare.py" --root . \
   --check-receipt "$CAPHE_PRIVATE/receipts/selected-receipt.json"
 ```
 
-Use canonical, owner-only private paths outside all repositories. Save the returned `receipt_path`;
-the freshness check exits nonzero on missing or stale evidence. Never
+Use canonical, owner-only private paths outside all repositories. Save the returned `receipt_path`
+and pass its exact containing directory as `--receipt-root` when checking it. The read path enforces
+the same private-storage boundary as writing; this is local provenance, not executor attestation.
+The freshness check exits nonzero on missing or stale evidence. Never
 skip required completion checks because preparation was fresh.
 
 The gate includes staged, unstaged, and non-ignored untracked changes because checks execute the working
