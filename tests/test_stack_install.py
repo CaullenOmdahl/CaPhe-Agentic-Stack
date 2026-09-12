@@ -535,6 +535,16 @@ class InstallContracts(unittest.TestCase):
             self.assertEqual(len(list(private.glob('runtime-*.json'))),2)
             self.assertTrue(installer.verify_runtime_plan(plan))
 
+    def test_non_git_activation_fails_without_writing_a_partial_scaffold(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp).resolve()
+            (target / "notes.txt").write_text("preserve existing work\n")
+            (target / ".env").write_text("FIXTURE_SETTING=preserve\n")
+            before = self.snapshot(target)
+            with self.assertRaises(installer.InstallError):
+                installer.initialize_project(PATH.parents[1], target, apply=True)
+            self.assertEqual(self.snapshot(target), before)
+
     def test_git_ceiling_cannot_hide_repository_contained_runtime_or_inventory(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp).resolve(); source=self.fixture_source(root); repo=root/'other-repo'

@@ -382,6 +382,8 @@ def initialize_project(source, repo, *, apply=False):
             return {"state": "disabled", "changed": False}
     result = {"state": "planned", "changed": False, "source_digest": _digest(source)}
     if apply:
+        if probe.returncode != 0:
+            raise InstallError("project activation requires a Git worktree")
         init = source / "strict-mode" / "bin" / "strict-init.sh"
         if not init.is_file():
             raise InstallError("runtime strict-init is unavailable")
