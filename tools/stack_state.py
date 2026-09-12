@@ -22,6 +22,16 @@ class StateError(ValueError):
     pass
 
 
+def _json_object(pairs):
+    """Reject ambiguous object members at every nesting level before validation."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise StateError('JSON object contains duplicate keys')
+        result[key] = value
+    return result
+
+
 def _identifier(value):
     if not isinstance(value, str) or re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}', value) is None:
         raise StateError('invalid state identifier')
@@ -160,7 +170,7 @@ class PrivateStateStore:
                 content = handle.read(1_048_577)
             if len(content.encode('utf-8')) > 1_048_576:
                 raise StateError('private state record exceeds 1 MiB')
-            record = json.loads(content)
+            record = json.loads(content, object_pairs_hook=_json_object)
         except (ValueError, OSError) as error:
             raise StateError('invalid private state record') from error
         if not isinstance(record, dict) or set(record) != {'schema_version', 'repository', 'id', 'data'}:

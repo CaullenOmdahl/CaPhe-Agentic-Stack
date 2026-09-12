@@ -209,3 +209,49 @@ class PrepareContracts(unittest.TestCase):
             self.assertFalse((root / 'command-ran').exists())
             self.assertFalse((nested / 'receipts').exists())
             self.assertEqual((root / 'output').read_bytes(), before)
+
+    def test_duplicate_recipe_keys_reject_before_probe_or_generator(self):
+        for field in ('argv', 'env'):
+            for reverse in (False, True):
+                with self.subTest(field=field, reverse=reverse), tempfile.TemporaryDirectory() as tmp:
+                    root, private, manifest_path, manifest, _ = self.receipt_fixture(Path(tmp).resolve())
+                    script = "from pathlib import Path; Path('command-ran').write_text('ran'); Path('output').write_text('generated')"
+                    manifest['argv'] = ['python3', '-c', script]
+                    manifest['toolchain'] = [['python3', '-c', "from pathlib import Path; Path('probe-ran').write_text('ran')"]]
+                    manifest['env'] = {'MODE': 'one'}
+                    content = json.dumps(manifest)
+                    if field == 'argv':
+                        values = [manifest['argv'], ['python3', '-c', script + "; print('other command')"]]
+                        if reverse: values.reverse()
+                        replacement = ', '.join('"argv": ' + json.dumps(value) for value in values)
+                        content = content.replace('"argv": ' + json.dumps(manifest['argv']), replacement)
+                    else:
+                        values = ['one', 'two'] if not reverse else ['two', 'one']
+                        replacement = ', '.join('"MODE": ' + json.dumps(value) for value in values)
+                        content = content.replace('"MODE": "one"', replacement)
+                    manifest_path.write_text(content)
+                    result = subprocess.run(['python3', str(PATH), '--root', str(root), '--manifest', str(manifest_path),
+                                             '--receipt-root', str(private)], capture_output=True, text=True, timeout=3)
+                    self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                    self.assertFalse((root / 'command-ran').exists())
+                    self.assertFalse((root / 'probe-ran').exists())
+                    self.assertEqual((root / 'output').read_text(), 'existing output')
+                    self.assertEqual(list(private.iterdir()), [])
+
+    def test_duplicate_receipt_keys_cannot_be_fresh_in_either_order(self):
+        for field in ('success', 'exit_code', 'recipe_digest'):
+            for reverse in (False, True):
+                with self.subTest(field=field, reverse=reverse), tempfile.TemporaryDirectory() as tmp:
+                    root, private, manifest_path, _, receipt = self.receipt_fixture(Path(tmp).resolve())
+                    valid = receipt['success'] if field == 'success' else receipt['outcome']['exit_code'] if field == 'exit_code' else receipt['identity']['recipe_digest']
+                    invalid = False if field == 'success' else 7 if field == 'exit_code' else 'stale'
+                    values = [invalid, valid] if not reverse else [valid, invalid]
+                    replacement = ', '.join(json.dumps(field) + ': ' + json.dumps(value) for value in values)
+                    content = json.dumps(receipt).replace(json.dumps(field) + ': ' + json.dumps(valid), replacement)
+                    path = private / 'receipt.json'; path.write_text(content); path.chmod(0o600)
+                    result = self.check_cli(root, private, manifest_path, path)
+                    self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                    self.assertNotIn('true', result.stdout)
+                    self.assertEqual(path.read_text(), content)
+                    self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+                    self.assertEqual((root / 'output').read_text(), 'existing output')

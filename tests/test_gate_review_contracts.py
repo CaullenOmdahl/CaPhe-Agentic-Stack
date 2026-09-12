@@ -9,7 +9,8 @@ import tempfile
 import time
 import unittest
 
-SPEC = importlib.util.spec_from_file_location('gate_body_review', Path(__file__).parents[1] / 'strict-mode/bin/strict_gate.py')
+ROOT_GATE = Path(__file__).resolve().parents[1] / 'strict-mode/bin/strict_gate.py'
+SPEC = importlib.util.spec_from_file_location('gate_body_review', ROOT_GATE)
 gate = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(gate)
 
@@ -21,6 +22,46 @@ def component(name):
 
 
 class ReviewBodyContracts(unittest.TestCase):
+    def test_cli_rejects_duplicate_manifest_keys_before_check_execution(self):
+        data = {'version': 1, 'components': [component('fixture')]}
+        data['components'][0]['paths'] = ['**']
+        data['components'][0]['commands'][0]['run'] = [sys.executable, '-c', "from pathlib import Path; Path('executed').touch()"]
+        encoded = json.dumps(data)
+        cases = ['{"version": 2, ' + encoded[1:],
+                 encoded.replace('"commands": [', '"commands": [], "commands": [')]
+        for content in cases:
+            with self.subTest(content=content), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                subprocess.run(['git', 'init', '-q', str(root)], check=True)
+                (root / '.agent').mkdir()
+                (root / '.agent/strict-gate.json').write_text(content)
+                result = subprocess.run([sys.executable, str(ROOT_GATE), '--mode', 'completion'],
+                                        cwd=root, text=True, capture_output=True, timeout=10)
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn('duplicate keys', result.stderr)
+                self.assertFalse((root / 'executed').exists())
+
+    def test_discovery_rejects_ambiguous_package_scripts(self):
+        cases = ['{"scripts":{"test":"first"},"scripts":{"lint":"last"}}',
+                 '{"scripts":{"test":"first","test":"last"}}']
+        for content in cases:
+            with self.subTest(content=content), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / 'package.json').write_text(content)
+                with self.assertRaisesRegex(gate.ManifestError, 'duplicate keys'):
+                    gate.discover_default_manifest(root)
+
+    def test_default_manifest_rejection_leaves_no_partial_scaffold(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            subprocess.run(['git', 'init', '-q', str(root)], check=True)
+            (root / 'package.json').write_text('{"scripts":{"test":"first","test":"last"}}')
+            result = subprocess.run([sys.executable, str(ROOT_GATE), '--write-default-manifest'],
+                                    cwd=root, text=True, capture_output=True, timeout=10)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertNotIn('Traceback', result.stderr)
+            self.assertFalse((root / '.agent').exists())
+
     def test_command_cwd_cannot_escape_before_command_or_cache_probe(self):
         for kind in ('absolute', 'parent', 'symlink', 'cached-symlink'):
             with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:

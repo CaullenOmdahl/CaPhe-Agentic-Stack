@@ -96,6 +96,15 @@ def _require_string_list(value: Any, label: str, *, nonempty: bool = False) -> l
     return value
 
 
+def _unique_json_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ManifestError("duplicate keys in gate JSON")
+        result[key] = value
+    return result
+
+
 def _validate_command_cwd(cwd: Any) -> None:
     if (not isinstance(cwd, str) or not cwd or "\\" in cwd or "\0" in cwd
             or Path(cwd).is_absolute() or ".." in Path(cwd).parts
@@ -939,7 +948,7 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
         if any(part in {"node_modules", "build", "dist", ".svelte-kit"} for part in package.parts):
             continue
         try:
-            scripts = json.loads(package.read_text()).get("scripts", {})
+            scripts = json.loads(package.read_text(), object_pairs_hook=_unique_json_object).get("scripts", {})
         except (OSError, json.JSONDecodeError):
             continue
         cwd = _relative_cwd(root, package)
@@ -1135,8 +1144,12 @@ def main(argv: list[str] | None = None) -> int:
         if manifest_path.exists():
             print(f"manifest already exists: {manifest_path}")
             return 0
+        try:
+            payload = json.dumps(discover_default_manifest(root), indent=2) + "\n"
+        except (OSError, ValueError) as error:
+            print(f"STRICT GATE CONFIG ERROR: {error}", file=sys.stderr)
+            return 2
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = json.dumps(discover_default_manifest(root), indent=2) + "\n"
         with tempfile.NamedTemporaryFile("w", dir=manifest_path.parent, delete=False) as handle:
             handle.write(payload)
             tmp = Path(handle.name)
@@ -1145,7 +1158,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     try:
         raw = manifest_path.read_bytes()
-        data = validate_manifest(json.loads(raw))
+        data = validate_manifest(json.loads(raw, object_pairs_hook=_unique_json_object))
         tracked = _git_paths(root, "ls-files")
         validate_path_coverage(data, tracked)
         changed = sorted(set(args.changed) | set(changed_paths(root)))
