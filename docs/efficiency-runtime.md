@@ -260,13 +260,13 @@ manifest with a generated default. A machine update does not claim application r
 readiness, or a completed production deployment. Keep detailed rollout inventories and exceptions private.
 
 This repository's CI retains `tests/`, `test/`, and `strict-mode/test/` from the exact PR base in a
-disposable checkout containing candidate product source. It runs the accepted runner and manifest there,
-then separately against the untouched candidate checkout to discover candidate-added tests even when
-the retained checks fail. Pushes to main use the preceding main commit; missing baseline policy fails
+disposable checkout containing candidate product source. It runs the accepted runner and manifest there.
+A separate phase uses the accepted runner with the candidate manifest against the untouched candidate
+checkout, so newly declared commands and added tests run even when the retained checks fail. Pushes to
+main use the preceding main commit as the accepted baseline; missing baseline policy fails
 closed. Both source checkouts disable persisted credentials. Candidate replacements cannot remove the
 accepted test implementations. The job rejects changed HEAD, index entries/flags, or nonignored source
 state after checks.
 The workflow and test sources still require independent review: this is not tamper-proof attestation or
-a trusted receipt service. Additions to the candidate's check matrix need separate verification until
-they become accepted baseline policy. GitHub's [PR event semantics](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request)
+a trusted receipt service. GitHub's [PR event semantics](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request)
 and [checkout configuration](https://github.com/actions/checkout) define the checkout boundary.

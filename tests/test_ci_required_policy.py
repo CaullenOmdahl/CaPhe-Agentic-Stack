@@ -40,7 +40,8 @@ def commit(root):
 class RequiredPolicyWorkflowTests(unittest.TestCase):
     def run_workflow(self, *, failure=False, mutation=False, wrong_ref=False, replaced_checks=False,
                      product_bad=False, new_candidate_failure=False, run_candidate=False, temp_alias=False,
-                     shadow_runner=False, python_environment=False):
+                     shadow_runner=False, python_environment=False, candidate_required_failure=False,
+                     candidate_required_success=False):
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary).resolve()
             candidate = workspace / "candidate"; candidate.mkdir()
@@ -51,7 +52,6 @@ class RequiredPolicyWorkflowTests(unittest.TestCase):
                 (root / '.gitignore').write_text('__pycache__/\n')
             # Either candidate file would make the former single-step workflow falsely pass.
             (candidate / "strict-mode/bin/strict_gate.py").write_text("print('CANDIDATE NOOP')\n")
-            (candidate / ".agent/strict-gate.json").write_text(json.dumps({"commands": []}))
             (candidate / "source.txt").write_text("broken\n" if product_bad else "original\n")
             (policy / "source.txt").write_text("original\n")
             for root in (candidate, policy):
@@ -96,6 +96,12 @@ class RequiredPolicyWorkflowTests(unittest.TestCase):
             if new_candidate_failure:
                 (candidate / 'tests/test_added.py').write_text(
                     "import unittest\nclass Added(unittest.TestCase):\n    def test_added(self): self.fail('candidate added test ran')\n")
+            candidate_commands = list(commands) if run_candidate else []
+            if candidate_required_failure:
+                candidate_commands = [["python3", "-c", "print('CANDIDATE REQUIRED'); raise SystemExit(8)"]]
+            elif candidate_required_success:
+                candidate_commands = [["python3", "-c", "print('CANDIDATE REQUIRED')"]]
+            (candidate / ".agent/strict-gate.json").write_text(json.dumps({"commands": candidate_commands}))
             (policy / ".agent/strict-gate.json").write_text(json.dumps({"commands": commands}))
             commit(candidate)
             revision = commit(policy)
@@ -125,15 +131,33 @@ class RequiredPolicyWorkflowTests(unittest.TestCase):
         self.assertNotIn("CANDIDATE NOOP", result.stdout)
         self.assertEqual(result.stdout.count("REQUIRED"), 4)
 
+    def test_candidate_declared_required_command_cannot_be_skipped(self):
+        results = self.run_workflow(candidate_required_failure=True, run_candidate=True)
+        self.assertEqual(results[0].returncode, 0, results[0].stdout + results[0].stderr)
+        self.assertEqual(results[0].stdout.count("REQUIRED"), 4)
+        self.assertNotEqual(results[1].returncode, 0)
+        self.assertIn("CANDIDATE REQUIRED", results[1].stdout)
+        self.assertNotIn("CANDIDATE NOOP", results[1].stdout)
+
+    def test_candidate_declared_required_command_runs_with_accepted_runner(self):
+        results = self.run_workflow(candidate_required_success=True, run_candidate=True)
+        self.assertEqual(results[0].returncode, 0, results[0].stdout + results[0].stderr)
+        self.assertEqual(results[0].stdout.count("REQUIRED"), 4)
+        self.assertEqual(results[1].returncode, 0, results[1].stdout + results[1].stderr)
+        self.assertEqual(results[1].stdout.count("CANDIDATE REQUIRED"), 1)
+        self.assertNotIn("CANDIDATE NOOP", results[1].stdout)
+
     def test_wrong_policy_revision_fails_before_execution(self):
         result = self.run_workflow(wrong_ref=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(result.stdout, "")
 
     def test_passing_checks_cannot_leave_changed_candidate_source(self):
-        result = self.run_workflow(mutation=True)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(result.stdout.count("REQUIRED"), 4)
+        results = self.run_workflow(mutation=True, run_candidate=True)
+        self.assertEqual(len(results), 2)
+        for result in results:
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout.count("REQUIRED"), 4)
 
     def test_replaced_check_scripts_and_trivial_tests_cannot_hide_broken_candidate_product(self):
         result = self.run_workflow(replaced_checks=True, product_bad=True)
@@ -160,8 +184,11 @@ class RequiredPolicyWorkflowTests(unittest.TestCase):
         self.assertEqual(result.stdout.count('REQUIRED'), 4)
 
     def test_both_matrices_use_canonical_temp_paths(self):
-        for result in self.run_workflow(temp_alias=True, run_candidate=True):
+        results = self.run_workflow(temp_alias=True, run_candidate=True)
+        self.assertEqual(len(results), 2)
+        for result in results:
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(result.stdout.count('REQUIRED'), 4)
 
     def test_candidate_stdlib_shadow_cannot_skip_either_python_matrix(self):
         results = self.run_workflow(replaced_checks=True, product_bad=True, shadow_runner=True,
@@ -173,6 +200,8 @@ class RequiredPolicyWorkflowTests(unittest.TestCase):
         self.assertIn('candidate added test ran', results[1].stdout + results[1].stderr)
 
     def test_both_matrices_clear_inherited_python_import_configuration(self):
-        for result in self.run_workflow(python_environment=True, run_candidate=True):
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertEqual(result.stdout.count('REQUIRED'), 4)
+        results = self.run_workflow(python_environment=True, candidate_required_success=True, run_candidate=True)
+        self.assertEqual(results[0].returncode, 0, results[0].stdout + results[0].stderr)
+        self.assertEqual(results[0].stdout.count('REQUIRED'), 4)
+        self.assertEqual(results[1].returncode, 0, results[1].stdout + results[1].stderr)
+        self.assertEqual(results[1].stdout.count('CANDIDATE REQUIRED'), 1)
