@@ -208,6 +208,12 @@ def _quality(trials, incumbent):
         return {'status': 'inconclusive', 'reason': 'paired incumbent and candidate runs are required'}
     if any(not trial['complete'] for trial in trials.values()):
         return {'status': 'inconclusive', 'reason': 'request/task closure is incomplete'}
+    acceptance_by_task = {}
+    for (_, task, _), trial in trials.items():
+        digest = trial['final']['acceptance_digest']
+        if task in acceptance_by_task and acceptance_by_task[task] != digest:
+            return {'status': 'inconclusive', 'reason': 'task acceptance changed across repetitions or configurations'}
+        acceptance_by_task[task] = digest
     reference = {(task, repetition): trial for (config, task, repetition), trial in trials.items() if config == incumbent}
     comparisons = {}
     for config in configurations:

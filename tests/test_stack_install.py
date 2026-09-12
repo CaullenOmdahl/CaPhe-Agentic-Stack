@@ -246,3 +246,40 @@ class InstallContracts(unittest.TestCase):
                         installer.apply_runtime_plan(plan, inventory_root=root / "private")
                 self.assertNotIn(b"3\n", activations)
                 self.assertFalse(target.exists())
+
+    def test_upgrade_retires_only_previously_managed_files_and_rolls_back_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); source = self.fixture_source(root); target = root / "target"
+            installer.apply_runtime_plan(installer.plan_runtime_install(source,target),inventory_root=root/'private')
+            old = target/'tools/tool.py'; original=old.read_bytes(); old_manifest=(target/installer._MANIFEST).read_bytes()
+            (target/'tools/user-script.py').write_text('user-owned extra\n')
+            subprocess.run(['git','-C',str(source),'rm','-q','-f','tools/tool.py'],check=True)
+            (source/'tools').mkdir(exist_ok=True)
+            (source/'tools/replacement.py').write_text('replacement\n')
+            subprocess.run(['git','-C',str(source),'add','tools/replacement.py'],check=True)
+            plan=installer.plan_runtime_install(source,target)
+            with self.assertRaises(installer.InstallError):
+                installer.apply_runtime_plan(plan,inventory_root=root/'private',fail_after=1)
+            self.assertEqual(old.read_bytes(),original)
+            self.assertEqual((target/installer._MANIFEST).read_bytes(),old_manifest)
+            installer.apply_runtime_plan(plan,inventory_root=root/'private')
+            self.assertFalse(old.exists())
+            self.assertTrue((target/'tools/replacement.py').is_file())
+            self.assertEqual((target/'tools/user-script.py').read_text(),'user-owned extra\n')
+            self.assertTrue(installer.verify_runtime_plan(plan))
+            installer.apply_runtime_plan(plan,inventory_root=root/'private')
+            old.write_bytes(original)
+            self.assertFalse(installer.verify_runtime_plan(plan))
+
+    def test_modified_retired_managed_file_rejects_upgrade_without_deleting_user_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); source=self.fixture_source(root); target=root/'target'
+            installer.apply_runtime_plan(installer.plan_runtime_install(source,target),inventory_root=root/'private')
+            subprocess.run(['git','-C',str(source),'rm','-q','-f','tools/tool.py'],check=True)
+            (source/'tools').mkdir(exist_ok=True)
+            (source/'tools/replacement.py').write_text('replacement\n')
+            subprocess.run(['git','-C',str(source),'add','tools/replacement.py'],check=True)
+            plan=installer.plan_runtime_install(source,target)
+            (target/'tools/tool.py').write_text('local customized content\n')
+            with self.assertRaises(installer.InstallError): installer.apply_runtime_plan(plan,inventory_root=root/'private')
+            self.assertEqual((target/'tools/tool.py').read_text(),'local customized content\n')

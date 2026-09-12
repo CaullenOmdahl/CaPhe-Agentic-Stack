@@ -122,7 +122,8 @@ def validate_contract(contract):
                         raise RouteError('child write scopes must be disjoint')
     for value in contract['allowed_writes'] + [path for child in contract['children'] for path in child['allowed_writes']]:
         target = PurePosixPath(value)
-        if any(target == PurePosixPath(exclusion) or PurePosixPath(exclusion) in target.parents for exclusion in contract['exclusions']):
+        if any(target == exclusion or exclusion in target.parents or target in exclusion.parents
+               for exclusion in map(PurePosixPath, contract['exclusions'])):
             raise RouteError('allowed writes overlap an exclusion')
 
 
