@@ -22,16 +22,10 @@ _MANIFEST = ".caphe-runtime.json"
 
 
 def _git_env():
-    """Keep user/global configuration while removing the caller's repository selection."""
-    local = {
-        "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS",
-        "GIT_CONFIG_COUNT", "GIT_OBJECT_DIRECTORY", "GIT_DIR", "GIT_WORK_TREE",
-        "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE", "GIT_INDEX_FILE",
-        "GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE", "GIT_PREFIX",
-        "GIT_SHALLOW_FILE", "GIT_COMMON_DIR",
-    }
+    """Preserve deliberate user config choices, not inherited Git discovery/state."""
+    user_config = {"GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_NOSYSTEM"}
     return {key: value for key, value in os.environ.items()
-            if key not in local and not key.startswith(("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_"))}
+            if not key.startswith("GIT_") or key in user_config}
 
 
 def _safe_path(value):
@@ -106,14 +100,25 @@ def _digest(root):
 
 
 def _outside_git(path):
-    for ancestor in (path, *path.parents):
+    ancestors = (path, *path.parents)
+    # Physical worktree markers must be checked even when Git cannot load config.
+    for ancestor in ancestors:
         if (ancestor / ".git").exists() or (ancestor / ".git").is_symlink():
             raise InstallError("runtime and private inventory must be outside Git worktrees")
-        if ancestor.exists():
-            result = subprocess.run(["git", "-C", str(ancestor), "rev-parse", "--git-dir"], capture_output=True, env=_git_env())
-            if result.returncode == 0:
-                raise InstallError("runtime and private inventory must be outside Git repositories")
-            break
+    nearest = next(ancestor for ancestor in ancestors if ancestor.exists())
+    try:
+        result = subprocess.run(["git", "-C", str(nearest), "rev-parse", "--git-dir"],
+                                capture_output=True, env={**_git_env(), "LC_ALL": "C"})
+    except OSError as error:
+        raise InstallError("Git repository boundary could not be verified") from error
+    if result.returncode == 0:
+        raise InstallError("runtime and private inventory must be outside Git repositories")
+    ordinary_nonrepo = result.stderr == b"fatal: not a git repository (or any of the parent directories): .git\n"
+    filesystem_boundary = re.fullmatch(
+        rb"fatal: not a git repository \(or any parent up to mount point [^\n]+\)\n"
+        rb"Stopping at filesystem boundary \(GIT_DISCOVERY_ACROSS_FILESYSTEM not set\)\.\n", result.stderr)
+    if result.returncode != 128 or not (ordinary_nonrepo or filesystem_boundary):
+        raise InstallError("Git repository boundary could not be verified")
 
 
 def _overlap(left, right):
