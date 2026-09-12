@@ -124,6 +124,8 @@ Ordinary completed commands retain their full output.
 Custom dependency verifiers must leave the source snapshot unchanged; mutation rejects planning and
 execution before narrower checks can run. Generated unittest manifests include both root modules and
 `tests/` when present, with independently scheduled nested projects excluded from parent discovery.
+Gate manifests reject unknown fields at every configuration level, so misspelled timeout or scheduling
+options fail before execution instead of silently using a default.
 
 ```bash
 bash "$CAPHE_RUNTIME/strict-mode/bin/strict-green-gate.sh" --mode affected

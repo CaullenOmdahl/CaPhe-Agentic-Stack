@@ -119,7 +119,9 @@ class PrivateStateStore:
         self.repo_root = Path(repo_root).resolve(strict=True)
         self.base = Path(base).absolute()
         _no_symlinks(self.base)
-        if any(left == '.codex' and right in ('memories', 'sessions')
+        self.base = Path(os.path.normpath(self.base))
+        _no_symlinks(self.base)
+        if any(left.casefold() == '.codex' and right.casefold() in ('memories', 'sessions')
                for left, right in zip(self.base.parts, self.base.parts[1:])):
             raise StateError('canonical memory and transcript directories cannot store task state')
         if self.base == self.repo_root or self.repo_root in self.base.parents:
