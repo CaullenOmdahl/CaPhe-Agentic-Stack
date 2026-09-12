@@ -48,6 +48,30 @@ def _safe_digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _instructions(repo, runtime):
+    begin = b"<!-- STRICT-MODE:BEGIN (managed by strict-mode; edit the canon, not this marker) -->"
+    end = b"<!-- STRICT-MODE:END -->"
+    template = runtime / "strict-mode/templates/instruction-section.md"
+    expected = template.read_bytes().strip(b"\n") if _safe_digest(template) else None
+    comparisons = {}
+    for name in ("AGENTS.md", "CLAUDE.md", "GEMINI.md"):
+        section = None
+        try:
+            path = (repo / name).resolve(strict=True)
+            path.relative_to(repo.resolve())
+            if _safe_digest(path):
+                lines = path.read_bytes().splitlines(keepends=True)
+                starts = [i for i, line in enumerate(lines) if line.rstrip(b"\r\n") == begin]
+                ends = [i for i, line in enumerate(lines) if line.rstrip(b"\r\n") == end]
+                if len(starts) == len(ends) == 1 and starts[0] < ends[0]:
+                    section = b"".join(lines[starts[0]:ends[0] + 1]).strip(b"\n")
+        except (OSError, ValueError, RuntimeError):
+            pass
+        comparisons[name] = {"matches": bool(expected and section == expected),
+                             "sha256": hashlib.sha256(section).hexdigest() if section else None}
+    return {"verified": all(item["matches"] for item in comparisons.values()), "files": comparisons}
+
+
 def inspect(repo, *, runtime, git_config=None):
     repo, runtime = Path(repo).absolute(), Path(runtime).absolute()
     unresolved = []
@@ -81,15 +105,21 @@ def inspect(repo, *, runtime, git_config=None):
         marker_version = "invalid"
     if not verified:
         unresolved.append("effective_gate_mismatch")
+    if not marked:
+        unresolved.append("project_version_missing")
     if marked and marker_version != "3":
         unresolved.append("project_version_mismatch")
+    instructions = _instructions(repo, runtime)
+    if not instructions["verified"]:
+        unresolved.append("managed_instructions_mismatch")
     digest = tree_digest(runtime) if runtime.is_dir() else None
     if runtime.is_dir() and digest is None:
         unresolved.append("runtime_inventory_invalid")
     result = {
         "runtime": {"path": str(runtime), "version": version, "source_digest": digest},
         "hooks": {"effective_path": str(hookdir) if hookdir else None, "configured": hook_path is not None, "verified": verified, "files": comparisons, "hook_digest": comparisons["pre-commit"]["actual"], "gate_digest": comparisons["strict-green-gate.sh"]["actual"]},
-        "project": {"path": str(repo), "managed": bool(marked and marker_version == "3" and verified), "marker_present": marked, "managed_version": marker_version},
+        "project": {"path": str(repo), "managed": bool(marked and marker_version == "3" and verified and instructions["verified"]), "marker_present": marked, "managed_version": marker_version},
+        "instructions": instructions,
         "duplicate_skills": find_duplicate_skills([runtime / "skills", repo / ".codex/skills", repo / ".claude/skills"]),
         "unresolved": unresolved,
     }

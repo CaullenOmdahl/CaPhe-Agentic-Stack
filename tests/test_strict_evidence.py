@@ -68,6 +68,25 @@ class StrictEvidenceTests(unittest.TestCase):
             with self.subTest(item=item), self.assertRaises(strict_evidence.EvidenceError):
                 strict_evidence.validate_record(item)
 
+    def test_public_https_review_urls_are_valid_and_private_paths_remain_rejected(self):
+        for url in ('https://github.com/example/project/pull/7', 'https://example.org/checks/123'):
+            with self.subTest(url=url):
+                strict_evidence.validate_record(record(evidence=[{'kind': 'url', 'reference': url}]))
+        for url in ('https://localhost./checks', 'https://127.1/checks', 'https://127.0.0.1/checks'):
+            with self.subTest(url=url), self.assertRaises(strict_evidence.EvidenceError):
+                strict_evidence.validate_record(record(evidence=[{'kind': 'url', 'reference': url}]))
+        for summary in ('Read C:/sensitive/state', 'Read C:' + chr(92) + 'sensitive' + chr(92) + 'state'):
+            with self.subTest(summary=summary), self.assertRaises(strict_evidence.EvidenceError):
+                strict_evidence.validate_record(record(summary=summary))
+
+    def test_encoded_file_credentials_cannot_enter_evidence_or_artifact_references(self):
+        reference = 'tests/%61pi_key%3Dsk%2D' + 'a' * 20
+        cases = [record(evidence=[{'kind': 'file', 'reference': reference}]),
+                 record(artifact={'sha256': 'e' * 64, 'reference': reference})]
+        for item in cases:
+            with self.subTest(item=item), self.assertRaises(strict_evidence.EvidenceError):
+                strict_evidence.validate_record(item)
+
     def test_legacy_is_readable_but_not_promoted_or_writable(self):
         legacy = {'id': 'legacy', 'decision': 'ADR-0001', 'lane': 'scoped-behavior',
                   'status': 'verified', 'tests': ['python3 -m unittest'], 'review': 'old review',

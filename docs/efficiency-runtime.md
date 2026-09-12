@@ -167,8 +167,8 @@ statement; the agent still checks that the next action is covered. No automatic 
 
 New public evidence writes use [schema v2](../schemas/public-evidence-v2.json). Record implementation,
 validation, review, merge, release, and external acceptance separately. Use explicit not-applicable
-reasons; source tests cannot imply device or release success. Artifact/device claims require matching
-artifact and semantic-acceptance bindings. Update state through a new immutable ID with `supersedes`.
+reasons; source tests cannot imply device or release success. Artifact claims require matching artifact
+bindings; device claims additionally require semantic acceptance. Update state through a new immutable ID with `supersedes`.
 Legacy records remain readable and explicitly unbound. Generate the index with `strict_evidence.py`.
 
 Install only a reviewed source payload. Plan first, apply with a private rollback journal, and verify

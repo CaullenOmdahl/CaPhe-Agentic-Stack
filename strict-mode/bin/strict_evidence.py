@@ -160,7 +160,7 @@ def _public_text(value):
             _public_text(item)
     elif isinstance(value, str):
         patterns = (
-            r'/(?:Users|home|private|tmp|etc)/', r'[A-Za-z]:[\\/]', r'~/',
+            r'/(?:Users|home|private|tmp|etc)/', r'(?<![A-Za-z0-9])[A-Za-z]:[\\/]', r'~/',
             r'(?:sk-|gh[pousr]_|github_' r'pat_)[A-Za-z0-9_-]{16,}',
             r'BEGIN [A-Z ]*PRIVATE KEY', r'(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{8,}',
             r'(?i)\b(?:password|api[_-]?key|access[_-]?token|secret)\s*[:=]\s*\S+',
@@ -175,6 +175,7 @@ def _reference(item):
     kind = item['kind']
     decoded = unquote(value)
     if kind == 'file':
+        _public_text(decoded)
         path = PurePosixPath(decoded)
         if (path.is_absolute() or '\\' in decoded or ':' in decoded or
                 any(part in ('', '.', '..') for part in decoded.split('/')) or
@@ -182,7 +183,7 @@ def _reference(item):
             raise EvidenceError('evidence file reference must be a sanitized relative path')
     elif kind == 'url':
         parsed = urlsplit(value)
-        host = parsed.hostname or ''
+        host = (parsed.hostname or '').rstrip('.')
         if parsed.scheme != 'https' or not host or parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise EvidenceError('evidence URL must be public HTTPS without credentials/query/fragment')
         if '.' not in host or host.endswith(('.local', '.internal', '.localhost')) or host == 'localhost':
@@ -191,7 +192,8 @@ def _reference(item):
             address = ipaddress.ip_address(host)
         except ValueError:
             address = None
-        if address is not None:
+        numeric_host = re.fullmatch(r'(?:0[xX][0-9a-fA-F]+|[0-9]+)(?:\.(?:0[xX][0-9a-fA-F]+|[0-9]+))*', host)
+        if address is not None or numeric_host:
             raise EvidenceError('IP-address evidence URLs are not public references')
         _public_text(decoded)
     elif kind == 'digest' and re.fullmatch(r'[0-9a-f]{64}', value) is None:
