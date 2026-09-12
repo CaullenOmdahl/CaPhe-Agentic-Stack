@@ -5,7 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from tools.benchmark_workflow import aggregate_attempts, BenchmarkError
+from tools.benchmark_workflow import aggregate_attempts, BenchmarkError, EVENT_SCHEMA
 
 
 def card():
@@ -19,6 +19,7 @@ def event(identifier='r1', **overrides):
              'task_id': 'task-1', 'repetition': 0, 'config': 'incumbent', 'model': 'frontier',
              'effort': 'high', 'service_tier': 'standard', 'parent_id': None, 'child_ids': [],
              'complete': True, 'task_final': True, 'acceptance_digest': 'a' * 64,
+             'task_class': 'implementation', 'source_digest': 'b' * 64, 'harness_digest': 'c' * 64,
              'usage': {'input_tokens': 1000, 'cached_input_tokens': 400, 'output_tokens': 100,
                        'reasoning_tokens': 50, 'output_includes_reasoning': True},
              'outcome': 'accepted', 'latency_ms': 1000, 'external_wait_ms': 100}
@@ -207,6 +208,93 @@ class BenchmarkTests(unittest.TestCase):
         self.assertEqual(result['quality_deltas']['status'], 'computed')
         self.assertEqual(result['quality_deltas']['comparisons']['candidate']['paired_runs'], 2)
         self.assertTrue(result['cost_eligible'])
+
+    def test_legacy_and_partial_bindings_preserve_cost_but_cannot_compare_quality(self):
+        fields = ('task_class', 'source_digest', 'harness_digest')
+        for missing in (fields, *[(field,) for field in fields]):
+            with self.subTest(missing=missing):
+                events = [event(), event('candidate', config='candidate')]
+                for item in events:
+                    for field in missing:
+                        del item[field]
+                result = aggregate_attempts(events, card())
+                self.assertEqual(result['quality_deltas']['status'], 'inconclusive')
+                self.assertEqual(result['quality_deltas']['reason'], 'missing_quality_bindings')
+                self.assertTrue(result['cost_eligible'])
+                self.assertAlmostEqual(result['spend'], 0.00168)
+                self.assertEqual(result['accepted_tasks'], 2)
+
+    def test_mixed_task_classes_cannot_mask_implementation_losses_with_lookup_wins(self):
+        events = [event('base-lookup', task_id='lookup', task_class='lookup', outcome='rejected'),
+                  event('candidate-lookup', task_id='lookup', task_class='lookup', config='candidate'),
+                  event('base-implementation', task_id='implementation'),
+                  event('candidate-implementation', task_id='implementation', config='candidate', outcome='rejected')]
+        result = aggregate_attempts(events, card())
+        self.assertEqual(result['quality_deltas'], {'status': 'inconclusive', 'reason': 'mixed_task_classes'})
+        self.assertTrue(result['cost_eligible'])
+        implementation = aggregate_attempts(events[2:], card())['quality_deltas']
+        self.assertEqual(implementation['task_class'], 'implementation')
+        self.assertEqual(implementation['comparisons']['candidate']['delta'], -1)
+
+    def test_paired_task_and_repetition_require_identical_source_and_harness(self):
+        for field in ('source_digest', 'harness_digest'):
+            for repetition in (0, 1):
+                with self.subTest(field=field, repetition=repetition):
+                    events = [event('base-0'), event('candidate-0', config='candidate'),
+                              event('base-1', repetition=1),
+                              event('candidate-1', repetition=1, config='candidate')]
+                    events[1 if repetition == 0 else 3][field] = 'd' * 64
+                    result = aggregate_attempts(events, card())
+                    self.assertEqual(result['quality_deltas'],
+                                     {'status': 'inconclusive', 'reason': 'evaluation_binding_mismatch'})
+                    self.assertTrue(result['cost_eligible'])
+
+    def test_retry_and_child_requests_cannot_hide_unbound_or_changed_evaluation_inputs(self):
+        for kind in ('retry', 'child'):
+            for field, reason in (('task_class', 'mixed_task_classes'),
+                    ('source_digest', 'evaluation_binding_mismatch'),
+                    ('harness_digest', 'evaluation_binding_mismatch')):
+                for missing in (False, True):
+                    with self.subTest(kind=kind, field=field, missing=missing):
+                        final = event('candidate', config='candidate')
+                        extra = event('extra', config='candidate', task_final=False)
+                        if kind == 'child':
+                            final['child_ids'] = ['extra']; extra['parent_id'] = 'candidate'
+                        if missing:
+                            del extra[field]
+                        else:
+                            extra[field] = 'lookup' if field == 'task_class' else 'd' * 64
+                        result = aggregate_attempts([event(), final, extra], card())
+                        self.assertEqual(result['quality_deltas'], {'status': 'inconclusive',
+                            'reason': 'missing_quality_bindings' if missing else reason})
+                        self.assertTrue(result['cost_eligible'])
+                        self.assertAlmostEqual(result['spend'], 0.00252)
+
+    def test_computed_report_exposes_exact_per_pair_bindings_and_one_class(self):
+        events = [event(), event('candidate-0', config='candidate'),
+                  event('base-1', repetition=1, source_digest='d' * 64, harness_digest='e' * 64),
+                  event('candidate-1', repetition=1, config='candidate', source_digest='d' * 64, harness_digest='e' * 64)]
+        quality = aggregate_attempts(events, card())['quality_deltas']
+        self.assertEqual(quality['status'], 'computed')
+        self.assertEqual(quality['task_class'], 'implementation')
+        self.assertEqual(quality['evaluation_bindings'], [
+            {'task_id': 'task-1', 'repetition': 0, 'source_digest': 'b' * 64,
+             'harness_digest': 'c' * 64, 'acceptance_digest': 'a' * 64},
+            {'task_id': 'task-1', 'repetition': 1, 'source_digest': 'd' * 64,
+             'harness_digest': 'e' * 64, 'acceptance_digest': 'a' * 64}])
+
+    def test_optional_quality_bindings_are_closed_and_match_routing_syntax(self):
+        from tools.stack_route import ID, DIGEST
+        self.assertEqual(EVENT_SCHEMA['properties']['task_class'], ID)
+        for field in ('source_digest', 'harness_digest'):
+            self.assertEqual(EVENT_SCHEMA['properties'][field], DIGEST)
+        for field in ('task_class', 'source_digest', 'harness_digest'):
+            self.assertNotIn(field, EVENT_SCHEMA['required'])
+            for value in (None, True, 1, '', 'invalid value', 'A' * 64, '../path'):
+                if field == 'task_class' and value == 'A' * 64:
+                    continue  # Uppercase identifiers are valid in the routing contract.
+                with self.subTest(field=field, value=value), self.assertRaises(BenchmarkError):
+                    aggregate_attempts([event(**{field: value})], card())
 
     def test_quality_requires_same_acceptance_across_all_repetitions_of_each_task(self):
         events = [event('base-0'), event('candidate-0', config='candidate'),

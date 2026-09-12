@@ -3,6 +3,8 @@
 Request usage is incremental per request, never a cumulative conversation counter.
 Retries use new request IDs; only one root request closes each task/config/repetition.
 Children retain that evaluated task identity and declare their parent request ID.
+Optional quality bindings identify the task class, frozen evaluation input snapshot,
+and acceptance/tool/version harness. Legacy unbound events retain cost accounting.
 """
 from __future__ import annotations
 
@@ -22,6 +24,8 @@ class BenchmarkError(ValueError):
 
 
 ID = {'type': 'string', 'pattern': r'^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+DIGEST = {'type': 'string', 'pattern': '^[0-9a-f]{64}$'}
+QUALITY_FIELDS = ('task_class', 'source_digest', 'harness_digest')
 TOKEN = {'type': ['integer', 'null'], 'minimum': 0, 'maximum': 10**12}
 MEASURE = {'type': ['number', 'null'], 'minimum': 0, 'maximum': 10**12}
 USAGE_FIELDS = ('input_tokens', 'cached_input_tokens', 'output_tokens', 'reasoning_tokens', 'output_includes_reasoning')
@@ -30,6 +34,7 @@ EVENT_SCHEMA = {
     'properties': {
         'schema_version': {'const': 1}, 'event_type': {'const': 'request_final'},
         **{field: ID for field in ('request_id', 'task_id', 'config', 'model', 'effort', 'service_tier')},
+        'task_class': ID, 'source_digest': DIGEST, 'harness_digest': DIGEST,
         'repetition': {'type': 'integer', 'minimum': 0},
         'parent_id': {'type': ['string', 'null'], 'pattern': ID['pattern']},
         'child_ids': {'type': 'array', 'items': ID, 'uniqueItems': True},
@@ -41,7 +46,7 @@ EVENT_SCHEMA = {
         'latency_ms': MEASURE, 'external_wait_ms': MEASURE,
     },
 }
-EVENT_SCHEMA['required'] = list(EVENT_SCHEMA['properties'])
+EVENT_SCHEMA['required'] = [field for field in EVENT_SCHEMA['properties'] if field not in QUALITY_FIELDS]
 RATE_FIELDS = ('input_per_million', 'cached_input_per_million', 'output_per_million')
 
 
@@ -65,11 +70,17 @@ def _number(value, integer=False, nullable=False):
 
 
 def validate_event(event):
-    _closed(event, EVENT_SCHEMA['required'])
+    _closed(event, EVENT_SCHEMA['required'], QUALITY_FIELDS)
     if type(event['schema_version']) is not int or event['schema_version'] != 1 or event['event_type'] != 'request_final':
         raise BenchmarkError('only version 1 per-request final events are accepted; normalize cumulative streams first')
     for field in ('request_id', 'task_id', 'config', 'model', 'effort', 'service_tier'):
         _id(event[field])
+    if 'task_class' in event:
+        _id(event['task_class'])
+    for field in ('source_digest', 'harness_digest'):
+        if field in event and (not isinstance(event[field], str) or
+                               re.fullmatch(DIGEST['pattern'], event[field]) is None):
+            raise BenchmarkError(field + ' must be a SHA-256 binding')
     _number(event['repetition'], integer=True)
     if event['parent_id'] is not None:
         _id(event['parent_id'])
@@ -208,12 +219,26 @@ def _quality(trials, incumbent):
         return {'status': 'inconclusive', 'reason': 'paired incumbent and candidate runs are required'}
     if any(not trial['complete'] for trial in trials.values()):
         return {'status': 'inconclusive', 'reason': 'request/task closure is incomplete'}
+    task_classes = set()
+    for trial in trials.values():
+        for event in trial['events']:
+            if any(field not in event for field in QUALITY_FIELDS):
+                return {'status': 'inconclusive', 'reason': 'missing_quality_bindings'}
+            task_classes.add(event['task_class'])
+    if len(task_classes) != 1:
+        return {'status': 'inconclusive', 'reason': 'mixed_task_classes'}
     # A config label alone cannot bind a composite workflow policy. Include
     # retries and children so route changes cannot hide behind a stable final root.
     routes = defaultdict(set)
-    for (config, _, _), trial in trials.items():
+    evaluation_bindings = {}
+    for (config, task, repetition), trial in trials.items():
         for event in trial['events']:
             routes[config].add((event['model'], event['effort'], event['service_tier']))
+            binding = event['source_digest'], event['harness_digest']
+            key = task, repetition
+            if key in evaluation_bindings and evaluation_bindings[key] != binding:
+                return {'status': 'inconclusive', 'reason': 'evaluation_binding_mismatch'}
+            evaluation_bindings[key] = binding
     if any(len(values) != 1 for values in routes.values()):
         return {'status': 'inconclusive', 'reason': 'mixed_config_routes'}
     acceptance_by_task = {}
@@ -246,6 +271,11 @@ def _quality(trials, incumbent):
                                'losses': sum(value < 0 for value in differences),
                                'ties': differences.count(0)}
     return {'status': 'computed', 'incumbent': incumbent, 'comparisons': comparisons,
+            'task_class': next(iter(task_classes)),
+            'evaluation_bindings': [{'task_id': task, 'repetition': repetition,
+                                     'source_digest': binding[0], 'harness_digest': binding[1],
+                                     'acceptance_digest': acceptance_by_task[task]}
+                                    for (task, repetition), binding in sorted(evaluation_bindings.items())],
             'interpretation': 'equal task weights with repetitions averaged within each task; descriptive acceptance-rate deltas, not statistical non-inferiority'}
 
 

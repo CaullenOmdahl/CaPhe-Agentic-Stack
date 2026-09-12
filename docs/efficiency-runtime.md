@@ -147,7 +147,11 @@ review retains its separately approved reviewer route and human gates.
 
 Normalize provider telemetry into closed `request_final` events. Each request has a unique ID; each retry
 has another ID. Declare parent and child IDs and close a root task exactly once. Bind repetitions to the
-same task and acceptance digest. Preserve missing material usage as unknown. Record whether output
+same task and acceptance digest. Quality evidence also requires `task_class`, `source_digest`, and
+`harness_digest` on every request. The source digest is the SHA-256 of the frozen evaluation input/problem
+snapshot, not a worker's output or changing repair workspace. The harness digest is the SHA-256 of a
+canonical manifest covering acceptance code, harness configuration, and tool/dependency versions.
+Preserve missing material usage as unknown. Record whether output
 already includes reasoning; never add reasoning twice. Native credit rates and USD rates are separate
 cards, dated and keyed by model and service tier. Unknown rates, children, usage, or closure make whole-task
 spend ineligible. Partial observed spend is not the total.
@@ -159,7 +163,12 @@ python3 "$CAPHE_RUNTIME/tools/benchmark_workflow.py" \
 ```
 
 The report compares paired root acceptance outcomes, averaging repetitions within each task and weighting
-tasks equally. It reports task and run counts separately. Its latency is final-root request duration, not
+tasks equally within one task class. A trial's requests must share the same evaluation bindings, and
+incumbent/candidate bindings must match for each task/repetition. Missing bindings, mixed classes, or
+source/harness mismatches make quality inconclusive; legacy records retain otherwise eligible usage and
+cost totals. Computed comparisons expose the class and paired evaluation bindings. Digest declarations
+still require source provenance checks; merely filling in a hash does not establish a valid experiment.
+The report records task and run counts separately. Its latency is final-root request duration, not
 invented whole-workflow duration; collect independent end-to-end timing for overlapping workers/retries.
 Each configuration must keep one model, effort, and service-tier tuple across recorded requests for a
 quality comparison. Mixed routes, including different retry or child routes, make quality inconclusive
