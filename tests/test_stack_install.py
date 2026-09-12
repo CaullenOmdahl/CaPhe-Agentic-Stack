@@ -1,9 +1,10 @@
 import importlib.util
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import tempfile
 import subprocess
 import json
 import copy
+import hashlib
 import os
 import shutil
 import sys
@@ -728,3 +729,50 @@ class InstallContracts(unittest.TestCase):
             installer.apply_runtime_plan(plan, inventory_root=root / "private")
             self.assertTrue(installer.verify_runtime_plan(plan))
             self.assertEqual(self.snapshot(unrelated), before)
+
+    def test_public_payload_names_reject_windows_separators_drives_streams_and_nul(self):
+        escape = "tools/a" + "\\.." * 3 + "\\victim"
+        selected = PureWindowsPath("C:/selected/runtime")
+        # Windows treats the POSIX-accepted spelling as parent traversal.
+        parts = []
+        for part in (selected / escape).parts:
+            if part == "..": parts.pop()
+            else: parts.append(part)
+        self.assertFalse(PureWindowsPath(*parts).is_relative_to(selected))
+        for relative in (escape, "tools/C:relative", "tools/file:stream", "tools/nul" + chr(0) + ".py"):
+            with self.subTest(relative=relative):
+                self.assertFalse(installer._public(relative))
+
+    def test_ambiguous_standalone_payload_names_reject_before_install_or_retirement(self):
+        for relative in ("tools/a" + "\\.." * 3 + "\\victim", "tools/file:stream", "tools/C:relative", "tools/nul" + chr(0) + ".py"):
+            for use_as in ("source", "previous"):
+                with self.subTest(relative=relative, use_as=use_as), tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp).resolve(); source = self.fixture_source(root); runtime = root / "runtime"
+                    installer.apply_runtime_plan(installer.plan_runtime_install(source, runtime), inventory_root=root / "seed-private")
+                    target = root / "target" if use_as == "source" else runtime
+                    distribution = runtime if use_as == "source" else source
+                    plan = installer.plan_runtime_install(distribution, target)
+                    # POSIX permits these literal filenames; a standalone inventory
+                    # must not authorize their alternate Windows interpretation.
+                    content = b"preserve unowned bytes\n"
+                    if chr(0) not in relative:
+                        extra = runtime / relative; extra.write_bytes(content); extra.chmod(0o644)
+                    metadata = runtime / installer._MANIFEST
+                    record = json.loads(metadata.read_text())
+                    record["payload"].append([relative, hashlib.sha256(content).hexdigest(), 0o644])
+                    record["payload"].sort()
+                    record["source_digest"] = installer._entries_digest(record["payload"])
+                    metadata.write_text(json.dumps(record))
+                    before = self.snapshot(root)
+                    with self.assertRaises(installer.InstallError):
+                        installer.plan_runtime_install(distribution, target)
+                    with self.assertRaises(installer.InstallError):
+                        installer.apply_runtime_plan(plan, inventory_root=root / "private")
+                    self.assertEqual(self.snapshot(root), before)
+                    self.assertFalse((root / "private").exists())
+
+    def test_ambiguous_payload_paths_reject_before_filesystem_interpretation(self):
+        for relative in ("tools/a\\..\\victim", "tools/file:stream", "tools/nul" + chr(0)):
+            with self.subTest(relative=relative), mock.patch.object(installer, "_safe_path", side_effect=AssertionError("filesystem queried")):
+                with self.assertRaises(installer.InstallError):
+                    installer._payload_path(Path("selected"), relative)
