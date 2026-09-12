@@ -195,9 +195,18 @@ def resolve_route(contract, capabilities, policy):
     return {'status': 'fallback', **incumbent, 'task_class': task_class, 'reason': reason}
 
 
+def _unique_json_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise RouteError('duplicate keys in routing JSON')
+        result[key] = value
+    return result
+
+
 def main():
     try:
-        payload = json.load(sys.stdin)
+        payload = json.load(sys.stdin, object_pairs_hook=_unique_json_object)
         _closed(payload, ['contract', 'capabilities', 'policy'])
         result = resolve_route(**payload)
         print(json.dumps(result))

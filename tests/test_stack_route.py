@@ -138,10 +138,56 @@ class StackRouteTests(unittest.TestCase):
     def test_cli_roundtrip_and_schema_parity(self):
         import tools.stack_route as module
         self.assertEqual(json.loads(Path('schemas/delegation-contract-v1.json').read_text()), module.CONTRACT_SCHEMA)
-        process = subprocess.run([sys.executable, 'tools/stack_route.py'], input=json.dumps({
-            'contract': contract(), 'capabilities': capabilities(), 'policy': policy()}), text=True, capture_output=True)
-        self.assertEqual(process.returncode, 0, process.stderr)
-        self.assertEqual(json.loads(process.stdout)['status'], 'resolved')
+        reviewer = {'incumbent': route(), 'routes': {}, 'reviewer_route': {
+            'route': route('reviewer', 'approved-review', 'high'),
+            'approval': approval('approved-review', 'review')}}
+        for request, settings, expected_model in (
+                (contract(), policy(), 'candidate'),
+                (contract(task_class='review', canonical_review_role=True), reviewer, 'reviewer')):
+            with self.subTest(expected_model=expected_model):
+                process = self.run_cli(json.dumps({
+                    'contract': request, 'capabilities': capabilities(), 'policy': settings}))
+                self.assertEqual(process.returncode, 0, process.stderr)
+                result = json.loads(process.stdout)
+                self.assertEqual(result['status'], 'resolved')
+                self.assertEqual(result['model'], expected_model)
+
+    def run_cli(self, encoded):
+        return subprocess.run([sys.executable,
+            str(Path(__file__).resolve().parents[1] / 'tools/stack_route.py')],
+            input=encoded, text=True, capture_output=True, timeout=10)
+
+    def assert_duplicate_rejected(self, encoded):
+        process = self.run_cli(encoded)
+        self.assertEqual(process.returncode, 2)
+        result = json.loads(process.stdout)
+        self.assertEqual(result['status'], 'unsupported')
+        self.assertIn('duplicate keys', result['reason'])
+        self.assertNotIn('model', result)
+        self.assertNotIn('Traceback', process.stderr)
+
+    def test_cli_rejects_duplicate_top_level_policy_keys_in_both_orders(self):
+        approved = policy()
+        denied = copy.deepcopy(approved)
+        denied['routes']['implementation']['promotion']['approved'] = False
+        prefix = json.dumps({'contract': contract(), 'capabilities': capabilities()})[:-1]
+        for first, second in ((approved, denied), (denied, approved)):
+            with self.subTest(first_approved=first['routes']['implementation']['promotion']['approved']):
+                encoded = prefix + ', "policy": ' + json.dumps(first) + ', "policy": ' + json.dumps(second) + '}'
+                self.assert_duplicate_rejected(encoded)
+
+    def test_cli_rejects_duplicate_nested_promotion_and_reviewer_approvals(self):
+        reviewer = {'incumbent': route(), 'routes': {}, 'reviewer_route': {
+            'route': route('reviewer', 'approved-review', 'high'),
+            'approval': approval('approved-review', 'review')}}
+        for request, settings in ((contract(), policy()),
+                (contract(task_class='review', canonical_review_role=True), reviewer)):
+            for first, second in ((True, False), (False, True)):
+                with self.subTest(task_class=request['task_class'], first_approved=first):
+                    encoded = json.dumps({'contract': request, 'capabilities': capabilities(), 'policy': settings})
+                    encoded = encoded.replace('"approved": true',
+                        '"approved": ' + json.dumps(first) + ', "approved": ' + json.dumps(second))
+                    self.assert_duplicate_rejected(encoded)
 
 
 if __name__ == '__main__':
