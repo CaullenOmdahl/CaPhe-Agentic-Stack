@@ -18,8 +18,13 @@ HOOK_FILES = ("pre-commit", "strict-green-gate.sh", "strict_gate.py")
 FORWARDED_HOOKS = {"applypatch-msg", "pre-applypatch", "post-applypatch", "pre-merge-commit", "prepare-commit-msg", "commit-msg", "post-commit", "pre-rebase", "post-checkout", "post-merge", "pre-push", "pre-receive", "update", "proc-receive", "post-receive", "post-update", "reference-transaction", "push-to-checkout", "pre-auto-gc", "post-rewrite", "sendemail-validate", "fsmonitor-watchman", "p4-changelist", "p4-prepare-changelist", "p4-post-changelist", "p4-pre-submit", "post-index-change"}
 CHAIN_FILE = ".caphe-chain.sh"
 ACTIVATION_FILE = ".caphe-activation.json"
-# Exact historical framework wrapper; similar custom scripts must still be chained.
+# Exact historical framework wrappers; custom variants must still be chained.
 LEGACY_WRAPPER_SHA256 = "ed90b0ef03c5ba58a9f4d52dea16b0aa67d960bac70893213275f59cbba18a64"
+LEGACY_WRAPPER_HASHES = frozenset({
+    LEGACY_WRAPPER_SHA256,
+    # v2 strict-init.sh copied this exact canonical bin/pre-commit at 4e9c057.
+    "13590f12c84d51af7d3b461e1c3dc5cb441ed8aab3d600786fbc62d681cc38bd",
+})
 
 
 class InitError(RuntimeError):
@@ -294,7 +299,7 @@ def initialize(canon, root, *, fail_probe=False):
         else:
             old = effective / "pre-commit"
             if (old.is_file() and os.access(old, os.X_OK)
-                    and _sha(old.read_bytes()) != LEGACY_WRAPPER_SHA256):
+                    and _sha(old.read_bytes()) not in LEGACY_WRAPPER_HASHES):
                 previous = str(effective_value / old.name)
             if effective.is_dir():
                 for old in effective.iterdir():

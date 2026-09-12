@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 import subprocess
+import json
 
 
 PATH = Path(__file__).parents[1] / "tools" / "stack_prepare.py"
@@ -15,6 +16,82 @@ SPEC.loader.exec_module(prepare)
 
 
 class PrepareContracts(unittest.TestCase):
+    def receipt_fixture(self, base):
+        root=base/'source'; private=base/'private'; root.mkdir(); private.mkdir(mode=0o700)
+        (root/'input').write_text('one'); (root/'output').write_text('existing output')
+        manifest={'argv':['false'],'cwd':'.','inputs':['input'],'outputs':['output'],
+                  'toolchain':[['python3','--version']],'env':{}}
+        path=root/'recipe.json'; path.write_text(json.dumps(manifest))
+        forged={'version':1,'identity':prepare._identity(root,manifest),'outputs':prepare._files(root,['output']),
+                'success':True,'source_changed':False,'outcome':{'exit_code':0,'output_digest':None},'elapsed_ms':0}
+        return root,private,path,manifest,forged
+
+    def check_cli(self, root, private, manifest_path, receipt):
+        return subprocess.run(['python3',str(PATH),'--root',str(root),'--manifest',str(manifest_path),
+                               '--receipt-root',str(private),'--check-receipt',str(receipt)],
+                              capture_output=True,text=True,timeout=3)
+
+    def test_cli_rejects_fabricated_checkout_receipt_before_identity_probes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root,private,manifest_path,manifest,forged=self.receipt_fixture(Path(tmp).resolve())
+            subprocess.run(['git','init','-q',str(root)],check=True)
+            candidate=root/'forged.json'; candidate.write_text(json.dumps(forged)); candidate.chmod(0o600)
+            self.assertTrue(prepare.is_fresh(root,manifest,forged))  # Data alone cannot prove where it came from.
+            result=self.check_cli(root,private,manifest_path,candidate)
+            self.assertEqual(result.returncode,2,result.stdout+result.stderr)
+            self.assertNotIn('true',result.stdout)
+            self.assertEqual(list(private.iterdir()),[])
+
+    def test_receipt_read_enforces_scope_permissions_symlinks_and_regular_files(self):
+        for kind in ('outside','root-mode','file-mode','root-alias','file-alias','fifo','directory','missing-root','oversize'):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp:
+                base=Path(tmp).resolve();root,private,manifest_path,_,forged=self.receipt_fixture(base)
+                candidate=private/'receipt.json';candidate.write_text(json.dumps(forged));candidate.chmod(0o600)
+                supplied=private
+                if kind=='outside': candidate=base/'other.json';candidate.write_text(json.dumps(forged));candidate.chmod(0o600)
+                elif kind=='root-mode': private.chmod(0o755)
+                elif kind=='file-mode': candidate.chmod(0o644)
+                elif kind=='root-alias': supplied=base/'alias';supplied.symlink_to(private)
+                elif kind=='file-alias': original=private/'original.json';candidate.rename(original);candidate.symlink_to(original)
+                elif kind=='fifo': candidate.unlink();os.mkfifo(candidate,0o600)
+                elif kind=='directory': candidate.unlink();candidate.mkdir(mode=0o700)
+                elif kind=='missing-root': supplied=base/'missing'
+                elif kind=='oversize': candidate.write_bytes(b' '*1_048_577)
+                result=self.check_cli(root,supplied,manifest_path,candidate)
+                self.assertEqual(result.returncode,2,result.stdout+result.stderr)
+                self.assertNotIn('true',result.stdout)
+                if kind=='missing-root': self.assertFalse(supplied.exists())
+
+    def test_real_receipt_cli_is_fresh_then_stale_without_running_generator(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base=Path(tmp).resolve();root,private,manifest_path,manifest,_=self.receipt_fixture(base)
+            manifest['argv']=['python3','-c',"from pathlib import Path; p=Path('runs'); p.write_text(p.read_text()+'x' if p.exists() else 'x'); Path('output').write_text('generated')"]
+            manifest_path.write_text(json.dumps(manifest))
+            receipt=prepare.run_prepare(root,manifest,receipt_root=private)
+            self.assertEqual(self.check_cli(root,private,manifest_path,receipt['receipt_path']).returncode,0)
+            (root/'input').write_text('two')
+            self.assertEqual(self.check_cli(root,private,manifest_path,receipt['receipt_path']).returncode,1)
+            self.assertEqual((root/'runs').read_text(),'x')
+
+    def test_freshness_probe_cannot_leave_receipt_storage_unprotected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root,private,manifest_path,manifest,forged=self.receipt_fixture(Path(tmp).resolve())
+            manifest['toolchain']=[['python3','-c','from pathlib import Path; Path('+repr(str(private))+').chmod(0o755)']]
+            forged['identity']=prepare._identity(root,manifest);private.chmod(0o700)
+            manifest_path.write_text(json.dumps(manifest))
+            candidate=private/'receipt.json';candidate.write_text(json.dumps(forged));candidate.chmod(0o600)
+            result=self.check_cli(root,private,manifest_path,candidate)
+            self.assertEqual(result.returncode,2,result.stdout+result.stderr)
+            self.assertNotIn('true',result.stdout)
+
+    def test_dotdot_cannot_put_receipts_inside_nongit_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root,private,_,manifest,_=self.receipt_fixture(Path(tmp).resolve())
+            requested=private/'..'/'source'/'receipts'
+            with self.assertRaises(prepare.PrepareError):
+                prepare.run_prepare(root,manifest,receipt_root=requested)
+            self.assertFalse((root/'receipts').exists())
+
     def test_manifest_rejects_shell_strings_and_env_copying(self):
         with self.assertRaises(prepare.PrepareError):
             prepare.validate_manifest({"argv": "echo unsafe", "cwd": ".", "inputs": [], "outputs": [], "toolchain": [], "env": {}})

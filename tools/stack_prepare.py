@@ -18,9 +18,9 @@ import time
 from typing import Any, Mapping
 
 try:
-    from stack_state import StateError, _mkdir, _outside_git, _no_symlinks
+    from stack_state import StateError, _mkdir, _outside_git, _no_symlinks, _owned
 except ModuleNotFoundError:
-    from tools.stack_state import StateError, _mkdir, _outside_git, _no_symlinks
+    from tools.stack_state import StateError, _mkdir, _outside_git, _no_symlinks, _owned
 
 
 class PrepareError(ValueError):
@@ -151,8 +151,13 @@ def _valid_identity(identity):
     return all(value is not None for value in identity['inputs'].values()) and all(item['exit_code'] == 0 for item in identity['toolchain'])
 
 
-def _receipt_directory(root, requested):
+def _receipt_directory(root, requested, *, create=True):
     path = Path(requested).expanduser().absolute()
+    try:
+        _no_symlinks(path)
+    except StateError as error:
+        raise PrepareError(str(error)) from error
+    path = path.resolve()
     if path == root or root in path.parents:
         raise PrepareError('preparation receipts must be outside the source root')
     if any(left == '.codex' and right in ('memories', 'sessions') for left, right in zip(path.parts, path.parts[1:])):
@@ -160,10 +165,50 @@ def _receipt_directory(root, requested):
     try:
         _no_symlinks(path)
         _outside_git(path)
-        _mkdir(path)
+        if create:
+            _mkdir(path)
+        else:
+            _owned(path, directory=True)
     except StateError as error:
         raise PrepareError(str(error)) from error
     return path
+
+
+def read_receipt(root, receipt_path, *, receipt_root):
+    """Load only an owner-only receipt from its exact declared private directory.
+
+    This validates local storage provenance, not a trusted-executor attestation.
+    The data-only is_fresh helper assumes its caller has already established trust.
+    """
+    root = Path(root).resolve(strict=True)
+    directory = _receipt_directory(root, receipt_root, create=False)
+    directory_before = directory.stat()
+    path = Path(receipt_path).expanduser().absolute()
+    try:
+        _no_symlinks(path)
+        path = path.resolve(strict=True)
+        if path.parent != directory:
+            raise PrepareError('receipt is outside its declared private directory')
+        _owned(path)
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(descriptor, 'rb') as handle:
+            before = os.fstat(handle.fileno())
+            if not stat.S_ISREG(before.st_mode) or before.st_uid != os.getuid() or before.st_mode & 0o077:
+                raise PrepareError('receipt must be an owner-only regular file')
+            content = handle.read(1_048_577)
+            after = os.fstat(handle.fileno())
+        identity = lambda info: (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns,
+                                 info.st_ctime_ns, info.st_mode, info.st_uid)
+        _owned(path)
+        if len(content) > 1_048_576 or identity(before) != identity(after) or identity(after) != identity(path.stat()):
+            raise PrepareError('receipt changed or exceeds the size limit')
+        _receipt_directory(root, directory, create=False)
+        current = directory.stat()
+        if (directory_before.st_dev, directory_before.st_ino) != (current.st_dev, current.st_ino):
+            raise PrepareError('receipt directory changed while reading')
+        return json.loads(content)
+    except (StateError, RecursionError) as error:
+        raise PrepareError('invalid private receipt') from error
 
 
 def run_prepare(root: Path | str, manifest: Mapping[str, Any], *, receipt_root: Path | str) -> dict:
@@ -222,7 +267,12 @@ def main(argv=None):
     try:
         manifest = json.loads(Path(args.manifest).read_text())
         if args.check_receipt:
-            fresh = is_fresh(args.root, manifest, json.loads(Path(args.check_receipt).read_text()))
+            receipt = read_receipt(args.root, args.check_receipt, receipt_root=args.receipt_root)
+            fresh = is_fresh(args.root, manifest, receipt)
+            if fresh:
+                # Toolchain probes also run during identity collection; retain
+                # the private-storage boundary after those commands finish.
+                fresh = read_receipt(args.root, args.check_receipt, receipt_root=args.receipt_root) == receipt
             print(json.dumps({'fresh': fresh}))
             return 0 if fresh else 1
         receipt = run_prepare(args.root, manifest, receipt_root=args.receipt_root)

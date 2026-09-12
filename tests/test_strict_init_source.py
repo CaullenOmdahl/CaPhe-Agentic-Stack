@@ -301,6 +301,36 @@ class StrictInitSourceTests(unittest.TestCase):
                 with self.assertRaises(initializer.InitError): initializer.initialize(ROOT/'strict-mode',repo)
                 self.assertEqual(self.hook_snapshot(root),before)
 
+    def test_real_v2_initializer_output_migrates_without_running_old_gate(self):
+        # Frozen verbatim from strict-mode/bin/{strict-init.sh,pre-commit} at
+        # 4e9c057866ec3bf9e3dcd1985d2586cc4ccc341a. The v2 initializer copied
+        # the canonical hook; run its actual installation block in a fresh repo.
+        # Embedding this bounded block keeps the test independent of Git depth.
+        v2_hook = b'#!/usr/bin/env bash\n# STRICT-MODE:MANAGED-HOOK v2\nset -euo pipefail\nSCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\nGATE="$SCRIPT_DIR/strict-green-gate.sh"\nif [ ! -x "$GATE" ]; then GATE="$HOME/strict-mode/bin/strict-green-gate.sh"; fi\nexec "$GATE" --mode affected\n'
+        v2_install = '  hook=$(git rev-parse --git-path hooks/pre-commit) || exit 1\n  mkdir -p "$(dirname "$hook")" || exit 1\n  if [ -f "$hook" ] && ! grep -qx \'# STRICT-MODE:MANAGED-HOOK v2\' "$hook"; then\n    echo "  ! $hook exists and is not ours — left intact"\n  else\n    cp "$CANON/bin/pre-commit" "$hook" && chmod +x "$hook" || exit 1\n    echo "  + $hook (focused green-gate)"\n  fi'
+        self.assertEqual(hashlib.sha256(v2_hook).hexdigest(), '13590f12c84d51af7d3b461e1c3dc5cb441ed8aab3d600786fbc62d681cc38bd')
+        for change in ('canonical','comment','custom-command'):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as tmp:
+                root=Path(tmp).resolve(); repo=self.repo(root); historical=root/'historical-v2'
+                (historical/'bin').mkdir(parents=True); (historical/'bin/pre-commit').write_bytes(v2_hook)
+                subprocess.run(['bash','-c','CANON="$1"\n'+v2_install,'v2-installer',str(historical)],cwd=repo,check=True,capture_output=True)
+                old=repo/'.git/hooks/pre-commit'
+                self.assertEqual(old.read_bytes(),v2_hook)
+                if change=='comment': old.write_bytes(v2_hook+b'# local comment\n')
+                elif change=='custom-command': old.write_bytes(v2_hook.replace(b'exec "$GATE"',b'printf "custom preserved\\n" > custom-hook-ran\nexec "$GATE"'))
+                expected=old.read_bytes()
+                old_gate=old.with_name('strict-green-gate.sh')
+                old_gate.write_text('#!/bin/sh\nprintf "old gate ran\\n" > old-gate-ran\n'); old_gate.chmod(0o755)
+                initializer.initialize(ROOT/'strict-mode',repo)
+                managed=Path(git(repo,'config','core.hooksPath'))
+                record=initializer.read_activation(repo,managed)
+                run=subprocess.run([str(managed/'pre-commit')],cwd=repo,capture_output=True,text=True)
+                self.assertEqual(run.returncode,0,run.stdout+run.stderr)
+                self.assertEqual((repo/'old-gate-ran').exists(),change!='canonical')
+                self.assertEqual(record['previous_hook'] is not None,change!='canonical')
+                self.assertEqual((repo/'custom-hook-ran').exists(),change=='custom-command')
+                self.assertEqual(old.read_bytes(),expected)
+
 
 if __name__ == '__main__':
     unittest.main()
