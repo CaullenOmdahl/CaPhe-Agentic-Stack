@@ -114,6 +114,12 @@ def validate_contract(contract):
             target = PurePosixPath(value)
             if not any(target == PurePosixPath(parent) or PurePosixPath(parent) in target.parents for parent in contract['allowed_writes']):
                 raise RouteError('child writes exceed parent scope')
+    for index, child in enumerate(contract['children']):
+        for other in contract['children'][index + 1:]:
+            for left in map(PurePosixPath, child['allowed_writes']):
+                for right in map(PurePosixPath, other['allowed_writes']):
+                    if left == right or left in right.parents or right in left.parents:
+                        raise RouteError('child write scopes must be disjoint')
     for value in contract['allowed_writes'] + [path for child in contract['children'] for path in child['allowed_writes']]:
         target = PurePosixPath(value)
         if any(target == PurePosixPath(exclusion) or PurePosixPath(exclusion) in target.parents for exclusion in contract['exclusions']):

@@ -258,7 +258,7 @@ def initialize_project(source, repo, *, apply=False):
         doctor = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(doctor)
         report = doctor.inspect(repo, runtime=source)
-        if not report["hooks"].get("verified"):
+        if not report["hooks"].get("verified") or not report["project"].get("managed"):
             raise InstallError("strict-init effective hook verification failed")
         result.update(state="initialized", changed=True)
     return result

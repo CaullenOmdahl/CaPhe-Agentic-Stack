@@ -62,7 +62,8 @@ class DoctorContracts(unittest.TestCase):
                 (hooks / name).chmod(0o755)
             report = lambda: doctor.inspect(repo, runtime=runtime, git_config=lambda key: "relative-hooks")
             self.assertTrue(report()["hooks"]["verified"])
-            self.assertTrue(report()["project"]["managed"])
+            self.assertFalse(report()["project"]["managed"])
+            self.assertIn("managed_instructions_mismatch", report()["unresolved"])
             for name in doctor.HOOK_FILES:
                 original = (hooks / name).read_text()
                 (hooks / name).write_text("stale")
@@ -98,3 +99,30 @@ class DoctorContracts(unittest.TestCase):
                 report = doctor.inspect(repo, runtime=runtime)
             self.assertEqual(report["hooks"]["effective_path"], str(hooks))
             self.assertTrue(report["hooks"]["verified"])
+
+    def test_missing_marker_or_changed_managed_instruction_fails_activation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); runtime = root / "runtime"; repo = root / "repo"
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            hooks = repo / "hooks"; hooks.mkdir()
+            template = (PATH.parents[1] / "strict-mode/templates/instruction-section.md").read_text()
+            canonical = runtime / "strict-mode/templates/instruction-section.md"
+            canonical.parent.mkdir(parents=True); canonical.write_text(template)
+            for name in doctor.HOOK_FILES:
+                source = runtime / "strict-mode/bin" / name; source.parent.mkdir(exist_ok=True)
+                source.write_text(name); (hooks / name).write_text(name); (hooks / name).chmod(0o755)
+            for name in ("AGENTS.md", "CLAUDE.md", "GEMINI.md"):
+                (repo / name).write_text("Custom rule preserved.\n" + template)
+            report = lambda: doctor.inspect(repo, runtime=runtime, git_config=lambda key: "hooks")
+            self.assertIn("project_version_missing", report()["unresolved"])
+            (repo / ".agent").mkdir(); (repo / ".agent/.strict-version").write_text("3\n")
+            self.assertTrue(report()["project"]["managed"])
+            self.assertTrue(report()["instructions"]["verified"])
+            (repo / "CLAUDE.md").write_text("Changed instructions\n")
+            self.assertFalse(report()["project"]["managed"])
+            self.assertIn("managed_instructions_mismatch", report()["unresolved"])
+            (repo / "CLAUDE.md").unlink(); (repo / "CLAUDE.md").symlink_to("AGENTS.md")
+            self.assertTrue(report()["instructions"]["verified"])
+            outside = root / "outside"; outside.write_text(template)
+            (repo / "CLAUDE.md").unlink(); (repo / "CLAUDE.md").symlink_to(outside)
+            self.assertFalse(report()["instructions"]["verified"])

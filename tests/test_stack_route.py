@@ -112,6 +112,20 @@ class StackRouteTests(unittest.TestCase):
             with self.assertRaises(RouteError):
                 resolve_route(request, capabilities(), policy())
 
+    def test_worker_write_scopes_must_be_disjoint_including_ancestor_paths(self):
+        def worker(identifier, writes):
+            return {'task_id': identifier, 'goal': 'Implement scoped change',
+                    'acceptance': ['Unit check'], 'allowed_writes': writes}
+        for first, second in ((['tools/shared.py'], ['tools/shared.py']),
+                              (['tools/'], ['tools/shared.py']),
+                              (['tools/nested/file.py'], ['tools/nested/'])):
+            request = contract(children=[worker('one', first), worker('two', second)])
+            with self.subTest(first=first, second=second), self.assertRaises(RouteError):
+                resolve_route(request, capabilities(), policy())
+        for first, second in ((['tools/one.py'], ['tools/two.py']), ([], ['tools/one.py']), ([], [])):
+            request = contract(children=[worker('one', first), worker('two', second)])
+            self.assertEqual(resolve_route(request, capabilities(), policy())['status'], 'resolved')
+
     def test_cli_roundtrip_and_schema_parity(self):
         import tools.stack_route as module
         self.assertEqual(json.loads(Path('schemas/delegation-contract-v1.json').read_text()), module.CONTRACT_SCHEMA)
