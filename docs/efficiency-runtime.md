@@ -150,7 +150,8 @@ python3 "$CAPHE_RUNTIME/tools/benchmark_workflow.py" \
   < "$CAPHE_PRIVATE/request-finals.jsonl"
 ```
 
-The report compares paired root acceptance outcomes. Its latency is final-root request duration, not
+The report compares paired root acceptance outcomes, averaging repetitions within each task and weighting
+tasks equally. It reports task and run counts separately. Its latency is final-root request duration, not
 invented whole-workflow duration; collect independent end-to-end timing for overlapping workers/retries.
 Small samples are descriptive. Before promotion, run representative frozen tasks with the incumbent and
 candidate, at multiple repetitions, under the same acceptance checks. Include parent review and all

@@ -6,6 +6,7 @@ import json
 import copy
 import os
 import shutil
+import sys
 from unittest import mock
 import unittest
 
@@ -386,6 +387,42 @@ class InstallContracts(unittest.TestCase):
             before=self.snapshot(private)
             installer.apply_runtime_plan(installer.plan_runtime_install(source,target),inventory_root=private)
             self.assertEqual(self.snapshot(private),before)
+
+    def test_runtime_verification_requires_activation_metadata_bytes_and_modes(self):
+        for mutation in ('missing-version', 'wrong-version', 'version-mode', 'manifest-mode', 'manifest-format', 'version-symlink'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:
+                root=Path(tmp).resolve(); source=self.fixture_source(root); target=root/'target'
+                plan=installer.plan_runtime_install(source,target)
+                installer.apply_runtime_plan(plan,inventory_root=root/'private')
+                self.assertTrue(installer.verify_runtime_plan(plan))
+                version=target/'VERSION'; manifest=target/installer._MANIFEST
+                if mutation=='missing-version': version.unlink()
+                elif mutation=='wrong-version': version.write_text('2\n')
+                elif mutation=='version-mode': version.chmod(0o600)
+                elif mutation=='manifest-mode': manifest.chmod(0o600)
+                elif mutation=='manifest-format': manifest.write_text(manifest.read_text()+'\n')
+                else:
+                    copy=target/'local-version'; copy.write_bytes(version.read_bytes())
+                    version.unlink(); version.symlink_to(copy)
+                self.assertFalse(installer.verify_runtime_plan(plan))
+
+    def test_nonregular_private_receipt_rejects_without_blocking_or_mutation(self):
+        for kind in ('fifo', 'directory'):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp:
+                root=Path(tmp).resolve(); source=self.fixture_source(root); target=root/'target'
+                plan=installer.plan_runtime_install(source,target); private=root/'private'; private.mkdir(mode=0o700)
+                receipt=private/('runtime-'+plan['source_digest'][:16]+'.json')
+                if kind == 'fifo': os.mkfifo(receipt, 0o600)
+                else: receipt.mkdir(mode=0o700)
+                before=receipt.stat()
+                code=("from pathlib import Path\nfrom tools.stack_install import apply_runtime_plan, InstallError\n"
+                      "try:\n apply_runtime_plan("+repr(plan)+",inventory_root=Path("+repr(str(private))+"))\n"
+                      "except InstallError:\n raise SystemExit(0)\nraise SystemExit(1)\n")
+                result=subprocess.run([sys.executable,'-c',code],cwd=PATH.parents[1],capture_output=True,timeout=3)
+                self.assertEqual(result.returncode,0,result.stderr)
+                after=receipt.stat()
+                self.assertEqual((before.st_ino,before.st_mode),(after.st_ino,after.st_mode))
+                self.assertEqual(list(private.iterdir()),[receipt]); self.assertFalse(target.exists())
 
     def test_failed_directory_removal_restores_retired_files_and_modes(self):
         with tempfile.TemporaryDirectory() as tmp:

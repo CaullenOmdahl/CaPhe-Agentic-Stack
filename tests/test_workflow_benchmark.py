@@ -158,7 +158,34 @@ class BenchmarkTests(unittest.TestCase):
             item['acceptance_digest'] = 'a' * 64
         stable = aggregate_attempts(events, card())
         self.assertEqual(stable['quality_deltas']['status'], 'computed')
-        self.assertEqual(stable['quality_deltas']['comparisons']['candidate']['paired_tasks'], 2)
+        self.assertEqual(stable['quality_deltas']['comparisons']['candidate']['paired_tasks'], 1)
+        self.assertEqual(stable['quality_deltas']['comparisons']['candidate']['paired_runs'], 2)
+
+    def test_quality_weights_tasks_equally_when_repetition_counts_differ(self):
+        events = []
+        for task, repetitions in (('winning-task', 10), ('losing-task', 1)):
+            for repetition in range(repetitions):
+                for config in ('incumbent', 'candidate'):
+                    accepted = (task == 'winning-task') == (config == 'candidate')
+                    events.append(event(task+'-'+config+'-'+str(repetition), task_id=task,
+                                        repetition=repetition, config=config,
+                                        outcome='accepted' if accepted else 'rejected'))
+        comparison = aggregate_attempts(events, card())['quality_deltas']['comparisons']['candidate']
+        self.assertEqual(comparison['paired_tasks'], 2)
+        self.assertEqual(comparison['paired_runs'], 11)
+        self.assertEqual(comparison['repetitions_per_task'], {'winning-task': 10, 'losing-task': 1})
+        self.assertEqual(comparison['delta'], 0)
+        self.assertEqual((comparison['wins'], comparison['losses'], comparison['ties']), (1, 1, 0))
+
+    def test_mixed_repetitions_count_task_level_acceptance_rate_direction(self):
+        events = [event('base-0'), event('candidate-0', config='candidate', outcome='rejected'),
+                  event('base-1', repetition=1, outcome='rejected'),
+                  event('candidate-1', config='candidate', repetition=1)]
+        comparison = aggregate_attempts(events, card())['quality_deltas']['comparisons']['candidate']
+        self.assertEqual(comparison['paired_tasks'], 1)
+        self.assertEqual(comparison['paired_runs'], 2)
+        self.assertEqual(comparison['delta'], 0)
+        self.assertEqual((comparison['wins'], comparison['losses'], comparison['ties']), (0, 0, 1))
 
     def test_root_latency_and_external_wait_reported_separately(self):
         result = aggregate_attempts([event(latency_ms=2000, external_wait_ms=500)], card())

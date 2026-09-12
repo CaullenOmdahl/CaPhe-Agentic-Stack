@@ -156,6 +156,15 @@ def _manifest_bytes(payload):
     return (json.dumps({"payload": payload, "source_digest": _entries_digest(payload)}, sort_keys=True) + "\n").encode()
 
 
+def _metadata_matches(target, payload):
+    for name, content in ((_MANIFEST, _manifest_bytes(payload)), ("VERSION", b"3\n")):
+        path = target / name
+        if (path.is_symlink() or not path.is_file() or path.read_bytes() != content
+                or stat.S_IMODE(path.stat().st_mode) != 0o644):
+            return False
+    return True
+
+
 def _validate_plan(plan, *, after_install=False):
     if not isinstance(plan, dict) or set(plan) != {"action", "source", "target", "source_digest", "payload", "previous_payload"}:
         raise InstallError("unsupported plan")
@@ -183,7 +192,8 @@ def verify_runtime_plan(plan):
     """Verify only managed files; unrelated local files and secrets remain untouched."""
     _, target = _validate_plan(plan, after_install=True)
     return ([_file_entry(target, item[0]) for item in plan["payload"]] == plan["payload"]
-            and not _retired_remaining(target, plan["previous_payload"], plan["payload"]))
+            and not _retired_remaining(target, plan["previous_payload"], plan["payload"])
+            and _metadata_matches(target, plan["payload"]))
 
 
 def apply_runtime_plan(plan, *, inventory_root, fail_after=None):
@@ -221,25 +231,25 @@ def apply_runtime_plan(plan, *, inventory_root, fail_after=None):
         for parent in destination.parents:
             if parent.exists() and not parent.is_dir() and (parent == target or target not in parent.parents or parent.relative_to(target).as_posix() not in removing):
                 raise InstallError("unmanaged destination parent is not a directory")
-    if installed:
-        for name, content in ((_MANIFEST, _manifest_bytes(installed)), ("VERSION", b"3\n")):
-            path = _safe_path(target / name)
-            if not path.is_file() or path.read_bytes() != content or stat.S_IMODE(path.stat().st_mode) != 0o644:
-                raise InstallError("runtime metadata differs from installed format: " + name)
+    if installed and not _metadata_matches(target, installed):
+        raise InstallError("runtime metadata differs from installed format")
     receipt = {"action": "install-runtime", "source_digest": plan["source_digest"], "target": str(target), "verified": True, "retired_files": [item[0] for item in retired]}
     receipt_data = (json.dumps(receipt, sort_keys=True) + "\n").encode()
     _safe_path(receipt_path)
     if receipt_path.exists():
+        if not receipt_path.is_file():
+            raise InstallError("private receipt must be a regular file")
         try:
-            existing = json.loads(receipt_path.read_bytes()) if receipt_path.is_file() else None
+            receipt_bytes = receipt_path.read_bytes()
+            existing = json.loads(receipt_bytes)
             known = (isinstance(existing, dict) and set(existing) == set(receipt)
                      and all(existing[key] == receipt[key] for key in receipt if key != "retired_files")
                      and existing["verified"] is True and isinstance(existing["retired_files"], list)
                      and all(_public(name) for name in existing["retired_files"])
                      and existing["retired_files"] == sorted(set(existing["retired_files"]))
                      and installed == plan["payload"]
-                     and receipt_path.read_bytes() == (json.dumps(existing, sort_keys=True) + "\n").encode())
-            if stat.S_IMODE(receipt_path.stat().st_mode) != 0o600 or (receipt_path.read_bytes() != receipt_data and not known):
+                     and receipt_bytes == (json.dumps(existing, sort_keys=True) + "\n").encode())
+            if stat.S_IMODE(receipt_path.stat().st_mode) != 0o600 or (receipt_bytes != receipt_data and not known):
                 raise ValueError("unowned receipt")
         except (ValueError, TypeError, OSError) as error:
             raise InstallError("private receipt collision") from error

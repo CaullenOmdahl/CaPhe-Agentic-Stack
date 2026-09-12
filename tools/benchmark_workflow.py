@@ -222,17 +222,23 @@ def _quality(trials, incumbent):
         candidate = {(task, repetition): trial for (name, task, repetition), trial in trials.items() if name == config}
         if candidate.keys() != reference.keys():
             return {'status': 'inconclusive', 'reason': 'task/repetition sets are not paired'}
-        differences = []
+        by_task = defaultdict(list)
         for key, trial in candidate.items():
             left, right = reference[key]['final'], trial['final']
             if left['acceptance_digest'] != right['acceptance_digest']:
                 return {'status': 'inconclusive', 'reason': 'paired acceptance contracts differ'}
-            differences.append(int(right['outcome'] == 'accepted') - int(left['outcome'] == 'accepted'))
-        comparisons[config] = {'paired_tasks': len(differences), 'delta': sum(differences) / len(differences),
-                               'wins': differences.count(1), 'losses': differences.count(-1),
+            by_task[key[0]].append(int(right['outcome'] == 'accepted') - int(left['outcome'] == 'accepted'))
+        # Repetitions estimate a task's acceptance rate; they do not give that
+        # task greater weight than other tasks in the evaluation set.
+        differences = [sum(values) / len(values) for values in by_task.values()]
+        comparisons[config] = {'paired_tasks': len(by_task), 'paired_runs': len(candidate),
+                               'repetitions_per_task': {task: len(by_task[task]) for task in sorted(by_task)},
+                               'delta': sum(differences) / len(differences),
+                               'wins': sum(value > 0 for value in differences),
+                               'losses': sum(value < 0 for value in differences),
                                'ties': differences.count(0)}
     return {'status': 'computed', 'incumbent': incumbent, 'comparisons': comparisons,
-            'interpretation': 'observed paired binary acceptance deltas; not evidence of statistical non-inferiority'}
+            'interpretation': 'equal task weights with repetitions averaged within each task; descriptive acceptance-rate deltas, not statistical non-inferiority'}
 
 
 def aggregate_attempts(events, card, incumbent_config='incumbent'):
