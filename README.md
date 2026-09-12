@@ -166,10 +166,11 @@ The public-safety rule is conservative by design: if a workflow needs private de
 
 ## External Workflow Research
 
-The stack includes two research documents:
+The stack includes these research documents:
 
 - [`docs/external-workflow-integrations.md`](docs/external-workflow-integrations.md): records external workflow ideas already integrated or rejected, including the jnsahaj gists that motivated the first skills.
 - [`docs/external-account-research.md`](docs/external-account-research.md): tracks public GitHub accounts and repositories worth monitoring, such as Vercel Labs agent-skill work, agent-agnostic repository guides, and multi-agent coordination catalogs.
+- [`docs/efficiency-improvement-plan.md`](docs/efficiency-improvement-plan.md): evaluates published efficiency results and proposes measured context, verification, and model-and-effort improvements with implementation instructions.
 
 Research notes are not automatically adopted rules. Changes to the stack should still go through a focused PR.
 
