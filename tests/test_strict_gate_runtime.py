@@ -306,7 +306,7 @@ class RuntimeTests(unittest.TestCase):
             module.symlink_to(root, target_is_directory=True)
             self.assertNotEqual(before['snapshot_digest'], gate.snapshot_identity(root)['snapshot_digest'])
 
-    def test_uninitialized_empty_gitlink_is_distinct_from_absent_and_nonempty_invalid(self):
+    def test_uninitialized_empty_gitlink_is_distinct_from_absent_and_ordinary_replacement(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             repository(root)
@@ -317,9 +317,12 @@ class RuntimeTests(unittest.TestCase):
             empty = gate.snapshot_identity(root)
             self.assertNotEqual(absent['snapshot_digest'], empty['snapshot_digest'])
             self.assertEqual(empty, gate.snapshot_identity(root))
+            (root / '.git/info/exclude').write_text('module/.env\n')
             (module / '.env').write_text('must not be read')
-            with self.assertRaisesRegex(gate.ManifestError, 'Git root'):
-                gate.snapshot_identity(root)
+            ordinary = gate.snapshot_identity(root)
+            self.assertNotEqual(empty['snapshot_digest'], ordinary['snapshot_digest'])
+            (module / '.env').write_text('ignored local state changed')
+            self.assertEqual(ordinary, gate.snapshot_identity(root))
 
     def test_untracked_nested_git_root_binds_its_contents(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -332,18 +335,19 @@ class RuntimeTests(unittest.TestCase):
             (module / 'tracked.txt').write_text('changed')
             self.assertNotEqual(before['snapshot_digest'], gate.snapshot_identity(root)['snapshot_digest'])
 
-    def test_invalid_or_symlink_gitlink_checkout_fails_closed(self):
-        for kind in ('non-git', 'symlink', 'parent-symlink'):
+    def test_invalid_or_symlink_git_metadata_and_parent_fail_closed(self):
+        for kind in ('invalid-git', 'metadata-symlink', 'parent-symlink'):
             with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 repository(root)
                 module = self.add_gitlink(root, 'parent/module' if kind == 'parent-symlink' else 'module')
                 shutil.rmtree(module)
-                if kind == 'non-git':
+                if kind == 'invalid-git':
                     module.mkdir()
-                    (module / 'tracked.txt').write_text('invalid')
-                elif kind == 'symlink':
-                    module.symlink_to(root, target_is_directory=True)
+                    (module / '.git').write_text('invalid Git metadata')
+                elif kind == 'metadata-symlink':
+                    module.mkdir()
+                    (module / '.git').symlink_to(root / '.git', target_is_directory=True)
                 else:
                     module.parent.rmdir()
                     module.parent.symlink_to(root, target_is_directory=True)
