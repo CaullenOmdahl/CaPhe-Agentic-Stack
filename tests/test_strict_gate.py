@@ -1,9 +1,13 @@
 import importlib.util
 import json
 import os
+import signal
+import sys
+import time
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 
 MODULE_PATH = Path(__file__).parents[1] / "strict-mode" / "bin" / "strict_gate.py"
@@ -55,6 +59,125 @@ class StrictGatePlanTests(unittest.TestCase):
                 else:
                     os.environ[name] = value
         self.assertEqual(returncode, 0, output)
+
+    def detached_writer(self, root):
+        child = "import time; print('detached output', flush=True); time.sleep(2)"
+        script = (
+            "import subprocess,sys,time; from pathlib import Path; "
+            "child=subprocess.Popen([sys.executable,'-c'," + repr(child) + "],start_new_session=True); "
+            "Path('detached.pid').write_text(str(child.pid)); "
+            "print('parent stdout',flush=True); print('parent stderr',file=sys.stderr,flush=True); time.sleep(5)"
+        )
+        return (sys.executable, '-c', script)
+
+    def cleanup_detached_writer(self, root):
+        path = root / 'detached.pid'
+        if path.exists():
+            try:
+                os.kill(int(path.read_text()), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+    @unittest.skipUnless(os.name == 'posix', 'fixture requires detached POSIX sessions')
+    def test_timeout_does_not_wait_for_detached_writer_output_eof(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            command = strict_gate.CommandSpec('fixture', 'detached', self.detached_writer(root), timeout_seconds=0.3)
+            try:
+                started = time.monotonic()
+                _, code, output, cached = strict_gate._run_one(root, command, 'manifest', root / 'cache')
+                elapsed = time.monotonic() - started
+                self.assertEqual(code, 124)
+                self.assertFalse(cached)
+                self.assertIn('parent stdout', output)
+                self.assertIn('parent stderr', output)
+                self.assertIn('command timeout', output)
+                self.assertFalse((root / 'cache').exists())
+                self.assertLess(elapsed, 1.3, 'detached pipe holder extended the command deadline')
+            finally:
+                self.cleanup_detached_writer(root)
+
+    @unittest.skipUnless(os.name == 'posix', 'fixture requires detached POSIX sessions')
+    def test_verifier_timeout_does_not_wait_for_detached_writer(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            data = component('fixture', ['**'], verification='custom')
+            data['dependency_verification'].update(command=list(self.detached_writer(root)), timeout_seconds=0.3)
+            try:
+                started = time.monotonic()
+                self.assertEqual(strict_gate.verify_dependency_completeness(root, manifest([data])), set())
+                self.assertLess(time.monotonic() - started, 1.3)
+                self.assertFalse((root / '.agent').exists())
+            finally:
+                self.cleanup_detached_writer(root)
+
+    @unittest.skipUnless(os.name == 'posix', 'fixture requires detached POSIX sessions')
+    def test_continuous_detached_writer_observes_closed_pipe_after_timeout(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            child = (
+                "import os,time; from pathlib import Path\n"
+                "deadline=time.monotonic()+3\n"
+                "while time.monotonic()<deadline:\n"
+                "    try: os.write(1,b'continuous output\\n')\n"
+                "    except BrokenPipeError:\n"
+                "        Path('pipe-closed').write_text('observed'); os._exit(0)\n"
+                "    time.sleep(0.01)\n"
+                "os._exit(0)\n"
+            )
+            script = (
+                "import subprocess,sys,time; from pathlib import Path; "
+                "child=subprocess.Popen([sys.executable,'-c'," + repr(child) + "],start_new_session=True); "
+                "Path('detached.pid').write_text(str(child.pid)); print('parent output',flush=True); time.sleep(5)"
+            )
+            command = strict_gate.CommandSpec('fixture', 'continuous', (sys.executable, '-c', script), timeout_seconds=0.3)
+            try:
+                started = time.monotonic()
+                _, code, output, _ = strict_gate._run_one(root, command, 'manifest', root / 'cache')
+                self.assertLess(time.monotonic() - started, 1.3)
+                self.assertEqual(code, 124)
+                self.assertEqual(output.count('parent output'), 1)
+                self.assertIn('continuous output', output)
+                self.assertIn('command timeout', output)
+                deadline = time.monotonic() + 1
+                while not (root / 'pipe-closed').exists() and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                self.assertTrue((root / 'pipe-closed').exists(), 'escaped writer retained a writable output descriptor')
+            finally:
+                self.cleanup_detached_writer(root)
+
+    def test_unsupported_platform_rejects_before_cache_probes_or_launch(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            command = strict_gate.CommandSpec('fixture', 'unsupported', (sys.executable, '-c', 'pass'), cache_allowed=True)
+            with mock.patch.object(strict_gate.os, 'name', 'nt'), \
+                    mock.patch.object(strict_gate, '_command_cwd', return_value=root), \
+                    mock.patch.object(strict_gate, 'cache_key') as cache, \
+                    mock.patch.object(strict_gate, 'snapshot_identity') as snapshot, \
+                    mock.patch.object(strict_gate.subprocess, 'Popen') as launch:
+                _, code, output, cached = strict_gate._run_one(root, command, 'manifest', root)
+                self.assertEqual(code, 127)
+                self.assertIn('WSL', output)
+                self.assertFalse(cached)
+                self.assertEqual(strict_gate.execute_plan(root, [command], 'manifest', 1), 127)
+                self.assertEqual(strict_gate.main(['--mode', 'completion']), 127)
+                cache.assert_not_called(); snapshot.assert_not_called(); launch.assert_not_called()
+            with mock.patch.object(strict_gate.os, 'name', 'nt'), \
+                    mock.patch.object(strict_gate.subprocess, 'run') as probe:
+                with self.assertRaisesRegex(strict_gate.ManifestError, 'WSL'):
+                    strict_gate.cache_key(root, command, 'manifest')
+                probe.assert_not_called()
+
+    def test_completed_command_retains_complete_failure_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            script = "import sys; sys.stdout.write('x' * 2097152); print('failure detail',file=sys.stderr); raise SystemExit(7)"
+            command = strict_gate.CommandSpec('fixture', 'noisy', (sys.executable, '-c', script), timeout_seconds=3)
+            _, code, output, cached = strict_gate._run_one(root, command, 'manifest', root / 'cache')
+            self.assertEqual(code, 7)
+            self.assertFalse(cached)
+            self.assertIn('failure detail', output)
+            self.assertEqual(output, ("x" * 2097152) + "failure detail\n")
 
     def test_completion_always_runs_every_command_uncached(self):
         data = manifest([

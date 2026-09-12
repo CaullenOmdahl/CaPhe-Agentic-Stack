@@ -67,7 +67,9 @@ def project_observation(raw: Mapping[str, Any]) -> dict[str, Any]:
             raise ValueError('invalid source digest')
         result['digest'] = raw['digest']
     if 'exit_code' in raw:
-        if result['status'] != 'QUERY_FAILURE' or type(raw['exit_code']) is not int or not -255 <= raw['exit_code'] <= 255:
+        # Preserve POSIX signals and signed/unsigned native Windows status codes.
+        if (result['status'] != 'QUERY_FAILURE' or type(raw['exit_code']) is not int
+                or not -(2 ** 31) <= raw['exit_code'] <= 2 ** 32 - 1):
             raise ValueError('invalid query exit code')
         result['exit_code'] = raw['exit_code']
     if 'failure_reason' in raw:
