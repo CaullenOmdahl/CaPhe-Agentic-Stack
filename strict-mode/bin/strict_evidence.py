@@ -177,6 +177,18 @@ def _remove_public_url_scheme(match):
     return match.group()[len('https://'):]
 
 
+def _decode_public_text(value):
+    """Reach a stable percent-decoded view, with at most eight decoding layers."""
+    for _ in range(8):
+        decoded = unquote(value)
+        if decoded == value:
+            return value
+        value = decoded
+    if unquote(value) != value:
+        raise EvidenceError('public evidence exceeds the percent-encoding depth limit')
+    return value
+
+
 def _public_text(value):
     """Conservative leak guard, not a guarantee that arbitrary prose is sanitized."""
     if isinstance(value, dict):
@@ -193,7 +205,7 @@ def _public_text(value):
             r'(?i)\b(?:password|api[_-]?key|access[_-]?token|secret)\s*[:=]\s*\S+',
             r'\b(?:127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+)\b',
         )
-        decoded = unquote(value)
+        decoded = _decode_public_text(value)
         if any(re.search(pattern, text) for pattern in patterns for text in (value, decoded)) or any(ord(c) < 32 for c in decoded):
             raise EvidenceError('public evidence contains unsafe/private-looking content')
         # Exempt only a validated HTTPS scheme delimiter. Keep the rest visible so
@@ -206,7 +218,7 @@ def _public_text(value):
 def _reference(item):
     value = item['reference']
     kind = item['kind']
-    decoded = unquote(value)
+    decoded = _decode_public_text(value)
     if kind == 'file':
         _public_text(decoded)
         path = PurePosixPath(decoded)
@@ -215,7 +227,7 @@ def _reference(item):
                 any(part in ('.git', '.codex', '.ssh', 'private') or part.startswith('.env') for part in path.parts)):
             raise EvidenceError('evidence file reference must be a sanitized relative path')
     elif kind == 'url':
-        _validate_public_url(value)
+        _validate_public_url(decoded)
         _public_text(decoded)
     elif kind == 'digest' and re.fullmatch(r'[0-9a-f]{64}', value) is None:
         raise EvidenceError('digest reference must be SHA-256')

@@ -131,8 +131,17 @@ def _hash_worktree_path(digest, root_fd: int, relative: bytes, *, allow_missing=
     try:
         digest.update(b'path\0' + len(relative).to_bytes(8, 'big') + relative)
         try:
-            for part in parts[:-1]:
-                child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+            for index, part in enumerate(parts[:-1]):
+                try:
+                    child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+                except NotADirectoryError:
+                    if not allow_missing:
+                        raise
+                    # A file/symlink can replace the directory containing a tracked path.
+                    # Bind that blocker itself, even if an ignore rule hides it from status.
+                    _hash_worktree_path(digest, root_fd, b'/'.join(parts[:index + 1]))
+                    digest.update(b'blocked-descendant\0')
+                    return
                 os.close(parent)
                 parent = child
             before = os.stat(parts[-1], dir_fd=parent, follow_symlinks=False)
@@ -141,11 +150,17 @@ def _hash_worktree_path(digest, root_fd: int, relative: bytes, *, allow_missing=
                 raise
             digest.update(b'missing\0')
             return
-        digest.update(f'{before.st_mode}:{before.st_size}\0'.encode())
-        if stat.S_ISLNK(before.st_mode):
+        if stat.S_ISDIR(before.st_mode) and allow_missing:
+            # Git lists visible descendants separately. Directory size/mtime can change
+            # because of ignored children, so only presence and mode enter the digest.
+            digest.update(f'{before.st_mode}:directory\0'.encode())
+            after = os.stat(parts[-1], dir_fd=parent, follow_symlinks=False)
+        elif stat.S_ISLNK(before.st_mode):
+            digest.update(f'{before.st_mode}:{before.st_size}\0'.encode())
             digest.update(os.fsencode(os.readlink(parts[-1], dir_fd=parent)))
             after = os.stat(parts[-1], dir_fd=parent, follow_symlinks=False)
         else:
+            digest.update(f'{before.st_mode}:{before.st_size}\0'.encode())
             fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
             with os.fdopen(fd, 'rb') as handle:
                 opened = os.fstat(handle.fileno())
