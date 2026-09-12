@@ -304,6 +304,103 @@ class StrictInitSourceTests(unittest.TestCase):
         return {str(p.relative_to(root)): ('directory' if p.is_dir() else p.read_bytes(), p.stat().st_mode & 0o777)
                 for p in root.rglob('*')}
 
+    def test_active_relative_receive_hook_rejects_initialization_without_mutation(self):
+        for configured in (False, True):
+            with self.subTest(configured=configured), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve(); repo = self.repo(root)
+                hooks = repo / '.git' / ('custom-hooks' if configured else 'hooks')
+                hooks.mkdir(exist_ok=True)
+                hook = hooks / 'pre-receive'
+                hook.write_text('#!/bin/sh\npwd > receive-cwd\ncat > receive-input\n')
+                hook.chmod(0o755)
+                if configured:
+                    git(repo, 'config', 'core.hooksPath', 'custom-hooks')
+                sender = root / 'sender'
+                git(root, 'clone', '-q', '--no-local', str(repo), str(sender))
+                git(sender, 'push', str(repo), 'HEAD:refs/heads/received')
+                self.assertEqual((repo / '.git/receive-cwd').read_text().strip(), str(repo / '.git'))
+                self.assertTrue((repo / '.git/receive-input').read_text().endswith(' refs/heads/received\n'))
+                before = self.hook_snapshot(root)
+                with self.assertRaisesRegex(initializer.InitError, 'absolute.*core.hooksPath'):
+                    initializer.initialize(ROOT / 'strict-mode', repo)
+                self.assertEqual(self.hook_snapshot(root), before)
+
+    def test_relative_receive_sensitive_hooks_reject_in_both_invocation_directories(self):
+        names = ('pre-receive', 'update', 'post-receive', 'post-update',
+                 'push-to-checkout', 'proc-receive', 'reference-transaction')
+        for name in names:
+            for context in ('worktree', 'gitdir'):
+                with self.subTest(name=name, context=context), tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp).resolve(); repo = self.repo(root)
+                    hooks = (repo if context == 'worktree' else repo / '.git') / 'custom-hooks'
+                    hooks.mkdir()
+                    hook = hooks / name
+                    hook.write_text('#!/bin/sh\nexit 0\n'); hook.chmod(0o755)
+                    git(repo, 'config', 'core.hooksPath', 'custom-hooks')
+                    before = self.hook_snapshot(root)
+                    with self.assertRaisesRegex(initializer.InitError, 'absolute.*core.hooksPath'):
+                        initializer.initialize(ROOT / 'strict-mode', repo)
+                    self.assertEqual(self.hook_snapshot(root), before)
+
+    def test_absolute_receive_hook_remains_active_after_initialization_and_refresh(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); repo = self.repo(root)
+            hooks = repo / '.git/custom-hooks'; hooks.mkdir()
+            hook = hooks / 'pre-receive'
+            content = b'#!/bin/sh\npwd > receive-cwd\ncat > receive-input\n'
+            hook.write_bytes(content); hook.chmod(0o755)
+            git(repo, 'config', 'core.hooksPath', str(hooks))
+            sender = root / 'sender'
+            git(root, 'clone', '-q', '--no-local', str(repo), str(sender))
+            for stage in ('before', 'after', 'refresh'):
+                if stage != 'before':
+                    initializer.initialize(ROOT / 'strict-mode', repo)
+                git(sender, 'push', str(repo), 'HEAD:refs/heads/' + stage)
+                self.assertEqual((repo / '.git/receive-cwd').read_text().strip(), str(repo / '.git'))
+                self.assertTrue((repo / '.git/receive-input').read_text().endswith(' refs/heads/' + stage + '\n'))
+                self.assertEqual(hook.read_bytes(), content)
+                self.assertEqual(hook.stat().st_mode & 0o777, 0o755)
+            record = initializer.read_activation(repo, Path(git(repo, 'config', 'core.hooksPath')))
+            self.assertEqual(record['forwarded_targets']['pre-receive']['path'], str(hook))
+
+    def test_historical_relative_receive_forwarder_requires_absolute_reconciliation(self):
+        doctor_spec = importlib.util.spec_from_file_location('receive_hook_doctor', ROOT / 'tools/stack_doctor.py')
+        doctor = importlib.util.module_from_spec(doctor_spec)
+        doctor_spec.loader.exec_module(doctor)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); repo = self.repo(root)
+            hooks = repo / 'custom-hooks'; hooks.mkdir()
+            original = hooks / 'pre-receive'
+            original.write_text('#!/bin/sh\nexit 0\n'); original.chmod(0o755)
+            git(repo, 'config', 'core.hooksPath', str(hooks))
+            initializer.initialize(ROOT / 'strict-mode', repo)
+            self.assertTrue(doctor.inspect(repo, runtime=ROOT)['project']['managed'])
+            managed = Path(git(repo, 'config', 'core.hooksPath'))
+            metadata = managed / initializer.ACTIVATION_FILE
+            record = json.loads(metadata.read_text())
+            self.assertEqual(record['schema'], 2)
+            # Recreate the internally consistent record produced by older versions:
+            # bytes, mode, resolved identity, and wrapper hash all still agree.
+            invocation = 'custom-hooks/pre-receive'
+            record['forwarded_targets']['pre-receive']['path'] = invocation
+            wrapper = initializer.forwarder_bytes(invocation)
+            (managed / 'pre-receive').write_bytes(wrapper)
+            record['forwarded_hooks']['pre-receive'] = hashlib.sha256(wrapper).hexdigest()
+            metadata.write_text(json.dumps(record))
+            before = self.hook_snapshot(root)
+            with self.assertRaisesRegex(initializer.InitError, 'original hook|absolute.*core.hooksPath'):
+                initializer.initialize(ROOT / 'strict-mode', repo)
+            self.assertEqual(self.hook_snapshot(root), before)
+            result = doctor.inspect(repo, runtime=ROOT)
+            self.assertFalse(result['project']['managed'])
+            self.assertIn('hook_chain_mismatch', result['unresolved'])
+            self.assertEqual(self.hook_snapshot(root), before)
+            git(repo, 'config', '--worktree', 'core.hooksPath', str(hooks))
+            initializer.initialize(ROOT / 'strict-mode', repo)
+            refreshed = initializer.read_activation(repo, managed)
+            self.assertEqual(refreshed['forwarded_targets']['pre-receive']['path'], str(original))
+            self.assertTrue(doctor.inspect(repo, runtime=ROOT)['project']['managed'])
+
     def test_owned_inactive_hooks_reactivate_and_failed_probe_restores_forwarders(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp).resolve(); repo=self.repo(root)

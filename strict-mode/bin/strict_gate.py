@@ -1131,6 +1131,18 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
         if cwd != ".":
             command["cwd"] = cwd
         commands.append(command)
+        if runner == "unittest" and (python_root / "tests").is_dir() and python_root in root_level_test_roots:
+            # Separate processes also avoid collisions between same-named root and tests/ modules.
+            root_command = {
+                "name": f"python-root-unittest{suffix}",
+                "run": [
+                    "python3", "-c", _SCOPED_UNITTEST_RUNNER, ".", "tests",
+                    *[candidate.relative_to(python_root).as_posix() for candidate in nested_roots],
+                ],
+            }
+            if cwd != ".":
+                root_command["cwd"] = cwd
+            commands.append(root_command)
 
     return {
         "version": 1,
@@ -1183,9 +1195,14 @@ def main(argv: list[str] | None = None) -> int:
         validate_path_coverage(data, tracked)
         changed = sorted(set(args.changed) | set(changed_paths(root)))
         mode = "affected" if args.mode == "plan" else args.mode
-        verified_dependencies = (
-            verify_dependency_completeness(root, data) if mode == "affected" else set()
-        )
+        verified_dependencies = set()
+        if mode == "affected" and any(
+            item.get("dependency_verification", {}).get("kind") == "custom" for item in data["components"]
+        ):
+            before_verification = snapshot_identity(root)
+            verified_dependencies = verify_dependency_completeness(root, data)
+            if snapshot_identity(root) != before_verification:
+                raise ManifestError("source changed during dependency verification; rerun against the resulting snapshot")
         plan = build_plan(
             data,
             changed,

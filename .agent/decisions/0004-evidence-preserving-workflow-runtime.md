@@ -18,8 +18,9 @@ Use isolated worker checkouts with bounded ownership and acceptance contracts. K
 review and complete checks. Record and resolve design findings before activating the affected capability.
 
 CI command reports are diagnostic unless an independently trusted verification bundle and enforced
-execution/result isolation can be authenticated. The current mutable candidate-runner workflow does not
-satisfy that contract. Implement explicitly nonauthoritative reporting without an automatic CI receipt
+execution/result isolation can be authenticated. The candidate-controlled CI workflow, including its
+required checks from the exact PR base, does not establish this receipt contract. Implement explicitly
+nonauthoritative reporting without an automatic CI receipt
 consumer or certifier; retain uncached local completion. Do not turn missing infrastructure into a claim
 that receipt-based certification is implemented or enabled.
 

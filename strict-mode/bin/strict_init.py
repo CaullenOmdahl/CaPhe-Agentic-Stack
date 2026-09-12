@@ -16,6 +16,7 @@ BEGIN = "<!-- STRICT-MODE:BEGIN (managed by strict-mode; edit the canon, not thi
 END = "<!-- STRICT-MODE:END -->"
 HOOK_FILES = ("pre-commit", "strict-green-gate.sh", "strict_gate.py")
 FORWARDED_HOOKS = {"applypatch-msg", "pre-applypatch", "post-applypatch", "pre-merge-commit", "prepare-commit-msg", "commit-msg", "post-commit", "pre-rebase", "post-checkout", "post-merge", "pre-push", "pre-receive", "update", "proc-receive", "post-receive", "post-update", "reference-transaction", "push-to-checkout", "pre-auto-gc", "post-rewrite", "sendemail-validate", "fsmonitor-watchman", "p4-changelist", "p4-prepare-changelist", "p4-post-changelist", "p4-pre-submit", "post-index-change"}
+RECEIVE_SENSITIVE_HOOKS = {"pre-receive", "update", "post-receive", "post-update", "push-to-checkout", "proc-receive", "reference-transaction"}
 CHAIN_FILE = ".caphe-chain.sh"
 ACTIVATION_FILE = ".caphe-activation.json"
 # Exact historical framework wrappers; custom variants must still be chained.
@@ -79,6 +80,9 @@ def _original_hook(root, hookdir, invocation, name="pre-commit"):
     if not isinstance(invocation, str) or not invocation or "\0" in invocation or Path(invocation).name != name:
         raise InitError("invalid original-hook invocation")
     path = Path(invocation)
+    if name in RECEIVE_SENSITIVE_HOOKS and not path.is_absolute():
+        raise InitError("receive-sensitive hook requires an absolute core.hooksPath; "
+                        "select the original hook directory with an absolute path and rerun initialization to reconcile")
     path = path if path.is_absolute() else root / path
     resolved = path.resolve(strict=True)
     if hookdir == resolved or hookdir in resolved.parents or not resolved.is_file() or not os.access(path, os.X_OK):
@@ -155,6 +159,8 @@ def read_activation(root, hookdir, *, canon=None, verify_previous=True):
         if verify_previous:
             try:
                 actual = _original_hook(root, hookdir, target["path"], name)
+            except InitError:
+                raise
             except (OSError, ValueError, RuntimeError) as error:
                 raise InitError("original hook cannot be verified") from error
             if actual != target:
@@ -318,6 +324,16 @@ def initialize(canon, root, *, fail_probe=False):
         hookdir = gitdir / "caphe-hooks"
         effective_value = Path(git(root, "rev-parse", "--git-path", "hooks"))
         effective = effective_value if effective_value.is_absolute() else root / effective_value
+        # Receive hooks run from the Git directory; reference-transaction can run
+        # in either context. Relative forwarders cannot preserve both meanings.
+        if not effective_value.is_absolute():
+            for directory in (effective, gitdir / effective_value):
+                for name in sorted(RECEIVE_SENSITIVE_HOOKS):
+                    original = directory / name
+                    if original.is_file() and os.access(original, os.X_OK):
+                        raise InitError("receive-sensitive hook requires an absolute core.hooksPath; "
+                                        "select the original hook directory with an absolute path and "
+                                        "rerun initialization to reconcile: " + str(original))
         chain = hookdir / CHAIN_FILE
         active = effective.resolve() == hookdir
         existing = None
