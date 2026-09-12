@@ -26,6 +26,7 @@ from typing import Any, Iterable, NamedTuple
 
 MANIFEST_PATH = ".agent/strict-gate.json"
 MAX_SNAPSHOT_DEPTH = 16
+PROCESS_PLATFORM_ERROR = "Strict Gate process execution requires macOS or Linux/POSIX; use Linux under WSL on Windows."
 GIT_REPOSITORY_ENV_FALLBACK = (
     "GIT_ALTERNATE_OBJECT_DIRECTORIES",
     "GIT_COMMON_DIR",
@@ -358,6 +359,8 @@ def _hash_file(root: Path, path: Path, digest: "hashlib._Hash") -> None:
 
 
 def cache_key(root: Path, command: CommandSpec, manifest_identity: str) -> str:
+    if os.name != "posix":
+        raise ManifestError(PROCESS_PLATFORM_ERROR)
     if not command.cache_allowed:
         raise ManifestError("cache key requested for a non-cacheable command")
     if not command.cache_inputs or not command.toolchain:
@@ -397,6 +400,8 @@ def cache_key(root: Path, command: CommandSpec, manifest_identity: str) -> str:
 
 
 def _run_one(root: Path, command: CommandSpec, manifest_identity: str, cache_dir: Path) -> tuple[CommandSpec, int, str, bool]:
+    if os.name != "posix":
+        return command, 127, PROCESS_PLATFORM_ERROR, False
     _command_cwd(root, command.cwd)
     cache_file: Path | None = None
     if command.cache_allowed:
@@ -408,7 +413,7 @@ def _run_one(root: Path, command: CommandSpec, manifest_identity: str, cache_dir
         process = subprocess.Popen(
             command.argv, cwd=_command_cwd(root, command.cwd), text=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            env=command_environment(), start_new_session=(os.name == "posix"),
+            env=command_environment(), start_new_session=True,
         )
     except OSError as error:
         return command, 127, f"command could not start: {error}", False
@@ -418,13 +423,22 @@ def _run_one(root: Path, command: CommandSpec, manifest_identity: str, cache_dir
         output = stdout + stderr
     except subprocess.TimeoutExpired:
         try:
-            if os.name == "posix":
-                os.killpg(process.pid, signal.SIGKILL)
-            else:
-                process.kill()
+            os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
-        stdout, stderr = process.communicate()
+        try:
+            stdout, stderr = process.communicate(timeout=0.2)
+        except subprocess.TimeoutExpired as error:
+            # POSIX communicate uses synchronous pipe reads. Its timeout carries
+            # cumulative bytes; close the readers without waiting for escaped writers.
+            stdout = (error.output or b"").decode(process.stdout.encoding, errors="replace")
+            stderr = (error.stderr or b"").decode(process.stderr.encoding, errors="replace")
+            process.stdout.close()
+            process.stderr.close()
+            try:
+                process.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                pass
         code = 124
         output = stdout + stderr + f"\ncommand timeout after {command.timeout_seconds}s"
     if code == 0 and cache_file is not None:
@@ -687,6 +701,9 @@ def execute_plan(
     root: Path, plan: list[CommandSpec], manifest_identity: str, jobs: int,
     *, report_path: Path | None = None, mode: str = "affected",
 ) -> int:
+    if os.name != "posix":
+        print(PROCESS_PLATFORM_ERROR, file=sys.stderr)
+        return 127
     for command in plan:
         _command_cwd(root, command.cwd)
     destination = _report_destination(report_path) if report_path is not None else None
@@ -1138,6 +1155,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--write-default-manifest", action="store_true")
     parser.add_argument("--report", type=Path, help="owner-only diagnostic JSON outside Git; never an authoritative receipt")
     args = parser.parse_args(argv)
+    if os.name != "posix":
+        print(PROCESS_PLATFORM_ERROR, file=sys.stderr)
+        return 127
     root = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
     manifest_path = root / args.manifest
     if args.write_default_manifest:

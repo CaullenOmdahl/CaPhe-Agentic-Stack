@@ -55,6 +55,25 @@ class WatchContracts(unittest.TestCase):
         self.assertEqual(timed['status'], 'QUERY_FAILURE')
         self.assertEqual(timed['conclusion'], 'TIMED_OUT')
 
+    def test_watch_surfaces_native_process_exit_codes_as_query_failures(self):
+        for code in (-2147483648, -1073741819, -9, 256, 3221225477, 4294967295):
+            with self.subTest(code=code):
+                observation = watcher._query_failure('process_exit', code)
+                with patch.object(watcher, 'run_process_observation', return_value=observation) as query:
+                    result = watcher.watch(['query'], timeout_seconds=1, poll_interval_seconds=.01)
+                self.assertEqual(result['state'], 'failure')
+                self.assertTrue(result['actionable'])
+                self.assertEqual(result['observation']['exit_code'], code)
+                self.assertEqual(result['observation']['failure_reason'], 'process_exit')
+                query.assert_called_once()
+
+    def test_query_exit_codes_reject_out_of_range_and_noninteger_values(self):
+        for code in (-2147483649, 4294967296, True, 1.5, '7'):
+            with self.subTest(code=code):
+                result = watcher.parse_status_query(json.dumps(watcher._query_failure('process_exit', code)))
+                self.assertEqual(result['failure_reason'], 'malformed_observation')
+                self.assertNotIn('exit_code', result)
+
     def test_status_query_rejects_large_output_and_duplicate_json_keys(self):
         large = watcher.run_process_observation([sys.executable, '-c', 'print("x" * 2000000)'], 1)
         self.assertEqual(large['status'], 'QUERY_FAILURE')

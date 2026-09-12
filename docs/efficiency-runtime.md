@@ -111,6 +111,13 @@ independence claim; use it only for checks that do not share installation or gen
 prerequisites block dependent commands. `depends_on` also orders selected components. Completion runs all
 commands uncached, and a source change during checks requires a rerun against the resulting source.
 
+Gate process execution supports POSIX hosts; this distribution is verified on macOS and Linux.
+Native Windows execution fails before launching checks; use a Linux environment such as WSL.
+After a timeout, the gate kills the original process group and gives output collection a bounded
+grace period. It retains available failure output and closes inherited output pipes if descendants
+keep them open. This bounds collection; it does not establish containment of detached descendants.
+Ordinary completed commands retain their full output.
+
 ```bash
 bash "$CAPHE_RUNTIME/strict-mode/bin/strict-green-gate.sh" --mode affected
 bash "$CAPHE_RUNTIME/strict-mode/bin/strict-green-gate.sh" --mode completion \
