@@ -384,7 +384,7 @@ def cache_key(root: Path, command: CommandSpec, manifest_identity: str) -> str:
         raise ManifestError("cache identity requires input files and toolchain probes")
     root = root.resolve()
     _command_cwd(root, command.cwd)
-    digest = hashlib.sha256(b"caphe-feedback-cache-v2\0")
+    digest = hashlib.sha256(b"caphe-feedback-cache-v3\0")
     digest.update(manifest_identity.encode())
     digest.update(json.dumps(command._asdict(), sort_keys=True).encode())
     # Probe first, so any resulting input mutation is reflected in the file hashes below.
@@ -416,7 +416,50 @@ def cache_key(root: Path, command: CommandSpec, manifest_identity: str) -> str:
     return digest.hexdigest()
 
 
-def _run_one(root: Path, command: CommandSpec, manifest_identity: str, cache_dir: Path) -> tuple[CommandSpec, int, str, bool]:
+def _write_cache_marker(cache_file: Path) -> None:
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    lock = cache_file.with_suffix(".lock")
+    try:
+        lock.mkdir()
+        with tempfile.NamedTemporaryFile("w", dir=cache_file.parent, delete=False) as handle:
+            handle.write("ok\n")
+            tmp = Path(handle.name)
+        os.replace(tmp, cache_file)
+    except FileExistsError:
+        pass
+    finally:
+        try:
+            lock.rmdir()
+        except OSError:
+            pass
+
+
+def _cache_destination_is_ignored_untracked(root: Path, cache_file: Path) -> bool:
+    try:
+        relative = cache_file.relative_to(root)
+    except ValueError:
+        return False
+    pathspec = relative.as_posix()
+    try:
+        ignored = subprocess.run(
+            ["git", "check-ignore", "-q", "--", pathspec], cwd=root,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            check=False, env=command_environment(), timeout=10,
+        )
+        tracked = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", "--", pathspec], cwd=root,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            check=False, env=command_environment(), timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return ignored.returncode == 0 and tracked.returncode == 1
+
+
+def _run_one(
+    root: Path, command: CommandSpec, manifest_identity: str, cache_dir: Path,
+    *, cache_publish_dir: Path | None = None,
+) -> tuple[CommandSpec, int, str, bool]:
     if os.name != "posix":
         return command, 127, PROCESS_PLATFORM_ERROR, False
     _command_cwd(root, command.cwd)
@@ -459,21 +502,8 @@ def _run_one(root: Path, command: CommandSpec, manifest_identity: str, cache_dir
         code = 124
         output = stdout + stderr + f"\ncommand timeout after {command.timeout_seconds}s"
     if code == 0 and cache_file is not None:
-        cache_file.parent.mkdir(parents=True, exist_ok=True)
-        lock = cache_file.with_suffix(".lock")
-        try:
-            lock.mkdir()
-            with tempfile.NamedTemporaryFile("w", dir=cache_file.parent, delete=False) as handle:
-                handle.write("ok\n")
-                tmp = Path(handle.name)
-            os.replace(tmp, cache_file)
-        except FileExistsError:
-            pass
-        finally:
-            try:
-                lock.rmdir()
-            except OSError:
-                pass
+        publish_dir = cache_dir if cache_publish_dir is None else cache_publish_dir
+        _write_cache_marker(publish_dir / cache_file.name)
     return command, code, output, False
 
 
@@ -678,14 +708,16 @@ def _snapshot_identity(root: Path, ancestors: tuple[Path, ...]) -> dict[str, Any
 
 def _report_destination(path: Path) -> Path:
     """Diagnostics stay owner-only outside repositories; they never attest their own authority."""
-    path = path.expanduser().absolute()
-    for component in (path, *path.parents):
+    original_path = path.expanduser().absolute()
+    for component in (original_path, *original_path.parents):
         if component.is_symlink():
             raise ManifestError("report destination must not contain a symlink")
         if (component / ".git").exists() or (component / ".git").is_symlink():
             raise ManifestError("diagnostic report must be outside Git worktrees")
-    if '.git' in path.parts or any(left == '.codex' and right in ('sessions', 'memories')
-                                 for left, right in zip(path.parts, path.parts[1:])):
+    path = Path(os.path.normpath(original_path))
+    normalized_parts = tuple(part.casefold() for part in path.parts)
+    if '.git' in normalized_parts or any(left == '.codex' and right in ('sessions', 'memories')
+                                         for left, right in zip(normalized_parts, normalized_parts[1:])):
         raise ManifestError("diagnostics cannot replace Git metadata or canonical records")
     nearest = path.parent
     while not nearest.exists():
@@ -735,54 +767,64 @@ def execute_plan(
     pending = dict(by_id)
     finished = {}
     running = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, jobs)) as executor:
-        while pending or running:
-            for identifier, command in list(pending.items()):
-                if not set(command.after).issubset(finished):
-                    continue
-                if any(finished[prior][1] != 0 for prior in command.after):
-                    finished[identifier] = (command, 126, "prerequisite check failed; command was not run", False)
-                    del pending[identifier]
-                elif len(running) < max(1, jobs):
-                    running[executor.submit(_run_one, root, command, manifest_identity, cache_dir)] = identifier
-                    del pending[identifier]
-            if running:
-                completed, _ = concurrent.futures.wait(running, return_when=concurrent.futures.FIRST_COMPLETED)
-                for future in completed:
-                    identifier = running.pop(future)
-                    try:
-                        finished[identifier] = future.result()
-                    except Exception as error:
-                        finished[identifier] = (by_id[identifier], 125, f"check execution failed: {error}", False)
-            elif pending:
-                # Failed prerequisites can unblock further skipped descendants on the next pass.
-                if any(set(command.after).issubset(finished) for command in pending.values()):
-                    continue
-                raise ManifestError("execution plan contains a dependency cycle")
-        for command in plan:
-            command, code, output, cached = finished[f"{command.component}:{command.name}"]
-            outcomes.append({
-                "component": command.component, "name": command.name,
-                "argv": list(command.argv), "cwd": command.cwd,
-                "after": list(command.after),
-                "exit_code": code, "cached": cached,
-                "output_sha256": hashlib.sha256(output.encode()).hexdigest(),
-            })
-            label = f"{command.component}:{command.name}"
-            if cached:
-                print(f"CACHE {label}")
-            elif code == 0:
-                print(f"PASS  {label}")
-            else:
-                failures += 1
-                print(f"FAIL  {label}", file=sys.stderr)
-                if output:
-                    print(output.rstrip(), file=sys.stderr)
-    after = snapshot_identity(root)
-    stale = before != after
-    if stale:
-        failures += 1
-        print("FAIL  source changed while checks ran; rerun against the resulting snapshot", file=sys.stderr)
+    with tempfile.TemporaryDirectory(prefix="strict-gate-cache-") as staging:
+        staged_cache_dir = Path(staging)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, jobs)) as executor:
+            while pending or running:
+                for identifier, command in list(pending.items()):
+                    if not set(command.after).issubset(finished):
+                        continue
+                    if any(finished[prior][1] != 0 for prior in command.after):
+                        finished[identifier] = (command, 126, "prerequisite check failed; command was not run", False)
+                        del pending[identifier]
+                    elif len(running) < max(1, jobs):
+                        running[executor.submit(
+                            _run_one, root, command, manifest_identity, cache_dir,
+                            cache_publish_dir=staged_cache_dir,
+                        )] = identifier
+                        del pending[identifier]
+                if running:
+                    completed, _ = concurrent.futures.wait(running, return_when=concurrent.futures.FIRST_COMPLETED)
+                    for future in completed:
+                        identifier = running.pop(future)
+                        try:
+                            finished[identifier] = future.result()
+                        except Exception as error:
+                            finished[identifier] = (by_id[identifier], 125, f"check execution failed: {error}", False)
+                elif pending:
+                    # Failed prerequisites can unblock further skipped descendants on the next pass.
+                    if any(set(command.after).issubset(finished) for command in pending.values()):
+                        continue
+                    raise ManifestError("execution plan contains a dependency cycle")
+            for command in plan:
+                command, code, output, cached = finished[f"{command.component}:{command.name}"]
+                outcomes.append({
+                    "component": command.component, "name": command.name,
+                    "argv": list(command.argv), "cwd": command.cwd,
+                    "after": list(command.after),
+                    "exit_code": code, "cached": cached,
+                    "output_sha256": hashlib.sha256(output.encode()).hexdigest(),
+                })
+                label = f"{command.component}:{command.name}"
+                if cached:
+                    print(f"CACHE {label}")
+                elif code == 0:
+                    print(f"PASS  {label}")
+                else:
+                    failures += 1
+                    print(f"FAIL  {label}", file=sys.stderr)
+                    if output:
+                        print(output.rstrip(), file=sys.stderr)
+        after = snapshot_identity(root)
+        stale = before != after
+        if stale:
+            failures += 1
+            print("FAIL  source changed while checks ran; rerun against the resulting snapshot", file=sys.stderr)
+        else:
+            for marker in staged_cache_dir.glob("*.ok"):
+                destination_marker = cache_dir / marker.name
+                if _cache_destination_is_ignored_untracked(root, destination_marker):
+                    _write_cache_marker(destination_marker)
     if destination is not None:
         report = {
             "schema_version": 1, "kind": "diagnostic-gate-report", "authoritative": False,

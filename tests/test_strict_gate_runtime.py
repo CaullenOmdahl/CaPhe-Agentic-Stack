@@ -104,6 +104,11 @@ class RuntimeTests(unittest.TestCase):
         subprocess.run(['git', 'update-index', '--add', '--cacheinfo', '160000,' + revision + ',' + name], cwd=root, check=True)
         return module
 
+    def ignore_cache(self, root):
+        (root / ".gitignore").write_text(".agent/cache/\n")
+        subprocess.run(["git", "add", ".gitignore"], cwd=root, check=True)
+        subprocess.run(["git", "commit", "-qm", "ignore cache"], cwd=root, check=True)
+
     def test_nested_gitlinks_bind_dirty_and_untracked_state_despite_ignore_settings(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -460,6 +465,61 @@ class RuntimeTests(unittest.TestCase):
             self.assertNotEqual(code, 0)
             self.assertTrue(json.loads(path.read_text())["stale_source"])
 
+    def test_stale_source_does_not_publish_a_cache_marker(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repository(root)
+            self.ignore_cache(root)
+            command = gate.CommandSpec(
+                "fixture", "mutates",
+                (sys.executable, "-c", "from pathlib import Path; Path('tracked.txt').write_text('mutated')"),
+                cache_allowed=True, cache_inputs=("tracked.txt",),
+                toolchain=((sys.executable, "--version"),),
+            )
+            self.assertEqual(gate.execute_plan(root, [command], "manifest", 1), 1)
+            (root / "tracked.txt").write_text("baseline")
+            self.assertEqual(gate.execute_plan(root, [command], "manifest", 1), 1)
+            self.assertEqual((root / "tracked.txt").read_text(), "mutated")
+
+    def test_stable_source_publishes_and_reuses_an_ignored_cache_marker(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as state:
+            root = Path(tmp)
+            repository(root)
+            self.ignore_cache(root)
+            ran = Path(state) / "ran"
+            command = gate.CommandSpec(
+                "fixture", "passes",
+                (sys.executable, "-c", f"from pathlib import Path; Path({str(ran)!r}).write_text('ran')"),
+                cache_allowed=True, cache_inputs=("tracked.txt",),
+                toolchain=((sys.executable, "--version"),),
+            )
+            before = gate.snapshot_identity(root)
+            self.assertEqual(gate.execute_plan(root, [command], "manifest", 1), 0)
+            self.assertEqual(before, gate.snapshot_identity(root))
+            self.assertTrue(any((root / ".agent/cache/strict-gate").glob("*.ok")))
+            ran.unlink()
+            self.assertEqual(gate.execute_plan(root, [command], "manifest", 1), 0)
+            self.assertFalse(ran.exists())
+
+    def test_stable_source_does_not_publish_an_unignored_cache_marker(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as state:
+            root = Path(tmp)
+            repository(root)
+            ran = Path(state) / "ran"
+            command = gate.CommandSpec(
+                "fixture", "passes",
+                (sys.executable, "-c", f"from pathlib import Path; Path({str(ran)!r}).write_text('ran')"),
+                cache_allowed=True, cache_inputs=("tracked.txt",),
+                toolchain=((sys.executable, "--version"),),
+            )
+            before = gate.snapshot_identity(root)
+            self.assertEqual(gate.execute_plan(root, [command], "manifest", 1), 0)
+            self.assertEqual(before, gate.snapshot_identity(root))
+            self.assertFalse((root / ".agent/cache/strict-gate").exists())
+            ran.unlink()
+            self.assertEqual(gate.execute_plan(root, [command], "manifest", 1), 0)
+            self.assertTrue(ran.exists())
+
     def test_reports_reject_hidden_or_malformed_destination_repositories(self):
         for kind in ("malformed-config", "bare", "discovery-ceiling"):
             with self.subTest(kind=kind), tempfile.TemporaryDirectory() as source, tempfile.TemporaryDirectory() as destination:
@@ -495,6 +555,24 @@ class RuntimeTests(unittest.TestCase):
             with self.assertRaises(gate.ManifestError):
                 gate.execute_plan(root, [command], "manifest", 1, report_path=root / "report.json", mode="completion")
             self.assertFalse((root / "report.json").exists())
+
+    def test_reports_reject_canonical_records_after_lexical_normalization_and_casefold(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp).resolve()
+            for record in ("MeMoRiEs", "SeSsIoNs"):
+                target = base / ".codex" / "scratch" / ".." / record / "report.json"
+                with self.subTest(record=record), self.assertRaisesRegex(gate.ManifestError, "canonical records"):
+                    gate._report_destination(target)
+                self.assertFalse((base / ".codex" / record).exists())
+
+    def test_reports_reject_original_symlink_path_before_lexical_normalization(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp).resolve()
+            (base / "link").symlink_to(base, target_is_directory=True)
+            target = base / "link" / ".." / "private" / "report.json"
+            with self.assertRaisesRegex(gate.ManifestError, "symlink"):
+                gate._report_destination(target)
+            self.assertFalse((base / "private").exists())
 
 
 if __name__ == "__main__":

@@ -116,6 +116,8 @@ checkout. Commands in a component run in declared order by default. `parallel_sa
 independence claim; use it only for checks that do not share installation or generation state. Failed
 prerequisites block dependent commands. `depends_on` also orders selected components. Completion runs all
 commands uncached, and a source change during checks requires a rerun against the resulting source.
+Feedback cache v3 invalidates older markers. New markers publish only after the final source snapshot
+is unchanged and only to Git-ignored, untracked destinations; otherwise the check remains uncached.
 
 Gate process execution supports POSIX hosts; this distribution is verified on macOS and Linux.
 Native Windows execution fails before launching checks; use a Linux environment such as WSL.
