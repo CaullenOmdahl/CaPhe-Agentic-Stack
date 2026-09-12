@@ -77,6 +77,8 @@ Declare an exact preparation recipe in private project state. Required fields ar
 nonempty `inputs` and `outputs` file lists, toolchain probe argv lists, and explicit non-secret `env` values.
 `timeout_seconds` is optional and defaults to 900. Inputs and outputs cannot overlap. The recipe receives
 only basic process environment plus its declared values; it does not copy environment files.
+Toolchain probes must leave declared files unchanged. Probe-created or rewritten outputs cannot
+establish successful preparation or freshness; generation belongs in the recipe command.
 
 ```json
 {
