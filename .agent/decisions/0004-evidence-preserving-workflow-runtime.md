@@ -14,12 +14,17 @@ before model reasoning, immutable public evidence and separate private state, ex
 resolution, and source-bound preparation/installation reports. Install from reviewed source rather than
 requiring runtime repository checkouts.
 
+Retain the legacy Python evidence writer only for closed, bounded, immutable unbound notes. The CLI
+and snapshot validator require v2. Legacy notes never acquire source binding or acceptance, and v2
+supersession cannot promote them. This preserves the accepted API contract without a retained-test waiver.
+
 Use isolated worker checkouts with bounded ownership and acceptance contracts. Keep independent PR
 review and complete checks. Record and resolve design findings before activating the affected capability.
 
 CI command reports are diagnostic unless an independently trusted verification bundle and enforced
 execution/result isolation can be authenticated. The candidate-controlled CI workflow, including its
-required checks from the exact PR base, does not establish this receipt contract. Implement explicitly
+required runner, manifest, and retained test implementations from the exact PR base, does not establish
+this receipt contract. Implement explicitly
 nonauthoritative reporting without an automatic CI receipt
 consumer or certifier; retain uncached local completion. Do not turn missing infrastructure into a claim
 that receipt-based certification is implemented or enabled.

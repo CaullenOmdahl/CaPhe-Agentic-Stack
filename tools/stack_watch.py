@@ -29,6 +29,15 @@ _DIGEST = re.compile(r'(?:[a-f0-9]{40}|[a-f0-9]{64})\Z')
 _CREDENTIAL = re.compile(r'\b(?:' + 'sk' + r'-|gh[pousr]_|github' + r'_pat_)[A-Za-z0-9_-]{12,}')
 
 
+class UnsupportedPlatformError(ValueError):
+    pass
+
+
+def _require_posix() -> None:
+    if os.name != 'posix':
+        raise UnsupportedPlatformError('Status query execution requires POSIX; use Linux or WSL on Windows.')
+
+
 def _json(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True, allow_nan=False).encode()
 
@@ -139,10 +148,7 @@ def parse_status_query(stdout: str | bytes) -> dict[str, Any]:
 def _stop(process) -> None:
     # Kill the query's process group as well: a child may otherwise retain the output pipe.
     try:
-        if os.name == 'posix':
-            os.killpg(process.pid, signal.SIGKILL)
-        else:
-            process.kill()
+        os.killpg(process.pid, signal.SIGKILL)
     except ProcessLookupError:
         pass
     process.wait()
@@ -150,13 +156,14 @@ def _stop(process) -> None:
 
 def run_process_observation(argv: Sequence[str], timeout_seconds: float = 15) -> dict[str, Any]:
     """Execute an explicitly supplied read-only JSON query, with a byte cap and deadline."""
+    _require_posix()
     _duration(timeout_seconds, positive=True)
     if isinstance(argv, (str, bytes)) or not argv or any(not isinstance(arg, str) or not arg or '\0' in arg for arg in argv):
         raise ValueError('explicit query argv is required')
     deadline = time.monotonic() + timeout_seconds
     try:
         process = subprocess.Popen(list(argv), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                   start_new_session=(os.name == 'posix'))
+                                   start_new_session=True)
     except OSError:
         return _query_failure('unavailable', 127)
     output = bytearray()
@@ -201,6 +208,7 @@ def watch(argv: Sequence[str], *, timeout_seconds: float, poll_interval_seconds:
     Arbitrary fetch callbacks are intentionally unsupported: they cannot be cancelled safely.
     A zero duration performs no query and returns an explicit timeout.
     """
+    _require_posix()
     _duration(timeout_seconds)
     _duration(poll_interval_seconds, positive=True)
     _duration(process_timeout_seconds, positive=True)
@@ -292,6 +300,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise ValueError('event exceeds bound')
         sys.stdout.buffer.write(encoded)
         return 1 if event['state'] == 'failure' else 0
+    except UnsupportedPlatformError as error:
+        sys.stderr.buffer.write(_json({'error': 'UnsupportedPlatform', 'message': str(error)}) + b'\n')
+        return 2
     except ValueError:
         sys.stderr.buffer.write(b'{"error":"InvalidWatchConfiguration"}\n')
         return 2
