@@ -147,6 +147,62 @@ class BenchmarkTests(unittest.TestCase):
             result = aggregate_attempts([event(), candidate], card())
             self.assertEqual(result['quality_deltas']['status'], 'inconclusive')
 
+    def test_quality_rejects_config_route_changes_across_tasks_and_repetitions(self):
+        rates = card()
+        rates['models']['frontier']['tiers']['priority'] = copy.deepcopy(
+            rates['models']['frontier']['tiers']['standard'])
+        for field, value in (('model', 'small'), ('effort', 'medium'), ('service_tier', 'priority')):
+            for changed_config in ('incumbent', 'candidate'):
+                for next_trial in ({'task_id': 'task-2'}, {'repetition': 1}):
+                    with self.subTest(field=field, config=changed_config, next_trial=next_trial):
+                        events = [event('base-0'), event('candidate-0', config='candidate'),
+                                  event('base-1', **next_trial),
+                                  event('candidate-1', config='candidate', **next_trial)]
+                        changed = events[2 if changed_config == 'incumbent' else 3]
+                        changed[field] = value
+                        result = aggregate_attempts(events, rates)
+                        self.assertEqual(result['quality_deltas']['status'], 'inconclusive')
+                        self.assertEqual(result['quality_deltas']['reason'], 'mixed_config_routes')
+                        self.assertTrue(result['cost_eligible'])
+                        self.assertEqual(result['attempts_counted'], 4)
+                        self.assertIsNotNone(result['spend'])
+
+    def test_quality_rejects_mixed_retry_and_child_routes_without_dropping_spend(self):
+        rates = card()
+        rates['models']['frontier']['tiers']['priority'] = copy.deepcopy(
+            rates['models']['frontier']['tiers']['standard'])
+        for field, value in (('model', 'small'), ('effort', 'medium'), ('service_tier', 'priority')):
+            for kind in ('retry', 'child'):
+                with self.subTest(field=field, kind=kind):
+                    final = event('candidate', config='candidate')
+                    extra = event('extra', config='candidate', task_final=False, **{field: value})
+                    if kind == 'child':
+                        final['child_ids'] = ['extra']
+                        extra['parent_id'] = 'candidate'
+                    result = aggregate_attempts([event(), final, extra], rates)
+                    self.assertEqual(result['quality_deltas']['status'], 'inconclusive')
+                    self.assertEqual(result['quality_deltas']['reason'], 'mixed_config_routes')
+                    self.assertTrue(result['cost_eligible'])
+                    self.assertEqual(result['attempts_counted'], 3)
+                    self.assertEqual(result['root_tasks_counted'], 2)
+                    expected = 0.001848 if field == 'model' else 0.00252
+                    self.assertAlmostEqual(result['spend'], expected)
+
+    def test_quality_compares_distinct_stable_config_routes(self):
+        rates = card()
+        rates['models']['small']['tiers']['priority'] = copy.deepcopy(
+            rates['models']['small']['tiers']['standard'])
+        events = []
+        for repetition in (0, 1):
+            events.extend([event('base-' + str(repetition), repetition=repetition),
+                           event('candidate-' + str(repetition), repetition=repetition,
+                                 config='candidate', model='small', effort='medium',
+                                 service_tier='priority')])
+        result = aggregate_attempts(events, rates)
+        self.assertEqual(result['quality_deltas']['status'], 'computed')
+        self.assertEqual(result['quality_deltas']['comparisons']['candidate']['paired_runs'], 2)
+        self.assertTrue(result['cost_eligible'])
+
     def test_quality_requires_same_acceptance_across_all_repetitions_of_each_task(self):
         events = [event('base-0'), event('candidate-0', config='candidate'),
                   event('base-1', repetition=1, acceptance_digest='b' * 64),

@@ -53,6 +53,47 @@ class DoctorContracts(unittest.TestCase):
             self.assertIn("effective_gate_mismatch", result["unresolved"])
             self.assertNotIn("safe", str(result))
 
+    def test_initialize_project_and_doctor_agree_for_root_and_subdirectory(self):
+        installer = doctor._installer()
+        for from_child in (False, True):
+            with self.subTest(from_child=from_child), tempfile.TemporaryDirectory() as tmp:
+                base = Path(tmp).resolve()
+                repo, wrong = base / "repo", base / "wrong"
+                for target in (repo, wrong):
+                    subprocess.run(["git", "init", "-q", str(target)], check=True)
+                child = repo / "packages" / "app"
+                child.mkdir(parents=True)
+                original_foreign_config = (wrong / ".git/config").read_bytes()
+                contamination = {
+                    "GIT_DIR": str(wrong / ".git"), "GIT_WORK_TREE": str(wrong),
+                    "GIT_INDEX_FILE": str(wrong / ".git/index"), "GIT_CONFIG_COUNT": "1",
+                    "GIT_CONFIG_KEY_0": "core.hooksPath", "GIT_CONFIG_VALUE_0": "/must-not-use",
+                }
+                with mock.patch.dict(os.environ, contamination):
+                    result = installer.initialize_project(PATH.parents[1], child if from_child else repo, apply=True)
+                    at_root = doctor.inspect(repo, runtime=PATH.parents[1])
+                    at_child = doctor.inspect(child, runtime=PATH.parents[1])
+                self.assertEqual(result["state"], "initialized")
+                self.assertEqual(at_root, at_child)
+                self.assertEqual(at_child["project"]["path"], str(repo))
+                self.assertTrue(at_child["project"]["managed"])
+                self.assertTrue(at_child["instructions"]["verified"])
+                self.assertFalse((child / ".agent").exists())
+                self.assertEqual((wrong / ".git/config").read_bytes(), original_foreign_config)
+                self.assertFalse((wrong / ".agent").exists())
+
+    def test_git_root_probe_failure_is_reported_without_claiming_management(self):
+        failures = (FileNotFoundError("git unavailable"), subprocess.TimeoutExpired(["git"], 30))
+        for failure in failures:
+            with self.subTest(failure=type(failure).__name__), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve()
+                with mock.patch.object(doctor.subprocess, "run", side_effect=failure):
+                    result = doctor.inspect(root, runtime=root / "missing")
+                self.assertFalse(result["project"]["managed"])
+                self.assertIn("project_not_git", result["unresolved"])
+                self.assertEqual(result["project"]["path"], str(root))
+                self.assertEqual(list(root.iterdir()), [])
+
     def test_duplicate_skill_names_are_explicit_findings(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()

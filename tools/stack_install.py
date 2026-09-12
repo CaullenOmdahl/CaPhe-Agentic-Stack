@@ -361,6 +361,19 @@ def apply_runtime_plan(plan, *, inventory_root, fail_after=None):
 
 def initialize_project(source, repo, *, apply=False):
     source, repo = _safe_path(source), _safe_path(repo)
+    try:
+        probe = subprocess.run(["git", "-C", str(repo), "rev-parse", "--show-toplevel"],
+                               capture_output=True, text=True, timeout=30,
+                               env={**_git_env(), "LC_ALL": "C"})
+    except (OSError, subprocess.SubprocessError):
+        raise InstallError("project Git root probe could not complete") from None
+    if probe.returncode == 0 and probe.stdout.strip():
+        repo = _safe_path(probe.stdout.removesuffix("\n"))
+    elif not (probe.returncode == 128 and "not a git repository" in probe.stderr
+              and not any((parent / ".git").exists() or (parent / ".git").is_symlink()
+                          for parent in (repo, *repo.parents))):
+        raise InstallError("project Git root could not be verified")
+    # Existing ordinary non-Git directories still support planning and explicit disable.
     disabled = repo / ".agent" / ".strict-mode"
     _safe_path(disabled)
     if disabled.is_file() and disabled.read_bytes().partition(b"\n")[0] == b"off":

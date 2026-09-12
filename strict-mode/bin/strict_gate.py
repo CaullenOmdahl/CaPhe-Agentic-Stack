@@ -426,9 +426,18 @@ def _git_bytes(root: Path, *args: str, check: bool = True) -> bytes:
 
 def _symlink_gitlinks(root: Path) -> set[str]:
     records = _git_bytes(root, "ls-files", "--stage", "-z").split(b"\0")
-    return {os.fsdecode(record.split(b"\t", 1)[1]) for record in records
-            if record.startswith(b"160000 ")
-            and (root / os.fsdecode(record.split(b"\t", 1)[1])).is_symlink()}
+    replaced = set()
+    for record in records:
+        if not record.startswith(b"160000 "):
+            continue
+        relative = os.fsdecode(record.split(b"\t", 1)[1])
+        path = root
+        for part in Path(relative).parts:
+            path = path / part
+            if path.is_symlink():
+                replaced.add(relative)
+                break
+    return replaced
 
 
 def _diff_pathspec(excluded: set[str]) -> tuple[str, ...]:
@@ -471,15 +480,24 @@ def _replacement_paths(root: Path, directories: set[str]) -> set[str]:
     return {os.fsdecode(path).rstrip("/") for path in result.stdout.split(b"\0") if path}
 
 
-def _snapshot_paths(root: Path, tracked: set[str], gitlinks: set[str], others: set[str]) -> set[str]:
+def _snapshot_paths(root: Path, tracked: set[str], gitlinks: set[str], others: set[str]) -> tuple[set[str], set[str]]:
     paths = tracked | gitlinks | others
     visited = set()
+    replacements = set()
+    def blocked(relative):
+        return any(str(parent) in replacements for parent in Path(relative).parents)
+
     def inspect_parents(entries):
         parents = {parent for relative in entries for parent in Path(relative).parents if str(parent) != "."}
         for parent in sorted(parents - visited, key=lambda value: (len(value.parts), str(value))):
+            if blocked(parent):
+                continue
             path = root / parent
             if path.is_symlink():
-                raise ManifestError("snapshot path has a symlinked parent")
+                paths.add(str(parent))
+                replacements.add(str(parent))
+                visited.add(parent)
+                continue
             marker = path / ".git"
             if path.is_file() or (path.is_dir() and (marker.exists() or marker.is_symlink())):
                 paths.add(str(parent))
@@ -487,15 +505,15 @@ def _snapshot_paths(root: Path, tracked: set[str], gitlinks: set[str], others: s
 
     # Check ancestors before probing replacement directories or their Git metadata.
     inspect_parents(paths)
-    replacements = {relative for relative in gitlinks
-                    if not (root / relative).is_symlink() and (root / relative).is_dir()
-                    and not ((root / relative / ".git").exists() or (root / relative / ".git").is_symlink())}
-    descendants = _replacement_paths(root, replacements)
+    directories = {relative for relative in gitlinks if not blocked(relative)
+                   and not (root / relative).is_symlink() and (root / relative).is_dir()
+                   and not ((root / relative / ".git").exists() or (root / relative / ".git").is_symlink())}
+    descendants = _replacement_paths(root, directories)
     paths.update(descendants)
     # Git inventories files, so an embedded root beneath a parent-tracked directory
     # might never appear as an entry of its own. Inspect each candidate parent once.
     inspect_parents(descendants)
-    return paths
+    return paths, replacements
 
 
 def _snapshot_identity(root: Path, ancestors: tuple[Path, ...]) -> dict[str, Any]:
@@ -535,16 +553,22 @@ def _snapshot_identity(root: Path, ancestors: tuple[Path, ...]) -> dict[str, Any
     digest.update(len(index_bytes).to_bytes(8, "big") + index_bytes)
     others = {path.rstrip("/") for path in _git_paths(root, "ls-files", "--others", "--exclude-standard")}
     dirty = False
-    for relative in sorted(_snapshot_paths(root, tracked, gitlinks, others)):
+    paths, replacements = _snapshot_paths(root, tracked, gitlinks, others)
+    for relative in sorted(paths):
         path = root / relative
+        name = os.fsencode(relative)
+        digest.update(len(name).to_bytes(8, "big"))
+        digest.update(name)
+        if any(str(parent) in replacements for parent in Path(relative).parents):
+            # Former descendants are absent from this worktree. Never traverse
+            # the replacement link to inspect an external file with the same name.
+            digest.update(b"path:blocked-by-symlink\0")
+            continue
         for parent in path.parents:
             if parent == root:
                 break
             if parent.is_symlink():
                 raise ManifestError("snapshot path has a symlinked parent")
-        name = os.fsencode(relative)
-        digest.update(len(name).to_bytes(8, "big"))
-        digest.update(name)
         directory = not path.is_symlink() and path.is_dir()
         git_marker = path / ".git"
         embedded_git = directory and (git_marker.exists() or git_marker.is_symlink())
@@ -597,18 +621,31 @@ def _report_destination(path: Path) -> Path:
     for component in (path, *path.parents):
         if component.is_symlink():
             raise ManifestError("report destination must not contain a symlink")
+        if (component / ".git").exists() or (component / ".git").is_symlink():
+            raise ManifestError("diagnostic report must be outside Git worktrees")
     if '.git' in path.parts or any(left == '.codex' and right in ('sessions', 'memories')
                                  for left, right in zip(path.parts, path.parts[1:])):
         raise ManifestError("diagnostics cannot replace Git metadata or canonical records")
     nearest = path.parent
     while not nearest.exists():
         nearest = nearest.parent
-    in_git = subprocess.run(
-        ["git", "-C", str(nearest), "rev-parse", "--is-inside-work-tree"],
-        capture_output=True, text=True, env=command_environment(), timeout=10,
-    )
-    if in_git.returncode == 0 and in_git.stdout.strip() == "true":
-        raise ManifestError("diagnostic report must be outside Git worktrees")
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    environment["LC_ALL"] = "C"
+    try:
+        in_git = subprocess.run(
+            ["git", "-C", str(nearest), "rev-parse", "--git-dir"],
+            capture_output=True, text=True, env=environment, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        raise ManifestError("diagnostic Git boundary could not be verified") from None
+    if in_git.returncode == 0:
+        raise ManifestError("diagnostic report must be outside Git repositories")
+    ordinary_nonrepo = in_git.stderr == "fatal: not a git repository (or any of the parent directories): .git\n"
+    filesystem_boundary = re.fullmatch(
+        r"fatal: not a git repository \(or any parent up to mount point [^\n]+\)\n"
+        r"Stopping at filesystem boundary \(GIT_DISCOVERY_ACROSS_FILESYSTEM not set\)\.\n", in_git.stderr)
+    if in_git.returncode != 128 or not (ordinary_nonrepo or filesystem_boundary):
+        raise ManifestError("diagnostic Git boundary could not be verified")
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     parent_stat = path.parent.stat()
     if parent_stat.st_mode & 0o077 or parent_stat.st_uid != os.getuid():

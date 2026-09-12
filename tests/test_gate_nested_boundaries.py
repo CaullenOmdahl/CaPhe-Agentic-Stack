@@ -196,6 +196,68 @@ class NestedBoundaryTests(unittest.TestCase):
             with self.assertRaisesRegex(gate.ManifestError, "Git|git"):
                 gate.snapshot_identity(root)
 
+    def replaced_tracked_directory(self, root, *, gitlink=False):
+        initialize(root)
+        directory = root / 'd'; directory.mkdir()
+        (directory / 'file').write_text('original tracked source')
+        git(root, 'add', 'd/file')
+        if gitlink:
+            module = directory / 'module'; module.mkdir()
+            initialize(module)
+            (module / 'source.txt').write_text('original nested source')
+            git(module, 'add', '.')
+            git(module, 'commit', '-qm', 'nested source')
+            revision = git(module, 'rev-parse', 'HEAD').strip()
+            git(root, 'update-index', '--add', '--cacheinfo', '160000,' + revision + ',d/module')
+        git(root, 'commit', '-qm', 'tracked directory before symlink replacement')
+        shutil.rmtree(directory)
+        return directory
+
+    def test_unstaged_tracked_directory_symlink_binds_link_without_external_descendants(self):
+        for gitlink in (False, True):
+            with self.subTest(gitlink=gitlink), tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as outside:
+                root = Path(tmp).resolve(); external = Path(outside).resolve()
+                directory = self.replaced_tracked_directory(root, gitlink=gitlink)
+                first = external / 'first'; first.mkdir()
+                second = external / 'second'; second.mkdir()
+                (first / 'file').write_text('outside content before')
+                # A formerly indexed gitlink must not cause Git discovery through d.
+                (first / 'module').mkdir()
+                (first / 'module/.git').write_text('malformed external metadata must never be read')
+                directory.symlink_to(first, target_is_directory=True)
+                index = git(root, 'ls-files', '--stage')
+                before = gate.snapshot_identity(root)
+                (first / 'file').write_text('outside content after')
+                (first / 'module/.git').write_text('different external metadata')
+                self.assertEqual(before, gate.snapshot_identity(root))
+                directory.unlink(); directory.symlink_to(second, target_is_directory=True)
+                after = gate.snapshot_identity(root)
+                self.assertNotEqual(before['snapshot_digest'], after['snapshot_digest'])
+                self.assertEqual(before['revision'], after['revision'])
+                self.assertEqual(index, git(root, 'ls-files', '--stage'))
+                self.assertTrue(after['dirty'])
+
+    def test_tracked_directory_symlink_mutation_during_completion_runs_and_marks_stale(self):
+        for gitlink in (False, True):
+            with self.subTest(gitlink=gitlink), tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as outside:
+                root = Path(tmp).resolve(); external = Path(outside).resolve()
+                directory = self.replaced_tracked_directory(root, gitlink=gitlink)
+                first = external / 'first'; first.mkdir()
+                second = external / 'second'; second.mkdir()
+                directory.symlink_to(first, target_is_directory=True)
+                command = gate.CommandSpec('fixture', 'retarget-link', (
+                    sys.executable, '-c',
+                    "import os, sys; os.unlink('d'); os.symlink(sys.argv[1], 'd', target_is_directory=True)", str(second)))
+                report_path = external / 'report.json'
+                result = gate.execute_plan(root, [command], 'manifest', 1, mode='completion', report_path=report_path)
+                report = json.loads(report_path.read_text())
+                self.assertEqual(os.readlink(directory), str(second))
+                self.assertEqual(report['commands'][0]['exit_code'], 0)
+                self.assertFalse(report['commands'][0]['cached'])
+                self.assertTrue(report['stale_source'])
+                self.assertNotEqual(report['source_before']['snapshot_digest'], report['source_after']['snapshot_digest'])
+                self.assertEqual(result, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

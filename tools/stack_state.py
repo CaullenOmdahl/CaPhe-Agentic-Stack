@@ -45,16 +45,27 @@ def _git_environment():
 
 
 def _outside_git(path):
-    nearest = path
-    while not nearest.exists():
-        nearest = nearest.parent
-    result = subprocess.run(['git', '-C', str(nearest), 'rev-parse', '--is-inside-work-tree'],
-                            capture_output=True, text=True, env=_git_environment(), check=False)
-    if result.returncode == 0:
-        raise StateError('private state must be outside all Git worktrees and Git metadata')
-    # Also reject .git metadata and nested worktree descendants without relying on git config.
     if '.git' in path.parts:
         raise StateError('Git metadata cannot store private state')
+    ancestors = (path, *path.parents)
+    for ancestor in ancestors:
+        if (ancestor / '.git').exists() or (ancestor / '.git').is_symlink():
+            raise StateError('private state must be outside all Git worktrees and Git metadata')
+    nearest = next(ancestor for ancestor in ancestors if ancestor.exists())
+    try:
+        result = subprocess.run(['git', '-C', str(nearest), 'rev-parse', '--git-dir'],
+                                capture_output=True, text=True,
+                                env={**_git_environment(), 'LC_ALL': 'C'}, check=False)
+    except OSError as error:
+        raise StateError('private state Git boundary could not be verified') from error
+    if result.returncode == 0:
+        raise StateError('private state must be outside all Git worktrees and Git metadata')
+    ordinary_nonrepo = result.stderr == 'fatal: not a git repository (or any of the parent directories): .git\n'
+    filesystem_boundary = re.fullmatch(
+        r'fatal: not a git repository \(or any parent up to mount point [^\n]+\)\n'
+        r'Stopping at filesystem boundary \(GIT_DISCOVERY_ACROSS_FILESYSTEM not set\)\.\n', result.stderr)
+    if result.returncode != 128 or not (ordinary_nonrepo or filesystem_boundary):
+        raise StateError('private state Git boundary could not be verified')
 
 
 def _owned(path, directory=False):

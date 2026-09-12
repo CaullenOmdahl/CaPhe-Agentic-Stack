@@ -335,22 +335,19 @@ class RuntimeTests(unittest.TestCase):
             (module / 'tracked.txt').write_text('changed')
             self.assertNotEqual(before['snapshot_digest'], gate.snapshot_identity(root)['snapshot_digest'])
 
-    def test_invalid_or_symlink_git_metadata_and_parent_fail_closed(self):
-        for kind in ('invalid-git', 'metadata-symlink', 'parent-symlink'):
+    def test_invalid_or_symlink_git_metadata_fail_closed(self):
+        for kind in ('invalid-git', 'metadata-symlink'):
             with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 repository(root)
-                module = self.add_gitlink(root, 'parent/module' if kind == 'parent-symlink' else 'module')
+                module = self.add_gitlink(root)
                 shutil.rmtree(module)
                 if kind == 'invalid-git':
                     module.mkdir()
                     (module / '.git').write_text('invalid Git metadata')
-                elif kind == 'metadata-symlink':
+                else:
                     module.mkdir()
                     (module / '.git').symlink_to(root / '.git', target_is_directory=True)
-                else:
-                    module.parent.rmdir()
-                    module.parent.symlink_to(root, target_is_directory=True)
                 with self.assertRaisesRegex(gate.ManifestError, 'Git|git|symlink'):
                     gate.snapshot_identity(root)
 
@@ -462,6 +459,33 @@ class RuntimeTests(unittest.TestCase):
             code = gate.execute_plan(root, [command], "manifest", 1, report_path=path, mode="completion")
             self.assertNotEqual(code, 0)
             self.assertTrue(json.loads(path.read_text())["stale_source"])
+
+    def test_reports_reject_hidden_or_malformed_destination_repositories(self):
+        for kind in ("malformed-config", "bare", "discovery-ceiling"):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as source, tempfile.TemporaryDirectory() as destination:
+                root = Path(source).resolve(); repository(root)
+                other = Path(destination).resolve()
+                if kind == "bare":
+                    subprocess.run(["git", "init", "--bare", "-q", str(other)], check=True)
+                else:
+                    repository(other)
+                    if kind == "malformed-config":
+                        (other / ".git/config").write_text("[broken\n")
+                nested = other / "nested"; nested.mkdir(mode=0o700)
+                target = nested / "private" / "report.json"
+                with mock.patch.dict(os.environ, {"GIT_CEILING_DIRECTORIES": str(other)}):
+                    with self.assertRaises(gate.ManifestError):
+                        gate.execute_plan(root, [], "manifest", 1, report_path=target, mode="completion")
+                self.assertFalse(target.parent.exists())
+
+    def test_report_unknown_git_discovery_fails_before_creating_directories(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp).resolve() / "private" / "report.json"
+            result = subprocess.CompletedProcess([], 128, "", "fatal: bad config line 1\n")
+            with mock.patch.object(gate.subprocess, "run", return_value=result):
+                with self.assertRaises(gate.ManifestError):
+                    gate._report_destination(target)
+            self.assertFalse(target.parent.exists())
 
     def test_reports_cannot_write_into_the_worktree(self):
         with tempfile.TemporaryDirectory() as tmp:

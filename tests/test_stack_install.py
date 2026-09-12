@@ -226,6 +226,43 @@ class InstallContracts(unittest.TestCase):
             self.assertEqual(installer.initialize_project(source, repo)["state"], "planned")
             self.assertEqual(marker.read_text(), "off\nuser explanation\n")
 
+    def test_project_init_resolves_disabled_root_from_subdirectory_without_mutation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp).resolve()
+            source = self.fixture_source(base)
+            repo, wrong = base / "consumer", base / "wrong"
+            for target in (repo, wrong):
+                subprocess.run(["git", "init", "-q", str(target)], check=True)
+            child = repo / "packages" / "app"
+            child.mkdir(parents=True)
+            (repo / ".agent").mkdir()
+            (repo / ".agent/.strict-mode").write_text("off\nuser decision\n")
+            snapshot = lambda: {str(path.relative_to(base)): (path.read_bytes(), path.stat().st_mode)
+                                for path in base.rglob("*") if path.is_file()}
+            before = snapshot()
+            contamination = {"GIT_DIR": str(wrong / ".git"), "GIT_WORK_TREE": str(wrong),
+                             "GIT_INDEX_FILE": str(wrong / ".git/index"), "GIT_CONFIG_COUNT": "1",
+                             "GIT_CONFIG_KEY_0": "core.hooksPath", "GIT_CONFIG_VALUE_0": "/must-not-use"}
+            with mock.patch.dict(os.environ, contamination):
+                for target in (repo, child):
+                    self.assertEqual(installer.initialize_project(source, target, apply=True),
+                                     {"state": "disabled", "changed": False})
+            self.assertEqual(snapshot(), before)
+            self.assertFalse((child / ".agent").exists())
+            nongit = base / "nongit"
+            nongit.mkdir()
+            self.assertEqual(installer.initialize_project(source, nongit)["state"], "planned")
+            failures = (OSError("Git unavailable"), subprocess.TimeoutExpired(["git"], 30))
+            for failure in failures:
+                with self.subTest(failure=type(failure).__name__), mock.patch.object(installer.subprocess, "run", side_effect=failure):
+                    with self.assertRaisesRegex(installer.InstallError, "Git root"):
+                        installer.initialize_project(source, child, apply=True)
+            result = subprocess.CompletedProcess(["git"], 128, "", "fatal: detected dubious ownership")
+            with mock.patch.object(installer.subprocess, "run", return_value=result):
+                with self.assertRaisesRegex(installer.InstallError, "Git root"):
+                    installer.initialize_project(source, child, apply=True)
+            self.assertEqual(snapshot(), before)
+
     def test_inherited_git_repository_environment_cannot_redirect_install_or_child_init(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve(); source = self.fixture_source(root)

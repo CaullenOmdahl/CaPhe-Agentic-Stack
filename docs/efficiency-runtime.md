@@ -45,7 +45,8 @@ normalized Git diff cannot establish freshness. This adds file-reading cost even
 The completion gate separately binds initialized nested Git repositories recursively, including their working changes.
 Absent and empty uninitialized gitlinks have explicit identities; required checks still determine
 whether their contents are needed. Unstaged gitlink replacements bind their actual file type and
-visible contents; symlink leaves bind the link target without following it. Embedded repositories
+visible contents; symlink leaves and replaced directory parents bind the link target without following
+it, with former tracked descendants recorded as absent. Embedded repositories
 inside parent-tracked directories bind their own HEAD and index. Malformed present Git metadata and
 hidden index flags fail closed.
 
@@ -160,6 +161,10 @@ python3 "$CAPHE_RUNTIME/tools/benchmark_workflow.py" \
 The report compares paired root acceptance outcomes, averaging repetitions within each task and weighting
 tasks equally. It reports task and run counts separately. Its latency is final-root request duration, not
 invented whole-workflow duration; collect independent end-to-end timing for overlapping workers/retries.
+Each configuration must keep one model, effort, and service-tier tuple across recorded requests for a
+quality comparison. Mixed routes, including different retry or child routes, make quality inconclusive
+while retaining valid request-level cost totals. Comparing composite workflow policies requires a
+separate stable policy contract that this benchmark does not yet implement.
 Small samples are descriptive. Before promotion, run representative frozen tasks with the incumbent and
 candidate, at multiple repetitions, under the same acceptance checks. Include parent review and all
 repairs, rejection rate, escaped defects, external wait, cached input, output, and reasoning. Predeclare
