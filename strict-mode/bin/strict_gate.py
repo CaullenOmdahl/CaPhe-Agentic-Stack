@@ -384,7 +384,7 @@ def cache_key(root: Path, command: CommandSpec, manifest_identity: str) -> str:
         raise ManifestError("cache identity requires input files and toolchain probes")
     root = root.resolve()
     _command_cwd(root, command.cwd)
-    digest = hashlib.sha256(b"caphe-feedback-cache-v3\0")
+    digest = hashlib.sha256(b"caphe-feedback-cache-v4\0")
     digest.update(manifest_identity.encode())
     digest.update(json.dumps(command._asdict(), sort_keys=True).encode())
     # Probe first, so any resulting input mutation is reflected in the file hashes below.
@@ -410,9 +410,10 @@ def cache_key(root: Path, command: CommandSpec, manifest_identity: str) -> str:
             raise ManifestError("cache input pattern has no matches")
         for path in matches:
             _hash_file(root, path, digest)
-    for name in command.cache_env:
-        digest.update(name.encode())
-        digest.update(os.environ.get(name, "<unset>").encode())
+    environment = json.dumps(
+        [(name, os.environ.get(name)) for name in command.cache_env], separators=(",", ":"),
+    ).encode()
+    digest.update(len(environment).to_bytes(8, "big") + environment)
     return digest.hexdigest()
 
 
@@ -709,12 +710,12 @@ def _snapshot_identity(root: Path, ancestors: tuple[Path, ...]) -> dict[str, Any
 def _report_destination(path: Path) -> Path:
     """Diagnostics stay owner-only outside repositories; they never attest their own authority."""
     original_path = path.expanduser().absolute()
-    for component in (original_path, *original_path.parents):
+    path = Path(os.path.normpath(original_path))
+    for component in dict.fromkeys((original_path, *original_path.parents, path, *path.parents)):
         if component.is_symlink():
             raise ManifestError("report destination must not contain a symlink")
         if (component / ".git").exists() or (component / ".git").is_symlink():
             raise ManifestError("diagnostic report must be outside Git worktrees")
-    path = Path(os.path.normpath(original_path))
     normalized_parts = tuple(part.casefold() for part in path.parts)
     if '.git' in normalized_parts or any(left == '.codex' and right in ('sessions', 'memories')
                                          for left, right in zip(normalized_parts, normalized_parts[1:])):

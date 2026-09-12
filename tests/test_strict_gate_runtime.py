@@ -574,6 +574,17 @@ class RuntimeTests(unittest.TestCase):
                 gate._report_destination(target)
             self.assertFalse((base / "private").exists())
 
+    def test_reports_reject_symlink_exposed_by_normalizing_missing_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp).resolve()
+            records = base / '.codex' / 'memories'
+            records.mkdir(parents=True, mode=0o700)
+            (base / 'alias').symlink_to(records, target_is_directory=True)
+            target = base / 'missing' / '..' / 'alias' / 'report.json'
+            with self.assertRaisesRegex(gate.ManifestError, 'symlink'):
+                gate._report_destination(target)
+            self.assertFalse((records / 'report.json').exists())
+
 
 if __name__ == "__main__":
     unittest.main()
