@@ -235,6 +235,8 @@ exact managed bytes. Upgrades remove retired files only from a verified prior ru
 rollback; changed managed files require reconciliation and unrelated files remain untouched.
 Payload names use portable relative paths, and resolved payload locations must remain beneath their
 source, staging, or target root. Platform-specific separators cannot change that boundary.
+Runtime targets and private installation journals must not overlap canonical memory or transcript
+stores, including case aliases on filesystems that ignore case.
 An initial install rejects existing files at managed destinations. Structural file/directory upgrades
 require the replaced subtree to belong entirely to the previous inventory; unrelated children block them.
 Then merge global canon/skill updates while preserving user-specific authorization

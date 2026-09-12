@@ -776,3 +776,47 @@ class InstallContracts(unittest.TestCase):
             with self.subTest(relative=relative), mock.patch.object(installer, "_safe_path", side_effect=AssertionError("filesystem queried")):
                 with self.assertRaises(installer.InstallError):
                     installer._payload_path(Path("selected"), relative)
+
+    def test_runtime_and_inventory_reject_canonical_store_aliases_before_payload_reads(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); source = self.fixture_source(root); home = root / "home"; home.mkdir()
+            target = root / "runtime"
+            plan = installer.plan_runtime_install(source, target)
+            canonical = home / ".codex/memories"; canonical.mkdir(parents=True, mode=0o700)
+            (canonical / "record.json").write_text('{"fixture":"preserve"}\n')
+            forbidden = [root, home, home.with_name("HOME"), home / ".CoDeX"]
+            for relative in (".codex/memories/install", ".CODEX/MEMORIES/install", ".codex/sessions/install", ".CoDeX/SeSsIoNs/install"):
+                forbidden.extend((home / relative, root / "other-home" / relative))
+            forbidden.append(home / "nested/../.CODEX/MEMORIES/install")
+            before = self.snapshot(root)
+            with mock.patch.object(installer.Path, "home", return_value=home):
+                for destination in forbidden:
+                    with self.subTest(destination=destination):
+                        with mock.patch.object(installer, "_payload", side_effect=AssertionError("payload read before canonical-store rejection")):
+                            with self.assertRaisesRegex(installer.InstallError, "canonical"):
+                                installer.plan_runtime_install(source, destination)
+                            stale = copy.deepcopy(plan); stale["target"] = str(destination)
+                            with self.assertRaisesRegex(installer.InstallError, "canonical"):
+                                installer.apply_runtime_plan(stale, inventory_root=root / "private")
+                        with self.assertRaisesRegex(installer.InstallError, "canonical"):
+                            installer.apply_runtime_plan(plan, inventory_root=destination)
+            self.assertEqual(self.snapshot(root), before)
+
+    def test_canonical_store_sibling_names_remain_valid_install_destinations(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); source = self.fixture_source(root); home = root / "home"; home.mkdir()
+            with mock.patch.object(installer.Path, "home", return_value=home):
+                target = home / ".codex/memories-archive/runtime"
+                inventory = home / ".codex/sessions-backup/inventory"
+                plan = installer.plan_runtime_install(source, target)
+                installer.apply_runtime_plan(plan, inventory_root=inventory)
+                installer.apply_runtime_plan(plan, inventory_root=inventory)
+                self.assertTrue(installer.verify_runtime_plan(plan))
+
+    def test_private_inventory_rejects_mixed_case_canonical_store_components(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); source = self.fixture_source(root); home = root / "home"; home.mkdir()
+            with mock.patch.object(installer.Path, "home", return_value=home):
+                for relative in (".CODEX/MEMORIES/install", ".CoDeX/SeSsIoNs/install"):
+                    with self.subTest(relative=relative), self.assertRaisesRegex(installer.InstallError, "canonical"):
+                        installer._private_preflight(home / relative, source, root / "target")

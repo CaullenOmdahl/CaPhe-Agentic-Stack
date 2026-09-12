@@ -142,14 +142,24 @@ def _overlap(left, right):
     return left == right or left in right.parents or right in left.parents
 
 
+def _outside_canonical_stores(path):
+    parts = tuple(part.casefold() for part in Path(os.path.abspath(path)).parts)
+    home = tuple(part.casefold() for part in Path(os.path.abspath(Path.home())).parts)
+    if any(left == ".codex" and right in ("memories", "sessions")
+           for left, right in zip(parts, parts[1:])):
+        raise InstallError("installation destination overlaps canonical memory or transcripts")
+    for name in ("memories", "sessions"):
+        protected = (*home, ".codex", name)
+        if parts[:len(protected)] == protected or protected[:len(parts)] == parts:
+            raise InstallError("installation destination overlaps canonical memory or transcripts")
+
+
 def _private_preflight(path, source, target):
     path = _safe_path(path)
+    _outside_canonical_stores(path)
     _outside_git(path)
     if _overlap(path, source) or _overlap(path, target):
         raise InstallError("private inventory overlaps source or target")
-    for protected in (Path.home() / ".codex/memories", Path.home() / ".codex/sessions"):
-        if _overlap(path, protected):
-            raise InstallError("private inventory overlaps canonical memory")
     if path.exists() and (not path.is_dir() or path.stat().st_uid != os.getuid() or stat.S_IMODE(path.stat().st_mode) & 0o077):
         raise InstallError("existing private inventory must already be owner-only")
     return path
@@ -173,6 +183,7 @@ def _preflight_runtime_destinations(target, entries):
 
 def _runtime_plan(source, target, historical_payload=()):
     source, target = _safe_path(source), _safe_path(target)
+    _outside_canonical_stores(target)
     if _overlap(source, target):
         raise InstallError("runtime target must be outside source checkout")
     payload = _payload(source)
