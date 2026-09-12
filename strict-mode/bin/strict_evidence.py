@@ -150,6 +150,33 @@ def _validate(value, schema, location='record'):
             raise EvidenceError(f'{location}: invalid integer')
 
 
+def _validate_public_url(value):
+    try:
+        parsed = urlsplit(value)
+        host = (parsed.hostname or '').rstrip('.')
+    except ValueError as error:
+        raise EvidenceError('invalid evidence URL') from error
+    if parsed.scheme != 'https' or not host or parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise EvidenceError('evidence URL must be public HTTPS without credentials/query/fragment')
+    if '.' not in host or host.endswith(('.local', '.internal', '.localhost')) or host == 'localhost':
+        raise EvidenceError('private host reference rejected')
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        address = None
+    numeric_host = re.fullmatch(r'(?:0[xX][0-9a-fA-F]+|[0-9]+)(?:\.(?:0[xX][0-9a-fA-F]+|[0-9]+))*', host)
+    if address is not None or numeric_host:
+        raise EvidenceError('IP-address evidence URLs are not public references')
+
+
+def _remove_public_url_scheme(match):
+    try:
+        _validate_public_url(match.group())
+    except EvidenceError:
+        return match.group()
+    return match.group()[len('https://'):]
+
+
 def _public_text(value):
     """Conservative leak guard, not a guarantee that arbitrary prose is sanitized."""
     if isinstance(value, dict):
@@ -166,8 +193,14 @@ def _public_text(value):
             r'(?i)\b(?:password|api[_-]?key|access[_-]?token|secret)\s*[:=]\s*\S+',
             r'\b(?:127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+)\b',
         )
-        if any(re.search(pattern, value) for pattern in patterns) or any(ord(c) < 32 for c in value):
+        decoded = unquote(value)
+        if any(re.search(pattern, text) for pattern in patterns for text in (value, decoded)) or any(ord(c) < 32 for c in decoded):
             raise EvidenceError('public evidence contains unsafe/private-looking content')
+        # Exempt only a validated HTTPS scheme delimiter. Keep the rest visible so
+        # quoted/Markdown URLs cannot hide an adjoining local path from the guard.
+        prose = re.sub(r'https://[^\s<>"`]+', _remove_public_url_scheme, decoded)
+        if re.search(r'''(?:^|[\s'"`([{=:,;<>])/+(?=[^\s/])''', prose):
+            raise EvidenceError('public evidence contains an absolute local path')
 
 
 def _reference(item):
@@ -182,19 +215,7 @@ def _reference(item):
                 any(part in ('.git', '.codex', '.ssh', 'private') or part.startswith('.env') for part in path.parts)):
             raise EvidenceError('evidence file reference must be a sanitized relative path')
     elif kind == 'url':
-        parsed = urlsplit(value)
-        host = (parsed.hostname or '').rstrip('.')
-        if parsed.scheme != 'https' or not host or parsed.username or parsed.password or parsed.query or parsed.fragment:
-            raise EvidenceError('evidence URL must be public HTTPS without credentials/query/fragment')
-        if '.' not in host or host.endswith(('.local', '.internal', '.localhost')) or host == 'localhost':
-            raise EvidenceError('private host reference rejected')
-        try:
-            address = ipaddress.ip_address(host)
-        except ValueError:
-            address = None
-        numeric_host = re.fullmatch(r'(?:0[xX][0-9a-fA-F]+|[0-9]+)(?:\.(?:0[xX][0-9a-fA-F]+|[0-9]+))*', host)
-        if address is not None or numeric_host:
-            raise EvidenceError('IP-address evidence URLs are not public references')
+        _validate_public_url(value)
         _public_text(decoded)
     elif kind == 'digest' and re.fullmatch(r'[0-9a-f]{64}', value) is None:
         raise EvidenceError('digest reference must be SHA-256')
