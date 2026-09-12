@@ -131,6 +131,47 @@ class PrivateStateTests(unittest.TestCase):
         with self.assertRaises(self.module.StateError):
             self.store(memory / 'derived')
 
+    def test_parent_segments_cannot_enter_canonical_stores(self):
+        codex = self.root / '.codex'
+        (codex / 'intermediate').mkdir(parents=True, mode=0o700)
+        for name in ('memories', 'sessions'):
+            with self.subTest(name=name):
+                canonical = codex / name
+                canonical.mkdir(mode=0o700)
+                sentinel = canonical / 'existing.txt'
+                sentinel.write_bytes(b'preserve canonical source\r\n')
+                with self.assertRaises(self.module.StateError):
+                    self.store(codex / 'intermediate' / '..' / name / 'state')
+                self.assertEqual(list(canonical.iterdir()), [sentinel])
+                self.assertEqual(sentinel.read_bytes(), b'preserve canonical source\r\n')
+
+    def test_safe_parent_segments_share_the_normalized_store(self):
+        intermediate = self.root / 'intermediate'
+        intermediate.mkdir(mode=0o700)
+        store = self.store(intermediate / '..' / 'private')
+        store.write_task('task-1', {'next_action': 'verify'})
+        self.assertEqual(self.store().read_task('task-1'), {'next_action': 'verify'})
+
+    def test_canonical_store_exclusion_covers_case_insensitive_hosts(self):
+        codex = self.root / '.codex'
+        codex.mkdir(mode=0o700)
+        for name in ('memories', 'sessions'):
+            with self.subTest(name=name):
+                canonical = codex / name
+                canonical.mkdir(mode=0o700)
+                with self.assertRaises(self.module.StateError):
+                    self.store(self.root / '.CoDeX' / name.upper() / 'private')
+                self.assertEqual(list(canonical.iterdir()), [])
+
+    def test_parent_normalization_does_not_hide_a_symlink(self):
+        target = self.root / 'target'
+        target.mkdir(mode=0o700)
+        alias = self.root / 'alias'
+        alias.symlink_to(target, target_is_directory=True)
+        with self.assertRaises(self.module.StateError):
+            self.store(alias / '..' / 'private')
+        self.assertFalse((self.root / 'private').exists())
+
     def test_rejects_unsafe_scope_and_ids(self):
         for scope in ('../escape', '/absolute', 'https://private.example/repo', 'a/b/../../c'):
             with self.assertRaises(self.module.StateError):

@@ -106,6 +106,19 @@ def _unique_json_object(pairs):
     return result
 
 
+_MANIFEST_FIELDS = frozenset({'version', 'components', 'exclude_paths'})
+_COMPONENT_FIELDS = frozenset({'name', 'paths', 'depends_on', 'dependency_verification', 'commands'})
+_COMMAND_FIELDS = frozenset({'name', 'run', 'cwd', 'cache', 'cache_inputs', 'cache_env',
+                             'toolchain', 'timeout_seconds', 'parallel_safe'})
+_VERIFICATION_FIELDS = frozenset({'kind', 'command', 'timeout_seconds'})
+
+
+def _reject_unknown_fields(value: dict[str, Any], fields: frozenset[str], label: str) -> None:
+    unknown = set(value) - fields
+    if unknown:
+        raise ManifestError(f"{label} has unknown fields: {', '.join(sorted(map(str, unknown)))}")
+
+
 def _validate_command_cwd(cwd: Any) -> None:
     if (not isinstance(cwd, str) or not cwd or "\\" in cwd or "\0" in cwd
             or Path(cwd).is_absolute() or ".." in Path(cwd).parts
@@ -128,6 +141,7 @@ def _command_cwd(root: Path, cwd: str) -> Path:
 def validate_manifest(data: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(data, dict) or data.get("version") != 1:
         raise ManifestError("manifest version must be 1")
+    _reject_unknown_fields(data, _MANIFEST_FIELDS, "manifest")
     components = data.get("components")
     if not isinstance(components, list) or not components:
         raise ManifestError("components must be a non-empty list")
@@ -136,6 +150,7 @@ def validate_manifest(data: dict[str, Any]) -> dict[str, Any]:
     for index, component in enumerate(components):
         if not isinstance(component, dict):
             raise ManifestError(f"components[{index}] must be an object")
+        _reject_unknown_fields(component, _COMPONENT_FIELDS, f"components[{index}]")
         name = component.get("name")
         if not isinstance(name, str) or not name or name in names:
             raise ManifestError(f"component name is missing or duplicated: {name!r}")
@@ -148,6 +163,7 @@ def validate_manifest(data: dict[str, Any]) -> dict[str, Any]:
         for command in commands:
             if not isinstance(command, dict):
                 raise ManifestError(f"{name}.commands entries must be objects")
+            _reject_unknown_fields(command, _COMMAND_FIELDS, f"{name}.commands entry")
             command_name = command.get("name")
             argv = command.get("run")
             _validate_command_cwd(command.get("cwd", "."))
@@ -176,6 +192,7 @@ def validate_manifest(data: dict[str, Any]) -> dict[str, Any]:
         verification = component.get("dependency_verification", {"kind": "unverified"})
         if not isinstance(verification, dict) or not isinstance(verification.get("kind"), str):
             raise ManifestError(f"{name}.dependency_verification must declare kind")
+        _reject_unknown_fields(verification, _VERIFICATION_FIELDS, f"{name}.dependency_verification")
         if verification["kind"] == "custom":
             _require_string_list(verification.get("command"), f"{name}.dependency_verification.command", nonempty=True)
             timeout = verification.get("timeout_seconds", 10)

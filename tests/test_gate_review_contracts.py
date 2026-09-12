@@ -41,6 +41,49 @@ class ReviewBodyContracts(unittest.TestCase):
                 self.assertIn('duplicate keys', result.stderr)
                 self.assertFalse((root / 'executed').exists())
 
+    def test_cli_rejects_unknown_keys_at_every_manifest_level_before_execution(self):
+        for level, key in (('manifest', 'exclude_path'), ('component', 'depend_on'),
+                           ('command', 'timeout_second'), ('verification', 'timeout_second')):
+            with self.subTest(level=level), tempfile.TemporaryDirectory() as temporary:
+                base = Path(temporary).resolve(); root = base / 'repo'; root.mkdir()
+                subprocess.run(['git', 'init', '-q', str(root)], check=True)
+                data = {'version': 1, 'components': [component('fixture')]}
+                item = data['components'][0]; item['paths'] = ['**']
+                item['commands'][0]['run'] = [sys.executable, '-c',
+                    "from pathlib import Path; Path(" + repr(str(base / 'executed')) + ").touch()"]
+                target = {'manifest': data, 'component': item, 'command': item['commands'][0],
+                          'verification': item['dependency_verification']}[level]
+                target[key] = 0.01
+                (root / '.agent').mkdir()
+                (root / '.agent/strict-gate.json').write_text(json.dumps(data))
+                result = subprocess.run([sys.executable, str(ROOT_GATE), '--mode', 'completion'],
+                                        cwd=root, text=True, capture_output=True, timeout=5)
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn('unknown fields', result.stderr)
+                self.assertIn(key, result.stderr)
+                self.assertFalse((base / 'executed').exists())
+
+    def test_closed_manifest_preserves_all_supported_and_legacy_fields(self):
+        data = {'version': 1, 'exclude_paths': ['docs/**'], 'components': [{
+            'name': 'fixture', 'paths': ['src/**'], 'depends_on': [],
+            'dependency_verification': {'kind': 'custom', 'command': [sys.executable, '-c', 'pass'], 'timeout_seconds': 3},
+            'commands': [{'name': 'test', 'run': [sys.executable, '-c', 'pass'], 'cwd': '.',
+                          'cache': True, 'cache_inputs': ['src/input'], 'cache_env': ['FIXTURE'],
+                          'toolchain': [[sys.executable, '--version']], 'timeout_seconds': 4,
+                          'parallel_safe': True}]}]}
+        self.assertIs(gate.validate_manifest(data), data)
+        command = gate.build_plan(data, ['src/input'], mode='completion')[0]
+        self.assertEqual(command.timeout_seconds, 4)
+        self.assertEqual(command.cwd, '.')
+        self.assertFalse(command.cache_allowed)
+        # Both existing runtime generations use manifest version 1 and optional metadata.
+        for verification in (None, {'kind': 'single-component'}, {'kind': 'unverified'}, {'kind': 'legacy-unverified-kind'}):
+            legacy = {'version': 1, 'components': [{'name': 'legacy', 'paths': ['**'],
+                      'commands': [{'name': 'test', 'run': ['true']}]}]}
+            if verification is not None: legacy['components'][0]['dependency_verification'] = verification
+            self.assertIs(gate.validate_manifest(legacy), legacy)
+            self.assertEqual(len(gate.build_plan(legacy, ['input'], mode='completion')), 1)
+
     def test_discovery_rejects_ambiguous_package_scripts(self):
         cases = ['{"scripts":{"test":"first"},"scripts":{"lint":"last"}}',
                  '{"scripts":{"test":"first","test":"last"}}']
