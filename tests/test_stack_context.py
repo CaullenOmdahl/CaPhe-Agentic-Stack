@@ -118,6 +118,45 @@ class ContextContracts(unittest.TestCase):
             path.write_bytes(content); path.chmod(mode)
             self.assertEqual(context._snapshot_identity(repo), original)
 
+    def test_tracked_file_replaced_by_directory_binds_visible_children_and_directory_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp).resolve(); initialize(repo)
+            path = repo / 'tracked'; content = path.read_bytes(); mode = path.stat().st_mode & 0o777
+            original = context._snapshot_identity(repo)
+            path.unlink(); path.mkdir()
+            empty = context._snapshot_identity(repo)
+            self.assertTrue(empty['complete'])
+            self.assertNotEqual(original['working_snapshot'], empty['working_snapshot'])
+            path.chmod(0o700)
+            restricted = context._snapshot_identity(repo)
+            self.assertTrue(restricted['complete'])
+            self.assertNotEqual(empty['working_snapshot'], restricted['working_snapshot'])
+            child = path / 'new.py'; child.write_text('first')
+            first = context._snapshot_identity(repo)
+            child.write_text('second')
+            second = context._snapshot_identity(repo)
+            self.assertTrue(first['complete'] and second['complete'])
+            self.assertNotEqual(first['working_snapshot'], second['working_snapshot'])
+            (repo / '.git/info/exclude').write_text('tracked/ignored\n')
+            ignored = path / 'ignored'; ignored.write_text('local state')
+            self.assertEqual(context._snapshot_identity(repo), second)
+            child.unlink(); ignored.unlink(); path.rmdir(); path.write_bytes(content); path.chmod(mode)
+            self.assertEqual(context._snapshot_identity(repo), original)
+
+    def test_directory_replaced_by_ignored_file_binds_the_tracked_path_blocker(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp).resolve(); initialize(repo)
+            folder = repo / 'folder'; folder.mkdir()
+            child = folder / 'tracked.py'; child.write_text('source')
+            git(repo, 'add', 'folder/tracked.py')
+            child.unlink(); folder.rmdir(); folder.write_text('first')
+            (repo / '.git/info/exclude').write_text('folder\n')
+            first = context._snapshot_identity(repo)
+            folder.write_text('second')
+            second = context._snapshot_identity(repo)
+            self.assertTrue(first['complete'] and second['complete'])
+            self.assertNotEqual(first['working_snapshot'], second['working_snapshot'])
+
     def test_large_file_hashing_is_streamed_and_symlink_target_is_not_read(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from urllib.parse import quote
 
 MODULE_PATH = Path(__file__).parents[1] / 'strict-mode' / 'bin' / 'strict_evidence.py'
 SPEC = importlib.util.spec_from_file_location('strict_evidence', MODULE_PATH)
@@ -82,7 +83,9 @@ class StrictEvidenceTests(unittest.TestCase):
     def test_absolute_paths_in_prose_and_criteria_are_rejected_before_public_write(self):
         paths = ('/root/customer/project', '/workspace/private-client/result',
                  '/container-client/result', '//mounted-client/result',
-                 '/var/customer/result', '%2Fworkspace%2Fclient%2Fresult')
+                 '/var/customer/result', '%2Fworkspace%2Fclient%2Fresult',
+                 '%252Froot%252Fcustomer%252Fsecret',
+                 '%25252Fworkspace%25252Fcustomer%25252Fresult')
         for path in paths:
             for field in ('summary', 'reason', 'criterion'):
                 with self.subTest(path=path, field=field), tempfile.TemporaryDirectory() as tmp:
@@ -228,6 +231,49 @@ class StrictEvidenceTests(unittest.TestCase):
                      {**acceptance, 'scope': {'kind': 'hardware'}}):
             with self.assertRaises(strict_evidence.EvidenceError):
                 strict_evidence.validate_semantic_acceptance(item)
+
+    def test_nested_encoded_references_reject_traversal_private_paths_and_credentials(self):
+        for raw in ('../outside/result.md', 'docs/private/result.md', 'docs/.env',
+                    '/root/customer/secret', 'tests/api_key=sk-' + 'a' * 20):
+            encoded = quote(quote(raw, safe=''), safe='')
+            for field in ('evidence', 'artifact'):
+                with self.subTest(raw=raw, field=field), tempfile.TemporaryDirectory() as tmp:
+                    item = record()
+                    if field == 'evidence': item['evidence'] = [{'kind': 'file', 'reference': encoded}]
+                    else: item['artifact'] = {'sha256': 'e' * 64, 'reference': encoded}
+                    root = Path(tmp).resolve()
+                    with self.assertRaises(strict_evidence.EvidenceError): strict_evidence.write_record(root, item)
+                    self.assertFalse((root / '.agent').exists())
+        for raw in ('https://user@example.org/result', 'https://localhost/result', 'https://example.org/result?secret=value'):
+            encoded = raw.replace('@', '%2540').replace('localhost', '%256cocalhost').replace('?', '%253F').replace('=', '%253D')
+            with self.subTest(url=encoded), self.assertRaises(strict_evidence.EvidenceError):
+                strict_evidence.validate_record(record(evidence=[{'kind': 'url', 'reference': encoded}]))
+
+    def test_nested_encoding_retains_valid_urls_relative_paths_and_percent_prose(self):
+        for summary in ('Progress 100%; literal %zz and %.', 'Progress 100%2525 complete',
+                        'Read docs%252Fplan.md', 'See https://example.org/reports/%2528public%2529/result'):
+            item = record(summary=summary); before = copy.deepcopy(item)
+            strict_evidence.validate_record(item)
+            self.assertEqual(item, before)
+        for kind, reference in (('file', 'docs%252Fplan.md'), ('file', 'docs/100%2525-complete.md'),
+                                ('url', 'https://example.org/reports/%2528public%2529/result')):
+            strict_evidence.validate_record(record(evidence=[{'kind': kind, 'reference': reference}]))
+
+    def test_encoding_depth_is_bounded_and_nested_secrets_and_controls_reject(self):
+        permitted = 'docs/result.md'
+        for _ in range(8): permitted = quote(permitted, safe='')
+        strict_evidence.validate_record(record(summary=permitted, evidence=[{'kind': 'file', 'reference': permitted}]))
+        excessive = quote(permitted, safe='')
+        for item in (record(summary=excessive), record(evidence=[{'kind': 'file', 'reference': excessive}])):
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve()
+                with self.assertRaisesRegex(strict_evidence.EvidenceError, 'depth limit'): strict_evidence.write_record(root, item)
+                self.assertFalse((root / '.agent').exists())
+        for raw in ('api_key=sk-' + 'a' * 20, 'line\nbreak'):
+            encoded = raw
+            for _ in range(3): encoded = quote(encoded, safe='')
+            with self.subTest(raw=raw), self.assertRaises(strict_evidence.EvidenceError):
+                strict_evidence.validate_record(record(summary=encoded))
 
 
 if __name__ == '__main__':
