@@ -60,6 +60,15 @@ def _file_entry(root, rel):
     return [rel, hashlib.sha256(path.read_bytes()).hexdigest(), mode]
 
 
+def _unique_json_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON field")
+        result[key] = value
+    return result
+
+
 def _payload(root):
     root = _safe_path(root)
     # Git identifies public distribution files, but bytes come from the dirty worktree.
@@ -73,7 +82,7 @@ def _payload(root):
         names = {name for name in names if _public(name)}
     elif manifest.is_file() and not manifest.is_symlink():
         try:
-            data = json.loads(manifest.read_text())
+            data = json.loads(manifest.read_text(), object_pairs_hook=_unique_json_object)
             expected = data["payload"]
             names = [entry[0] for entry in expected]
             if len(names) != len(set(names)):
@@ -255,7 +264,7 @@ def apply_runtime_plan(plan, *, inventory_root, fail_after=None):
             raise InstallError("private receipt must be a regular file")
         try:
             receipt_bytes = receipt_path.read_bytes()
-            existing = json.loads(receipt_bytes)
+            existing = json.loads(receipt_bytes, object_pairs_hook=_unique_json_object)
             known = (isinstance(existing, dict) and set(existing) == set(receipt)
                      and all(existing[key] == receipt[key] for key in receipt if key != "retired_files")
                      and existing["verified"] is True and isinstance(existing["retired_files"], list)

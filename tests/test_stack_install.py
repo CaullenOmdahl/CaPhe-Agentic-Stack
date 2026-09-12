@@ -195,6 +195,54 @@ class InstallContracts(unittest.TestCase):
                     self.assertFalse(target.exists())
                     self.assertFalse((root / "private").exists())
 
+    def test_duplicate_runtime_inventory_fields_reject_before_writes_and_doctor_fails_closed(self):
+        doctor_spec = importlib.util.spec_from_file_location("inventory_doctor", PATH.with_name("stack_doctor.py"))
+        doctor = importlib.util.module_from_spec(doctor_spec); doctor_spec.loader.exec_module(doctor)
+        prefixes = {
+            "payload": '{"payload": [],',
+            "source_digest": '{"source_digest": "' + '0' * 64 + '",',
+            "nested": '{"extra": {"value": 1, "value": 2},',
+            "escaped": '{"\\u0070ayload": [],',
+        }
+        for kind, prefix in prefixes.items():
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve(); source = self.fixture_source(root)
+                runtime, target = root / "runtime", root / "target"
+                installer.apply_runtime_plan(installer.plan_runtime_install(source, runtime), inventory_root=root / "seed-private")
+                plan = installer.plan_runtime_install(runtime, target)
+                valid_digest = installer._digest(runtime)
+                report = doctor.inspect(root, runtime=runtime)
+                self.assertEqual(report["runtime"]["source_digest"], valid_digest)
+                self.assertNotIn("runtime_inventory_invalid", report["unresolved"])
+                manifest = runtime / installer._MANIFEST
+                original = manifest.read_text()
+                manifest.write_text(prefix + original[1:])
+                before = self.snapshot(root)
+                with self.assertRaisesRegex(installer.InstallError, "invalid runtime inventory"):
+                    installer.apply_runtime_plan(plan, inventory_root=root / "private")
+                self.assertEqual(self.snapshot(root), before)
+                self.assertFalse(target.exists()); self.assertFalse((root / "private").exists())
+                report = doctor.inspect(root, runtime=runtime)
+                self.assertIsNone(report["runtime"]["source_digest"])
+                self.assertIn("runtime_inventory_invalid", report["unresolved"])
+                self.assertEqual(self.snapshot(root), before)
+                manifest.write_text(original)
+                installer.apply_runtime_plan(plan, inventory_root=root / "private")
+                self.assertTrue(installer.verify_runtime_plan(plan))
+
+    def test_duplicate_receipt_fields_remain_rejected_before_writes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); source = self.fixture_source(root)
+            target, private = root / "target", root / "private"
+            plan = installer.plan_runtime_install(source, target)
+            installer.apply_runtime_plan(plan, inventory_root=private)
+            receipt = installer.runtime_receipt_path(private, plan["source_digest"], target)
+            receipt.write_text('{"verified": false,' + receipt.read_text()[1:])
+            before = self.snapshot(root)
+            with self.assertRaisesRegex(installer.InstallError, "private receipt collision"):
+                installer.apply_runtime_plan(plan, inventory_root=private)
+            self.assertEqual(self.snapshot(root), before)
+
     def test_standalone_runtime_tampering_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve(); source = self.fixture_source(root); target = root / "target"

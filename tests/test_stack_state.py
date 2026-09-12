@@ -53,6 +53,39 @@ class PrivateStateTests(unittest.TestCase):
             store.write_authorization('auth-1', {**auth, 'action': 'merge'})
         self.assertEqual(list(self.repo.rglob('*.json')), [])
 
+    def test_duplicate_envelope_and_nested_authorization_keys_are_rejected(self):
+        store = self.store()
+        auth = {'action': 'publish branch', 'scope': 'example/project', 'user_statement': 'Approved for this task'}
+        for field, values in (('id', ('other-id', 'auth-1')),
+                              ('action', ('inspect only', 'publish branch')),
+                              ('user_statement', ('Not approved', 'Approved for this task'))):
+            for reverse in (False, True):
+                with self.subTest(field=field, reverse=reverse):
+                    pair = values[::-1] if reverse else values
+                    envelope = {'schema_version': 1, 'repository': 'example/project', 'id': 'auth-1', 'data': auth}
+                    content = json.dumps(envelope)
+                    original = json.dumps(field) + ': ' + json.dumps(envelope.get(field, auth.get(field)))
+                    duplicate = ', '.join(json.dumps(field) + ': ' + json.dumps(value) for value in pair)
+                    content = content.replace(original, duplicate)
+                    path = store.directory / 'authorizations/auth-1.json'
+                    path.write_text(content); path.chmod(0o600)
+                    before = (path.read_bytes(), path.stat().st_mode)
+                    with self.assertRaises(self.module.StateError): store.read_authorization('auth-1')
+                    with self.assertRaises(self.module.StateError): store.write_authorization('auth-1', auth)
+                    self.assertEqual((path.read_bytes(), path.stat().st_mode), before)
+
+    def test_duplicate_deep_task_keys_are_rejected_without_overwrite(self):
+        store = self.store()
+        for reverse in (False, True):
+            with self.subTest(reverse=reverse):
+                pairs = '"approved": false, "approved": true' if not reverse else '"approved": true, "approved": false'
+                path = store.directory / 'tasks/task-1.json'
+                content = '{"schema_version":1,"repository":"example/project","id":"task-1","data":{"continuation":{"authorization":{' + pairs + '}}}}'
+                path.write_text(content); path.chmod(0o600)
+                with self.assertRaises(self.module.StateError): store.read_task('task-1')
+                with self.assertRaises(self.module.StateError): store.write_task('task-1', {'next_action': 'continue'})
+                self.assertEqual(path.read_text(), content)
+
     def test_concurrent_authorization_writers_preserve_one_record(self):
         store = self.store()
         def attempt(index):

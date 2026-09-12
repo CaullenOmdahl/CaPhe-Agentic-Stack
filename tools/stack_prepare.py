@@ -18,9 +18,9 @@ import time
 from typing import Any, Mapping
 
 try:
-    from stack_state import StateError, _mkdir, _outside_git, _no_symlinks, _owned
+    from stack_state import StateError, _json_object, _mkdir, _outside_git, _no_symlinks, _owned
 except ModuleNotFoundError:
-    from tools.stack_state import StateError, _mkdir, _outside_git, _no_symlinks, _owned
+    from tools.stack_state import StateError, _json_object, _mkdir, _outside_git, _no_symlinks, _owned
 
 
 class PrepareError(ValueError):
@@ -206,7 +206,7 @@ def read_receipt(root, receipt_path, *, receipt_root):
         current = directory.stat()
         if (directory_before.st_dev, directory_before.st_ino) != (current.st_dev, current.st_ino):
             raise PrepareError('receipt directory changed while reading')
-        return json.loads(content)
+        return json.loads(content, object_pairs_hook=_json_object)
     except (StateError, RecursionError) as error:
         raise PrepareError('invalid private receipt') from error
 
@@ -265,7 +265,7 @@ def main(argv=None):
     parser.add_argument('--check-receipt', help='Check freshness without running the preparation command')
     args = parser.parse_args(argv)
     try:
-        manifest = json.loads(Path(args.manifest).read_text())
+        manifest = json.loads(Path(args.manifest).read_text(), object_pairs_hook=_json_object)
         if args.check_receipt:
             receipt = read_receipt(args.root, args.check_receipt, receipt_root=args.receipt_root)
             fresh = is_fresh(args.root, manifest, receipt)
