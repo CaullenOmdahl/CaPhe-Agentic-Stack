@@ -75,8 +75,8 @@ def _sha(content):
     return hashlib.sha256(content).hexdigest()
 
 
-def _original_hook(root, hookdir, invocation):
-    if not isinstance(invocation, str) or not invocation or "\0" in invocation or Path(invocation).name != "pre-commit":
+def _original_hook(root, hookdir, invocation, name="pre-commit"):
+    if not isinstance(invocation, str) or not invocation or "\0" in invocation or Path(invocation).name != name:
         raise InitError("invalid original-hook invocation")
     path = Path(invocation)
     path = path if path.is_absolute() else root / path
@@ -91,10 +91,17 @@ def chain_bytes(previous):
     return ("CAPHE_PREVIOUS_HOOK=" + shlex.quote(previous["path"] if previous else "") + "\n").encode()
 
 
-def activation_record(root, hookdir, canon, previous, forwarded=None):
+def forwarder_bytes(invocation):
+    return ("#!/usr/bin/env bash\n" + shlex.quote(invocation) + ' "$@"\n').encode()
+
+
+def activation_record(root, hookdir, canon, previous, forwarded=None, forwarded_targets=None):
     original = _original_hook(root, hookdir, previous) if previous else None
-    return {"schema": 1, "source_files": {name: _sha((canon / "bin" / name).read_bytes()) for name in HOOK_FILES},
-            "chain_sha256": _sha(chain_bytes(original)), "previous_hook": original, "forwarded_hooks": dict(forwarded or {})}
+    if set(forwarded or {}) != set(forwarded_targets or {}):
+        raise InitError("forwarded hook target identities missing; select the original hook directory to reconcile")
+    return {"schema": 2, "source_files": {name: _sha((canon / "bin" / name).read_bytes()) for name in HOOK_FILES},
+            "chain_sha256": _sha(chain_bytes(original)), "previous_hook": original,
+            "forwarded_hooks": dict(forwarded or {}), "forwarded_targets": dict(forwarded_targets or {})}
 
 
 def read_activation(root, hookdir, *, canon=None, verify_previous=True):
@@ -121,9 +128,11 @@ def read_activation(root, hookdir, *, canon=None, verify_previous=True):
     except (ValueError, UnicodeError) as error:
         raise InitError("malformed hook activation metadata") from error
     digest = lambda value: isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
-    if (not isinstance(record, dict) or set(record) not in ({"schema", "source_files", "chain_sha256", "previous_hook"},
-                                                        {"schema", "source_files", "chain_sha256", "previous_hook", "forwarded_hooks"})
-            or type(record["schema"]) is not int or record["schema"] != 1
+    base_fields = {"schema", "source_files", "chain_sha256", "previous_hook"}
+    schemas = {1: (base_fields, base_fields | {"forwarded_hooks"}),
+               2: (base_fields | {"forwarded_hooks", "forwarded_targets"},)}
+    if (not isinstance(record, dict) or type(record.get("schema")) is not int
+            or record["schema"] not in schemas or set(record) not in schemas[record["schema"]]
             or not isinstance(record["source_files"], dict) or set(record["source_files"]) != set(HOOK_FILES)
             or not all(digest(value) for value in record["source_files"].values()) or not digest(record["chain_sha256"])):
         raise InitError("invalid hook activation schema")
@@ -136,20 +145,32 @@ def read_activation(root, hookdir, *, canon=None, verify_previous=True):
         safe(path)
         if not path.is_file() or _sha(path.read_bytes()) != expected_hash or stat.S_IMODE(path.stat().st_mode) != 0o755:
             raise InitError("managed hook differs from activation inventory: " + name)
-    previous = record["previous_hook"]
-    if previous is not None:
-        if (not isinstance(previous, dict) or set(previous) != {"path", "resolved", "sha256", "mode"}
-                or not isinstance(previous["path"], str) or not previous["path"] or "\0" in previous["path"]
-                or Path(previous["path"]).name != "pre-commit" or not isinstance(previous["resolved"], str) or not Path(previous["resolved"]).is_absolute()
-                or not digest(previous["sha256"]) or type(previous["mode"]) is not int or not 0 <= previous["mode"] <= 0o777):
+    def validate_target(target, name):
+        if (not isinstance(target, dict) or set(target) != {"path", "resolved", "sha256", "mode"}
+                or not isinstance(target["path"], str) or not target["path"] or "\0" in target["path"]
+                or Path(target["path"]).name != name or not isinstance(target["resolved"], str)
+                or not Path(target["resolved"]).is_absolute() or not digest(target["sha256"])
+                or type(target["mode"]) is not int or not 0 <= target["mode"] <= 0o777):
             raise InitError("invalid original-hook record")
         if verify_previous:
             try:
-                actual_previous = _original_hook(root, hookdir, previous["path"])
+                actual = _original_hook(root, hookdir, target["path"], name)
             except (OSError, ValueError, RuntimeError) as error:
                 raise InitError("original hook cannot be verified") from error
-            if actual_previous != previous:
+            if actual != target:
                 raise InitError("original hook changed since activation")
+    targets = record.get("forwarded_targets", {})
+    if not isinstance(targets, dict) or (record["schema"] == 2 and set(targets) != set(forwarded)):
+        raise InitError("invalid forwarded-hook target inventory")
+    if record["schema"] == 1 and forwarded and verify_previous:
+        raise InitError("legacy forwarded hook target identities missing; select the original hook directory to reconcile")
+    for name, target in targets.items():
+        validate_target(target, name)
+        if (hookdir / name).read_bytes() != forwarder_bytes(target["path"]):
+            raise InitError("forwarded hook wrapper differs from its recorded target")
+    previous = record["previous_hook"]
+    if previous is not None:
+        validate_target(previous, "pre-commit")
     actual_chain = chain.read_bytes()
     if actual_chain != chain_bytes(previous) or _sha(actual_chain) != record["chain_sha256"]:
         raise InitError("hook chain differs from its declarative activation record")
@@ -202,6 +223,10 @@ class Transaction:
         finally:
             if os.path.exists(name):
                 os.unlink(name)
+
+    def remove(self, path):
+        self.remember(path)
+        path.unlink(missing_ok=True)
 
     def rollback(self):
         for path, previous in reversed(list(self.before.items())):
@@ -282,6 +307,7 @@ def initialize(canon, root, *, fail_probe=False):
     hookdir = None
     previous = None
     config_paths = []
+    retired_hooks = set()
     if is_git:
         # Resolve Git's actual effective path, including global/relative hooksPath.
         def gitpath(*args):
@@ -300,7 +326,10 @@ def initialize(canon, root, *, fail_probe=False):
         # the selected original custom hook to have an accepted update.
         if active or any((hookdir / name).exists() for name in (*HOOK_FILES, CHAIN_FILE, ACTIVATION_FILE)):
             existing = read_activation(root, hookdir, verify_previous=active)
-        forwarded = dict(existing.get("forwarded_hooks", {})) if existing else {}
+        owned_forwarders = set(existing.get("forwarded_hooks", {})) if existing else set()
+        # Inactive reconciliation follows only the explicitly selected original directory.
+        forwarded = dict(existing.get("forwarded_hooks", {})) if active else {}
+        forwarded_targets = dict(existing.get("forwarded_targets", {})) if active else {}
         if active:
             # Never adopt shell text from an unverified old chain during refresh.
             previous = existing["previous_hook"]["path"] if existing["previous_hook"] else None
@@ -314,15 +343,18 @@ def initialize(canon, root, *, fail_probe=False):
                     if old.name != "pre-commit" and old.is_file() and os.access(old, os.X_OK):
                         # Only real Git hook names are dispatched; never overwrite runtime payload.
                         if old.name in FORWARDED_HOOKS:
-                            writes[hookdir / old.name] = "#!/usr/bin/env bash\n" + shlex.quote(str(effective_value / old.name)) + ' "$@"\n'
-        owned = set(HOOK_FILES) | {CHAIN_FILE, ACTIVATION_FILE} | set(forwarded) if existing else set()
+                            invocation = str(effective_value / old.name)
+                            writes[hookdir / old.name] = forwarder_bytes(invocation)
+                            forwarded_targets[old.name] = _original_hook(root, hookdir, invocation, old.name)
+        owned = set(HOOK_FILES) | {CHAIN_FILE, ACTIVATION_FILE} | owned_forwarders if existing else set()
         for path, content in writes.items():
             if path.parent == hookdir:
                 safe(path)
                 if path.exists() and path.name not in owned:
                     raise InitError("unowned hook destination collision: " + path.name)
                 forwarded[path.name] = _sha(content.encode() if isinstance(content, str) else content)
-        record = activation_record(root, hookdir, canon, previous, forwarded)
+        retired_hooks = {hookdir / name for name in owned_forwarders - set(forwarded)}
+        record = activation_record(root, hookdir, canon, previous, forwarded, forwarded_targets)
         writes[chain] = chain_bytes(record["previous_hook"])
         writes[hookdir / ACTIVATION_FILE] = json.dumps(record, sort_keys=True) + "\n"
         for name in HOOK_FILES:
@@ -336,13 +368,15 @@ def initialize(canon, root, *, fail_probe=False):
         writes[exclude] = content
         config_paths = list(dict.fromkeys([common / "config", common / "config.worktree", gitdir / "config.worktree"]))
     safe(root / ".agent/evidence/.preflight")
-    for path in list(writes) + config_paths:
+    for path in list(writes) + config_paths + sorted(retired_hooks):
         safe(path)
     transaction = Transaction()
     try:
         transaction.mkdir(root / ".agent/evidence")
         for path in config_paths:
             transaction.remember(path)
+        for path in sorted(retired_hooks):
+            transaction.remove(path)
         for path, content in writes.items():
             mode = (0o600 if path.name in {CHAIN_FILE, ACTIVATION_FILE} else 0o755) if hookdir and path.parent == hookdir else None
             transaction.write(path, content, mode)

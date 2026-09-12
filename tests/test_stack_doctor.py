@@ -183,6 +183,36 @@ class DoctorContracts(unittest.TestCase):
             (repo / "CLAUDE.md").unlink(); (repo / "CLAUDE.md").symlink_to(outside)
             self.assertFalse(report()["instructions"]["verified"])
 
+    def test_forwarded_hook_target_drift_and_legacy_inventory_are_unmanaged(self):
+        for change in ("bytes", "mode", "symlink", "legacy"):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve(); repo = root / "repo"
+                subprocess.run(["git", "init", "-q", str(repo)], check=True)
+                original = repo / ".git/hooks/commit-msg"
+                original.write_text("#!/bin/sh\nexit 0\n"); original.chmod(0o755)
+                activation.initialize(PATH.parents[1] / "strict-mode", repo)
+                managed = Path(subprocess.check_output(["git", "-C", str(repo), "config", "core.hooksPath"], text=True).strip())
+                self.assertTrue(doctor.inspect(repo, runtime=PATH.parents[1])["project"]["managed"])
+                wrapper = (managed / "commit-msg").read_bytes()
+                if change == "bytes":
+                    original.write_text("#!/bin/sh\nexit 7\n")
+                elif change == "mode":
+                    original.chmod(0o700)
+                elif change == "symlink":
+                    other = original.with_name("alternate")
+                    other.write_bytes(original.read_bytes()); other.chmod(0o755)
+                    original.unlink(); original.symlink_to(other.name)
+                else:
+                    metadata = managed / activation.ACTIVATION_FILE
+                    record = json.loads(metadata.read_text())
+                    record["schema"] = 1; record.pop("forwarded_targets", None)
+                    metadata.write_text(json.dumps(record))
+                report = doctor.inspect(repo, runtime=PATH.parents[1])
+                self.assertFalse(report["project"]["managed"])
+                self.assertFalse(report["hooks"]["chain"]["verified"])
+                self.assertIn("hook_chain_mismatch", report["unresolved"])
+                self.assertEqual((managed / "commit-msg").read_bytes(), wrapper)
+
     def test_real_activation_requires_intact_chain_metadata_and_original_hook(self):
         spec = importlib.util.spec_from_file_location("chain_initializer", PATH.parents[1] / "strict-mode/bin/strict_init.py")
         init = importlib.util.module_from_spec(spec); spec.loader.exec_module(init)

@@ -96,6 +96,25 @@ def _require_string_list(value: Any, label: str, *, nonempty: bool = False) -> l
     return value
 
 
+def _validate_command_cwd(cwd: Any) -> None:
+    if (not isinstance(cwd, str) or not cwd or "\\" in cwd or "\0" in cwd
+            or Path(cwd).is_absolute() or ".." in Path(cwd).parts
+            or re.match(r"^[A-Za-z]:", cwd)):
+        raise ManifestError("command cwd must be a repository-relative directory")
+
+
+def _command_cwd(root: Path, cwd: str) -> Path:
+    _validate_command_cwd(cwd)
+    try:
+        root = root.resolve(strict=True)
+        directory = (root / cwd).resolve(strict=True)
+        if (directory != root and root not in directory.parents) or not directory.is_dir():
+            raise ManifestError("command cwd must stay inside the repository")
+        return directory
+    except (OSError, RuntimeError):
+        raise ManifestError("command cwd must be an existing repository directory") from None
+
+
 def validate_manifest(data: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(data, dict) or data.get("version") != 1:
         raise ManifestError("manifest version must be 1")
@@ -121,6 +140,7 @@ def validate_manifest(data: dict[str, Any]) -> dict[str, Any]:
                 raise ManifestError(f"{name}.commands entries must be objects")
             command_name = command.get("name")
             argv = command.get("run")
+            _validate_command_cwd(command.get("cwd", "."))
             if not isinstance(command_name, str) or not command_name:
                 raise ManifestError(f"{name} command name must be non-empty")
             if (name, command_name) in command_ids:
@@ -148,6 +168,10 @@ def validate_manifest(data: dict[str, Any]) -> dict[str, Any]:
             raise ManifestError(f"{name}.dependency_verification must declare kind")
         if verification["kind"] == "custom":
             _require_string_list(verification.get("command"), f"{name}.dependency_verification.command", nonempty=True)
+            timeout = verification.get("timeout_seconds", 10)
+            if (isinstance(timeout, bool) or not isinstance(timeout, (int, float))
+                    or not math.isfinite(timeout) or timeout <= 0):
+                raise ManifestError(f"{name}.dependency_verification.timeout_seconds must be positive and finite")
     for component in components:
         for dependency in component.get("depends_on", []):
             if dependency not in names:
@@ -209,18 +233,13 @@ def verify_dependency_completeness(root: Path, data: dict[str, Any]) -> set[str]
         verification = component.get("dependency_verification", {})
         if verification.get("kind") != "custom":
             continue
-        try:
-            result = subprocess.run(
-                verification["command"],
-                cwd=root,
-                text=True,
-                capture_output=True,
-                check=False,
-                env=command_environment(),
-            )
-        except OSError:
-            continue
-        if result.returncode == 0:
+        command = CommandSpec(
+            component["name"], "dependency-verification", tuple(verification["command"]),
+            timeout_seconds=verification.get("timeout_seconds", 10),
+        )
+        # Share the check executor's process-group deadline; failed proof falls back to full checks.
+        _, code, _, _ = _run_one(root, command, "", root / ".agent/cache/strict-gate")
+        if code == 0:
             verified.add(component["name"])
     return verified
 
@@ -335,6 +354,7 @@ def cache_key(root: Path, command: CommandSpec, manifest_identity: str) -> str:
     if not command.cache_inputs or not command.toolchain:
         raise ManifestError("cache identity requires input files and toolchain probes")
     root = root.resolve()
+    _command_cwd(root, command.cwd)
     digest = hashlib.sha256(b"caphe-feedback-cache-v2\0")
     digest.update(manifest_identity.encode())
     digest.update(json.dumps(command._asdict(), sort_keys=True).encode())
@@ -342,7 +362,7 @@ def cache_key(root: Path, command: CommandSpec, manifest_identity: str) -> str:
     for probe in command.toolchain:
         try:
             result = subprocess.run(
-                probe, cwd=root / command.cwd, text=True, capture_output=True,
+                probe, cwd=_command_cwd(root, command.cwd), text=True, capture_output=True,
                 check=False, env=command_environment(), timeout=10,
             )
         except (OSError, subprocess.SubprocessError):
@@ -368,6 +388,7 @@ def cache_key(root: Path, command: CommandSpec, manifest_identity: str) -> str:
 
 
 def _run_one(root: Path, command: CommandSpec, manifest_identity: str, cache_dir: Path) -> tuple[CommandSpec, int, str, bool]:
+    _command_cwd(root, command.cwd)
     cache_file: Path | None = None
     if command.cache_allowed:
         key = cache_key(root, command, manifest_identity)
@@ -376,7 +397,7 @@ def _run_one(root: Path, command: CommandSpec, manifest_identity: str, cache_dir
             return command, 0, "", True
     try:
         process = subprocess.Popen(
-            command.argv, cwd=root / command.cwd, text=True,
+            command.argv, cwd=_command_cwd(root, command.cwd), text=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             env=command_environment(), start_new_session=(os.name == "posix"),
         )
@@ -657,6 +678,8 @@ def execute_plan(
     root: Path, plan: list[CommandSpec], manifest_identity: str, jobs: int,
     *, report_path: Path | None = None, mode: str = "affected",
 ) -> int:
+    for command in plan:
+        _command_cwd(root, command.cwd)
     destination = _report_destination(report_path) if report_path is not None else None
     before = snapshot_identity(root)
     started = time.monotonic()
@@ -861,6 +884,22 @@ def _python_test_runner(root: Path, python_root: Path) -> str:
         current = current.parent
 
 
+# Embedded so generated manifests remain standalone in installed consumers.
+_SCOPED_UNITTEST_RUNNER = """import sys, unittest
+from pathlib import Path
+excluded = {Path(path).resolve() for path in sys.argv[2:]}
+class ScopedLoader(unittest.TestLoader):
+    def _find_test_path(self, full_path, pattern, *args, **kwargs):
+        # Exclude before importing the package or invoking its load_tests hook.
+        if Path(full_path).resolve() in excluded:
+            return None, False
+        return super()._find_test_path(full_path, pattern, *args, **kwargs)
+suite = ScopedLoader().discover(sys.argv[1])
+result = unittest.TextTestRunner(verbosity=2).run(suite)
+raise SystemExit(not result.wasSuccessful())
+"""
+
+
 def discover_default_manifest(root: Path) -> dict[str, Any]:
     """Create a safe single-component manifest; repositories can later split it for speed."""
     commands: list[dict[str, Any]] = [
@@ -891,7 +930,7 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
         text = pubspec.read_text(errors="replace")
         tool = "flutter" if re.search(r"sdk:\s*flutter", text) else "dart"
         for action in ("analyze", "test"):
-            name = f"{tool}-{action}-{cwd.replace('/', '-')}"
+            name = f"{tool}-{action}-{cwd}"
             if name not in command_names:
                 commands.append({"name": name, "run": [tool, action], "cwd": cwd})
                 command_names.add(name)
@@ -908,7 +947,7 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
         for script_name in ("test", "lint", "typecheck"):
             if script_name not in scripts:
                 continue
-            name = f"{package_manager}-{script_name}-{cwd.replace('/', '-')}"
+            name = f"{package_manager}-{script_name}-{cwd}"
             run = [package_manager, script_name] if package_manager == "pnpm" else ["npm", "run", script_name, "--silent"]
             commands.append({"name": name, "run": run, "cwd": cwd})
 
@@ -949,7 +988,7 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
     ]
     for cargo in cargo_roots:
         cwd = _relative_cwd(root, cargo)
-        suffix = cwd.replace("/", "-")
+        suffix = cwd
         commands.extend(
             [
                 {"name": f"cargo-fmt-{suffix}", "run": ["cargo", "fmt", "--all", "--check"], "cwd": cwd},
@@ -961,7 +1000,7 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
         if any(part in {"vendor", "build", "dist"} for part in go_mod.parts):
             continue
         cwd = _relative_cwd(root, go_mod)
-        suffix = cwd.replace("/", "-")
+        suffix = cwd
         commands.append({"name": f"go-test-{suffix}", "run": ["go", "test", "./..."], "cwd": cwd})
     excluded_python_parts = {
         ".git",
@@ -1023,7 +1062,7 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
     python_test_roots.update(pytest_project_roots)
     for python_root in sorted(python_test_roots):
         cwd = "." if python_root == root else python_root.relative_to(root).as_posix()
-        suffix = "" if cwd == "." else f"-{cwd.replace('/', '-')}"
+        suffix = "" if cwd == "." else f"-{cwd}"
         runner = _python_test_runner(root, python_root)
         nested_roots = sorted(
             candidate
@@ -1057,6 +1096,12 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
                 ],
             }
         )
+        if runner == "unittest" and nested_roots:
+            command["run"] = [
+                "python3", "-c", _SCOPED_UNITTEST_RUNNER,
+                "tests" if (python_root / "tests").is_dir() else ".",
+                *[candidate.relative_to(python_root).as_posix() for candidate in nested_roots],
+            ]
         if cwd != ".":
             command["cwd"] = cwd
         commands.append(command)
