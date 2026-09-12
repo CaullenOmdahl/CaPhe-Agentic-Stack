@@ -123,18 +123,24 @@ def _hash_stream(digest, label: bytes, handle) -> None:
         digest.update(chunk)
 
 
-def _hash_untracked(digest, root_fd: int, relative: bytes) -> None:
+def _hash_worktree_path(digest, root_fd: int, relative: bytes, *, allow_missing=False) -> None:
     parts = relative.split(b'/')
     if not parts or any(part in (b'', b'.', b'..') for part in parts):
         raise SnapshotFailure('unsafe-path')
     parent = os.dup(root_fd)
     try:
-        for part in parts[:-1]:
-            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
-            os.close(parent)
-            parent = child
-        before = os.stat(parts[-1], dir_fd=parent, follow_symlinks=False)
         digest.update(b'path\0' + len(relative).to_bytes(8, 'big') + relative)
+        try:
+            for part in parts[:-1]:
+                child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+                os.close(parent)
+                parent = child
+            before = os.stat(parts[-1], dir_fd=parent, follow_symlinks=False)
+        except FileNotFoundError:
+            if not allow_missing:
+                raise
+            digest.update(b'missing\0')
+            return
         digest.update(f'{before.st_mode}:{before.st_size}\0'.encode())
         if stat.S_ISLNK(before.st_mode):
             digest.update(os.fsencode(os.readlink(parts[-1], dir_fd=parent)))
@@ -149,7 +155,8 @@ def _hash_untracked(digest, root_fd: int, relative: bytes) -> None:
                     digest.update(block)
                 after = os.fstat(handle.fileno())
         identity = lambda info: (info.st_dev, info.st_ino, info.st_mode, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
-        if identity(before) != identity(after):
+        current = os.stat(parts[-1], dir_fd=parent, follow_symlinks=False)
+        if identity(before) != identity(after) or identity(after) != identity(current):
             raise SnapshotFailure('path-changed-during-read')
     except OSError:
         raise SnapshotFailure('path-unreadable-or-changed') from None
@@ -168,24 +175,31 @@ def _snapshot_identity(repo: Path) -> dict[str, Any]:
                 head = handle.read(128).decode('ascii').strip()
                 if not re.fullmatch(r'[a-f0-9]{40}|[a-f0-9]{64}', head):
                     raise SnapshotFailure('head')
-        digest = hashlib.sha256(b'caphe-context-snapshot-v2\0' + (head or 'unborn').encode())
+        digest = hashlib.sha256(b'caphe-context-snapshot-v3\0' + (head or 'unborn').encode())
         # Index modes, stages and blob IDs bind staging even when worktree bytes are unchanged.
         with _git_output(repo, 'index', ['ls-files', '--stage', '-z']) as (handle, _):
             _hash_stream(digest, b'index', handle)
             handle.seek(0)
             if any(record.startswith(b'160000 ') for record in _records(handle)):
                 raise SnapshotFailure('submodule-snapshot-unsupported')
-        with _git_output(repo, 'index-flags', ['ls-files', '-v', '-z']) as (handle, _):
-            # These flags can hide working bytes from diff; do not call that state fresh.
-            if any(record[:1].islower() or record.startswith(b'S ') for record in _records(handle)):
-                raise SnapshotFailure('hidden-worktree-paths-unsupported')
-        with _git_output(repo, 'working-diff', ['diff', '--binary', '--no-ext-diff', '--no-textconv', '--no-renames']) as (handle, _):
-            _hash_stream(digest, b'working-diff', handle)
+            with _git_output(repo, 'index-flags', ['ls-files', '-v', '-z']) as (flags, _):
+                if any(record[:1].islower() or record.startswith(b'S ') for record in _records(flags)):
+                    raise SnapshotFailure('hidden-worktree-paths-unsupported')
+            handle.seek(0)
+            root_fd = os.open(repo, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                # Git clean filters can make different executable bytes produce the same diff.
+                # Bind raw tracked files, modes and symlink targets without running filters.
+                for record in _records(handle):
+                    relative = record.split(b'\t', 1)[1]
+                    _hash_worktree_path(digest, root_fd, relative, allow_missing=True)
+            finally:
+                os.close(root_fd)
         with _git_output(repo, 'untracked', ['ls-files', '--others', '--exclude-standard', '-z']) as (handle, _):
             root_fd = os.open(repo, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
             try:
                 for relative in _records(handle):
-                    _hash_untracked(digest, root_fd, relative)
+                    _hash_worktree_path(digest, root_fd, relative)
             finally:
                 os.close(root_fd)
         return {'head': head, 'working_snapshot': digest.hexdigest(), 'complete': True}

@@ -39,8 +39,10 @@ Use a simple `git status --short` when only a clean/dirty answer is needed; a fu
 extra local I/O. Read the compact result before fetching more. An incomplete or stale result requires a targeted refresh;
 a matching pair of observations is not proof of filesystem isolation. Context and gate digests use
 separate versioned formats: never substitute one for the other. Hidden Git index flags and submodules
-must be resolved explicitly when the context collector reports them incomplete. The completion gate
-separately binds initialized nested Git repositories recursively, including their working changes.
+must be resolved explicitly when the context collector reports them incomplete.
+Context snapshot v3 streams tracked worktree bytes, modes, and symlink targets directly; a clean filter's
+normalized Git diff cannot establish freshness. This adds file-reading cost even in a clean checkout.
+The completion gate separately binds initialized nested Git repositories recursively, including their working changes.
 Absent and empty uninitialized gitlinks have explicit identities; required checks still determine
 whether their contents are needed. Nonempty invalid checkouts and hidden index flags fail closed.
 
