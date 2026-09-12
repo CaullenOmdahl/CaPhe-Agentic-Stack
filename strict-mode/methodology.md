@@ -75,6 +75,9 @@ Implementation review is PR-based on the actual diff. Local review prepares desi
 explicitly recorded fallback when PR review is genuinely unavailable. Reviewing design is not reviewing
 implementation. At most two revise-and-re-review rounds are allowed before human tie-break.
 
+When a defect repeats across entrypoints, inspect sibling implementations for that same defect before
+pushing the repair. Bound this search to the defect class and add regressions at the affected boundaries.
+
 The packaged `strict-confer` peers are Claude Code, agy (Gemini-family), and Codex; direct Gemini CLI is
 not assumed equivalent. Reviewer models come from an owner-only per-machine configuration: agy requires a
 Gemini Pro High tier, Codex a non-lightweight current GPT tier, and Claude Sonnet or Opus. Overrides require
