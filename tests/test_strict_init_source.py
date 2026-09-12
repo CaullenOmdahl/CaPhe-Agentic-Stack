@@ -290,12 +290,114 @@ class StrictInitSourceTests(unittest.TestCase):
             self.assertEqual((repo/'post-input').read_text(),'stdin preserved\nargument with spaces\n')
             self.assertEqual((managed/'private-note').read_text(),'preserve unrelated bytes\n')
 
+    def test_forwarded_target_changes_block_active_refresh_without_mutation(self):
+        for change in ("bytes", "mode", "symlink", "removed"):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve(); repo = self.repo(root)
+                custom = repo / "custom-hooks"; custom.mkdir()
+                target = custom / "commit-msg"
+                target.write_text("#!/bin/sh\nexit 0\n"); target.chmod(0o755)
+                git(repo, "config", "core.hooksPath", custom.name)
+                initializer.initialize(ROOT / "strict-mode", repo)
+                managed = Path(git(repo, "config", "core.hooksPath"))
+                if change == "bytes":
+                    target.write_text("#!/bin/sh\nexit 7\n")
+                elif change == "mode":
+                    target.chmod(0o700)
+                elif change == "symlink":
+                    other = custom / "alternate"
+                    other.write_bytes(target.read_bytes()); other.chmod(0o755)
+                    target.unlink(); target.symlink_to(other.name)
+                else:
+                    target.unlink()
+                before = self.hook_snapshot(root)
+                with self.assertRaisesRegex(initializer.InitError, "forwarded|original hook"):
+                    initializer.initialize(ROOT / "strict-mode", repo)
+                self.assertEqual(self.hook_snapshot(root), before)
+                with self.assertRaises(initializer.InitError):
+                    initializer.read_activation(repo, managed)
+
+    def test_forwarded_target_changes_reconcile_only_via_selected_original_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); repo = self.repo(root)
+            custom = repo / "custom-hooks"; custom.mkdir()
+            for name in ("commit-msg", "pre-push"):
+                target = custom / name
+                target.write_text("#!/bin/sh\nexit 0\n"); target.chmod(0o755)
+            git(repo, "config", "core.hooksPath", custom.name)
+            initializer.initialize(ROOT / "strict-mode", repo)
+            managed = Path(git(repo, "config", "core.hooksPath"))
+            target = custom / "commit-msg"
+            target.write_text("#!/bin/sh\n# accepted update\nexit 0\n")
+            with self.assertRaises(initializer.InitError):
+                initializer.initialize(ROOT / "strict-mode", repo)
+            git(repo, "config", "--worktree", "core.hooksPath", custom.name)
+            initializer.initialize(ROOT / "strict-mode", repo)
+            record = initializer.read_activation(repo, managed)
+            self.assertEqual(set(record["forwarded_targets"]), {"commit-msg", "pre-push"})
+            self.assertEqual(record["forwarded_targets"]["commit-msg"]["sha256"], hashlib.sha256(target.read_bytes()).hexdigest())
+            initializer.initialize(ROOT / "strict-mode", repo)
+
+    def test_reconciliation_retires_only_owned_forwarders_and_rolls_back_failed_probe(self):
+        for change in ("removed", "disabled", "new-directory"):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve(); repo = self.repo(root)
+                custom = repo / "original-hooks"; custom.mkdir()
+                original = custom / "commit-msg"
+                original.write_text("#!/bin/sh\nexit 0\n"); original.chmod(0o755)
+                git(repo, "config", "core.hooksPath", custom.name)
+                initializer.initialize(ROOT / "strict-mode", repo)
+                managed = Path(git(repo, "config", "core.hooksPath"))
+                unrelated = managed / "private-note"
+                unrelated.write_text("preserve unrelated file\n"); unrelated.chmod(0o640)
+                selected = custom
+                if change == "removed":
+                    original.unlink()
+                elif change == "disabled":
+                    original.chmod(0o644)
+                else:
+                    selected = repo / "new-empty-hooks"; selected.mkdir()
+                original_state = (original.read_bytes(), original.stat().st_mode) if original.exists() else None
+                git(repo, "config", "--worktree", "core.hooksPath", selected.name)
+                before = self.hook_snapshot(root)
+                with self.assertRaisesRegex(initializer.InitError, "probe"):
+                    initializer.initialize(ROOT / "strict-mode", repo, fail_probe=True)
+                self.assertEqual(self.hook_snapshot(root), before)
+                initializer.initialize(ROOT / "strict-mode", repo)
+                self.assertFalse((managed / "commit-msg").exists())
+                record = initializer.read_activation(repo, managed)
+                self.assertEqual(record["forwarded_hooks"], {})
+                self.assertEqual(record["forwarded_targets"], {})
+                self.assertEqual(unrelated.read_text(), "preserve unrelated file\n")
+                self.assertEqual(unrelated.stat().st_mode & 0o777, 0o640)
+                self.assertEqual((original.read_bytes(), original.stat().st_mode) if original.exists() else None, original_state)
+
+    def test_legacy_forwarders_require_explicit_original_directory_reconciliation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); repo = self.repo(root)
+            original = repo / ".git/hooks/commit-msg"
+            original.write_text("#!/bin/sh\nexit 0\n"); original.chmod(0o755)
+            initializer.initialize(ROOT / "strict-mode", repo)
+            managed = Path(git(repo, "config", "core.hooksPath"))
+            metadata = managed / initializer.ACTIVATION_FILE
+            record = json.loads(metadata.read_text())
+            record["schema"] = 1; record.pop("forwarded_targets", None)
+            metadata.write_text(json.dumps(record))
+            before = self.hook_snapshot(root)
+            with self.assertRaisesRegex(initializer.InitError, "forwarded.*target|legacy"):
+                initializer.initialize(ROOT / "strict-mode", repo)
+            self.assertEqual(self.hook_snapshot(root), before)
+            git(repo, "config", "--worktree", "core.hooksPath", ".git/hooks")
+            initializer.initialize(ROOT / "strict-mode", repo)
+            refreshed = initializer.read_activation(repo, managed)
+            self.assertEqual(refreshed["forwarded_targets"]["commit-msg"]["resolved"], str(original))
+
     def test_valid_legacy_metadata_never_adopts_unrecorded_forwarded_collision(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp).resolve(); repo=self.repo(root)
             initializer.initialize(ROOT/'strict-mode',repo)
             managed=Path(git(repo,'config','core.hooksPath')); metadata=managed/initializer.ACTIVATION_FILE
-            record=json.loads(metadata.read_text()); record.pop('forwarded_hooks'); metadata.write_text(json.dumps(record))
+            record=json.loads(metadata.read_text()); record['schema']=1; record.pop('forwarded_hooks'); record.pop('forwarded_targets', None); metadata.write_text(json.dumps(record))
             initializer.initialize(ROOT/'strict-mode',repo)  # Closed legacy record still refreshes.
             old=repo/'.git/hooks/post-commit'; old.write_text('#!/bin/sh\nexit 0\n'); old.chmod(0o755)
             collision=managed/'post-commit'; collision.write_text('unowned custom destination\n'); collision.chmod(0o640)

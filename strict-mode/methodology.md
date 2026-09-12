@@ -56,11 +56,15 @@ Checks cover staged, unstaged, and non-ignored untracked working files. A change
 execution is not green. Commands run in declared order within each component unless `parallel_safe: true`
 explicitly declares independence; selected dependent components wait for their prerequisites. Failed
 preparation blocks dependent checks. Use explicit timeouts for commands that can stall.
+Check and toolchain-probe working directories must resolve inside the repository. Custom dependency
+verifiers use `dependency_verification.timeout_seconds` (default 10); timeout leaves the dependency
+claim unproven and falls back to full checks.
 `--report` writes a private diagnostic outside Git. Candidate-produced reports cannot certify their own
 authority; automatic CI evidence reuse remains unavailable without an independently trusted executor.
 Run the uncached full local matrix when that independently verified CI evidence is absent.
 Generated default manifests assign Python test signals to their nearest declared project. Declared nested
-projects run independently and ancestor pytest commands ignore them, preventing duplicate collection.
+projects run independently and ancestor pytest/unittest commands exclude them before collection,
+preventing duplicate imports and execution.
 Pytest configuration or dependencies in PEP 621, standardized groups, Poetry tables, or requirements
 select `python -m pytest`; otherwise the project uses unittest discovery. Dart, Node, Cargo, and Go roots
 remain independently discovered.

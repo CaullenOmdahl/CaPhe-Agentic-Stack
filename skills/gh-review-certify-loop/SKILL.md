@@ -53,8 +53,12 @@ Use this loop until certified or blocked:
 4. Fetch PR state with thread awareness:
    - Prefer the `gh-address-comments` skill/script when available.
    - Otherwise use `gh api graphql` to read `reviewThreads { isResolved isOutdated path line comments }`, reviews, and PR comments.
+   - Inspect review-summary bodies as well as inline threads. Carry unresolved summary findings across
+     heads with source-review, fix-commit, and verification references. Fetch omitted pages or report
+     incomplete review coverage; an empty thread list or truncated response cannot certify review.
 5. Classify findings:
-   - **Current actionable**: non-outdated unresolved bot thread that still describes a real issue in current code.
+   - **Current actionable**: an unresolved bot finding in a thread or review summary that still describes
+     a real issue in current code, including findings carried forward from earlier heads.
    - **Stale anchor**: unresolved/non-outdated thread whose requested change is already present or whose referenced code no longer behaves that way.
    - **Waiting**: one bot has not posted a review for the current head after the 7-minute wait.
    - **Blocked**: conflicting feedback, failing required checks unrelated to the fix, missing auth, or unclear product behavior.

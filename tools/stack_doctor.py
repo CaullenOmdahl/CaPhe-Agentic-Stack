@@ -86,7 +86,8 @@ def _chain_status(repo, hookdir, runtime):
         validator = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(validator)
         record = validator.read_activation(repo, hookdir, canon=runtime / "strict-mode")
-        return {"verified": True, "chain_sha256": record["chain_sha256"], "original_hook_present": record["previous_hook"] is not None}
+        return {"verified": True, "chain_sha256": record["chain_sha256"], "original_hook_present": record["previous_hook"] is not None,
+                "forwarded_hook_count": len(record.get("forwarded_hooks", {}))}
     except (OSError, ValueError, RuntimeError) as error:
         return {"verified": False, "reason": str(error)}
 

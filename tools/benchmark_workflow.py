@@ -324,6 +324,15 @@ def aggregate_attempts(events, card, incumbent_config='incumbent'):
             'rate_card': {'date': card['date'], 'currency': card['currency']}}
 
 
+def _unique_json_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise BenchmarkError('duplicate keys in benchmark JSON')
+        result[key] = value
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--card', required=True)
@@ -331,8 +340,9 @@ def main():
     args = parser.parse_args()
     try:
         with open(args.card, encoding='utf-8') as handle:
-            card = json.load(handle)
-        events = [json.loads(line) for line in sys.stdin if line.strip()]
+            card = json.load(handle, object_pairs_hook=_unique_json_object)
+        events = [json.loads(line, object_pairs_hook=_unique_json_object)
+                  for line in sys.stdin if line.strip()]
         print(json.dumps(aggregate_attempts(events, card, args.incumbent), sort_keys=True, allow_nan=False))
     except (BenchmarkError, ValueError, TypeError, OSError) as error:
         parser.exit(2, f'benchmark rejected: {error}\n')

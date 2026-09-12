@@ -1,4 +1,9 @@
 import copy
+import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
 from tools.benchmark_workflow import aggregate_attempts, BenchmarkError
 
@@ -247,6 +252,49 @@ class BenchmarkTests(unittest.TestCase):
         result = aggregate_attempts([event(latency_ms=2000, external_wait_ms=500)], card())
         self.assertEqual(result['latency_ms']['external_wait_median'], 500)
         self.assertEqual(result['latency_ms']['median'], 2000)
+
+
+class BenchmarkCliTests(unittest.TestCase):
+    def run_cli(self, events_json, card_json):
+        with tempfile.TemporaryDirectory() as directory:
+            rates = Path(directory) / 'rates.json'
+            rates.write_text(card_json, encoding='utf-8')
+            return subprocess.run([sys.executable,
+                str(Path(__file__).resolve().parents[1] / 'tools/benchmark_workflow.py'),
+                '--card', str(rates)], input=events_json, cwd=directory,
+                capture_output=True, text=True, timeout=10)
+
+    def assert_duplicate_rejected(self, result):
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.stdout, '')
+        self.assertIn('benchmark rejected: duplicate keys', result.stderr)
+        self.assertNotIn('Traceback', result.stderr)
+
+    def test_cli_rejects_duplicate_event_keys_including_nested_usage(self):
+        encoded = json.dumps(event())
+        cases = [encoded[:-1] + ', "outcome": "rejected"}',
+                 json.dumps(event(outcome='rejected'))[:-1] + ', "outcome": "accepted"}',
+                 encoded.replace('"input_tokens": 1000',
+                                 '"input_tokens": 2000, "input_tokens": 1000')]
+        for events_json in cases:
+            with self.subTest(events_json=events_json):
+                self.assert_duplicate_rejected(self.run_cli(events_json, json.dumps(card())))
+
+    def test_cli_rejects_duplicate_rate_card_keys_including_nested_rates(self):
+        encoded = json.dumps(card())
+        cases = [encoded[:-1] + ', "currency": "EUR"}',
+                 encoded.replace('"input_per_million": 1',
+                                 '"input_per_million": 10, "input_per_million": 1', 1)]
+        for card_json in cases:
+            with self.subTest(card_json=card_json):
+                self.assert_duplicate_rejected(self.run_cli(json.dumps(event()), card_json))
+
+    def test_cli_accepts_unique_event_and_rate_card_keys(self):
+        result = self.run_cli(json.dumps(event()) + '\n', json.dumps(card()))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = json.loads(result.stdout)
+        self.assertEqual(result['accepted_tasks'], 1)
+        self.assertAlmostEqual(result['spend'], 0.00084)
 
 
 if __name__ == '__main__':
