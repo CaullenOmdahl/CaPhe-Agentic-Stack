@@ -211,3 +211,12 @@ mismatch. Preserve the original hook and its arguments/stdin behavior throughout
 A project without a proven affected graph retains its full checks. Do not replace a carefully maintained
 manifest with a generated default. A machine update does not claim application release, hardware
 readiness, or a completed production deployment. Keep detailed rollout inventories and exceptions private.
+
+This repository's CI runs the required runner and manifest from the exact PR base commit against the
+candidate checkout. Pushes to main use the preceding main commit; missing baseline policy fails closed.
+Both checkouts disable persisted credentials. Candidate runner/manifest edits cannot remove the baseline
+checks. The job also rejects changed HEAD, index entries/flags, or nonignored source state after checks.
+The workflow and test sources still require independent review: this is not tamper-proof attestation or
+a trusted receipt service. Additions to the candidate's check matrix need separate verification until
+they become accepted baseline policy. GitHub's [PR event semantics](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request)
+and [checkout configuration](https://github.com/actions/checkout) define the checkout boundary.

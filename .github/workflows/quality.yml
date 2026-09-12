@@ -17,8 +17,33 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: candidate
+          persist-credentials: false
+      - name: Checkout required policy from the accepted base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.before }}
+          path: required-policy
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Complete uncached verification matrix
-        run: python3 strict-mode/bin/strict_gate.py --mode completion
+      - name: Complete required uncached verification matrix
+        working-directory: candidate
+        shell: bash
+        env:
+          CAPHE_REQUIRED_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          policy="$GITHUB_WORKSPACE/required-policy"
+          test "$(git -C "$policy" rev-parse HEAD)" = "$CAPHE_REQUIRED_REF"
+          test -z "$(git -C "$policy" status --porcelain=v1 --untracked-files=all)"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          before_head=$(git rev-parse HEAD)
+          before_index=$(git ls-files --stage -v -z | git hash-object --stdin)
+          python3 -I "$policy/strict-mode/bin/strict_gate.py" \
+            --manifest "$policy/.agent/strict-gate.json" --mode completion
+          test "$(git rev-parse HEAD)" = "$before_head"
+          test "$(git ls-files --stage -v -z | git hash-object --stdin)" = "$before_index"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
