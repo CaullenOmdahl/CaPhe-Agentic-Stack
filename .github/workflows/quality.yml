@@ -10,13 +10,15 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: python3 -m unittest discover -s tests -v
-      - run: bash strict-mode/test/shell-syntax-test.sh
-      - run: bash strict-mode/test/strict-confer-isolation-test.sh
-      - run: bash test/public-safety-test.sh
+      - name: Complete uncached verification matrix
+        run: python3 strict-mode/bin/strict_gate.py --mode completion

@@ -1,0 +1,220 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "acceptance": {
+      "items": {
+        "maxLength": 2000,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 50,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "allowed_writes": {
+      "items": {
+        "maxLength": 2000,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 50,
+      "minItems": 0,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "canon_refs": {
+      "items": {
+        "maxLength": 2000,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 50,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "canonical_review_role": {
+      "type": "boolean"
+    },
+    "children": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptance": {
+            "items": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "allowed_writes": {
+            "items": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 0,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "goal": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "task_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "goal",
+          "acceptance",
+          "allowed_writes"
+        ],
+        "type": "object"
+      },
+      "maxItems": 2,
+      "minItems": 0,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "escalation": {
+      "const": "parent"
+    },
+    "exclusions": {
+      "items": {
+        "maxLength": 2000,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 50,
+      "minItems": 0,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "goal": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "type": "string"
+    },
+    "lane": {
+      "enum": [
+        "mechanically-proven",
+        "scoped-behavior",
+        "full-risk"
+      ]
+    },
+    "max_workers": {
+      "maximum": 2,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "output_limits": {
+      "additionalProperties": false,
+      "properties": {
+        "max_bytes": {
+          "maximum": 65536,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_words": {
+          "maximum": 2000,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_bytes",
+        "max_words"
+      ],
+      "type": "object"
+    },
+    "parent_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "type": "string"
+    },
+    "repair_budget": {
+      "additionalProperties": false,
+      "properties": {
+        "max_repairs": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_repairs"
+      ],
+      "type": "object"
+    },
+    "required_checks": {
+      "items": {
+        "maxLength": 2000,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 50,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "source": {
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$",
+          "type": "string"
+        },
+        "revision": {
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+          "type": "string"
+        },
+        "snapshot_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repository",
+        "revision",
+        "snapshot_digest"
+      ],
+      "type": "object"
+    },
+    "task_class": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "source",
+    "goal",
+    "acceptance",
+    "allowed_writes",
+    "exclusions",
+    "lane",
+    "canon_refs",
+    "required_checks",
+    "output_limits",
+    "repair_budget",
+    "escalation",
+    "task_class",
+    "parent_id",
+    "children",
+    "max_workers"
+  ],
+  "type": "object"
+}

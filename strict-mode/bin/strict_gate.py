@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic affected/full verification planner for Strict Mode v2 (ADR-0001)."""
+"""Deterministic affected/full verification planner for Strict Mode v3 (ADR-0004)."""
 
 from __future__ import annotations
 
@@ -9,12 +9,17 @@ import functools
 import fnmatch
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
+import platform
 import re
+import signal
+import stat
 import subprocess
 import sys
 import tempfile
+import time
 import tomllib
 from typing import Any, Iterable, NamedTuple
 
@@ -52,6 +57,8 @@ class CommandSpec(NamedTuple):
     cache_inputs: tuple[str, ...] = ()
     cache_env: tuple[str, ...] = ()
     toolchain: tuple[tuple[str, ...], ...] = ()
+    timeout_seconds: float | None = None
+    after: tuple[str, ...] = ()
 
 
 @functools.lru_cache(maxsize=1)
@@ -119,6 +126,14 @@ def validate_manifest(data: dict[str, Any]) -> dict[str, Any]:
                 raise ManifestError(f"duplicate command {name}:{command_name}")
             command_ids.add((name, command_name))
             _require_string_list(argv, f"{name}.{command_name}.run", nonempty=True)
+            if type(command.get("parallel_safe", False)) is not bool:
+                raise ManifestError(f"{name}.{command_name}.parallel_safe must be boolean")
+            timeout = command.get("timeout_seconds")
+            if timeout is not None and (
+                isinstance(timeout, bool) or not isinstance(timeout, (int, float))
+                or not math.isfinite(timeout) or timeout <= 0
+            ):
+                raise ManifestError(f"{name}.{command_name}.timeout_seconds must be positive and finite")
             if command.get("cache", False):
                 _require_string_list(command.get("cache_inputs"), f"{name}.{command_name}.cache_inputs", nonempty=True)
                 _require_string_list(command.get("cache_env"), f"{name}.{command_name}.cache_env")
@@ -222,6 +237,10 @@ def _command_specs(component: dict[str, Any], *, completion: bool) -> list[Comma
                 cache_inputs=tuple(command.get("cache_inputs", [])),
                 cache_env=tuple(command.get("cache_env", [])),
                 toolchain=tuple(tuple(probe) for probe in command.get("toolchain", [])),
+                timeout_seconds=command.get("timeout_seconds"),
+                after=() if command.get("parallel_safe", False) else tuple(
+                    f"{prior.component}:{prior.name}" for prior in result
+                ),
             )
         )
     return result
@@ -266,52 +285,84 @@ def build_plan(
                 ):
                     selected.add(component["name"])
                     changed_selection = True
-    return [
+    plan = [
         command
         for component in components
         if component["name"] in selected
         for command in _command_specs(component, completion=completion)
     ]
+    # A selected dependent component waits for selected prerequisite components.
+    dependencies = {component["name"]: component.get("depends_on", []) for component in components}
+    return [command._replace(after=tuple(dict.fromkeys((*command.after, *(
+        f"{prior.component}:{prior.name}" for prior in plan
+        if prior.component in dependencies[command.component]
+    ))))) for command in plan]
 
 
-def _hash_file(path: Path, digest: "hashlib._Hash") -> None:
-    digest.update(str(path).encode())
-    if not path.is_file():
-        digest.update(b"<missing>")
-        return
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
+def _hash_file(root: Path, path: Path, digest: "hashlib._Hash") -> None:
+    """Bind regular-file bytes and mode without following any input symlink."""
+    relative = path.relative_to(root)
+    parent = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for part in relative.parts[:-1]:
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+            os.close(parent)
+            parent = child
+        descriptor = os.open(relative.parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
+        with os.fdopen(descriptor, "rb") as handle:
+            before = os.fstat(handle.fileno())
+            if not stat.S_ISREG(before.st_mode):
+                raise ManifestError("cache inputs must be regular files")
+            name = os.fsencode(str(path))
+            digest.update(len(name).to_bytes(8, "big") + name)
+            digest.update(f"{before.st_mode}:{before.st_size}\0".encode())
+            for block in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(block)
+            after = os.fstat(handle.fileno())
+            identity = lambda info: (info.st_dev, info.st_ino, info.st_mode, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+            if identity(before) != identity(after):
+                raise ManifestError("cache input changed while hashing")
+    except OSError:
+        raise ManifestError("cache input is unreadable or uses a symlink") from None
+    finally:
+        os.close(parent)
 
 
 def cache_key(root: Path, command: CommandSpec, manifest_identity: str) -> str:
     if not command.cache_allowed:
         raise ManifestError("cache key requested for a non-cacheable command")
-    digest = hashlib.sha256()
+    if not command.cache_inputs or not command.toolchain:
+        raise ManifestError("cache identity requires input files and toolchain probes")
+    root = root.resolve()
+    digest = hashlib.sha256(b"caphe-feedback-cache-v2\0")
     digest.update(manifest_identity.encode())
     digest.update(json.dumps(command._asdict(), sort_keys=True).encode())
+    # Probe first, so any resulting input mutation is reflected in the file hashes below.
+    for probe in command.toolchain:
+        try:
+            result = subprocess.run(
+                probe, cwd=root / command.cwd, text=True, capture_output=True,
+                check=False, env=command_environment(), timeout=10,
+            )
+        except (OSError, subprocess.SubprocessError):
+            raise ManifestError("cache toolchain probe could not complete") from None
+        if result.returncode != 0:
+            raise ManifestError("cache toolchain probe failed")
+        digest.update(json.dumps(probe).encode())
+        for output in (result.stdout, result.stderr):
+            payload = output.encode()
+            digest.update(len(payload).to_bytes(8, "big") + payload)
     for pattern in command.cache_inputs:
+        if Path(pattern).is_absolute() or ".." in Path(pattern).parts:
+            raise ManifestError("cache inputs must stay inside the repository")
         matches = sorted(root.glob(pattern))
         if not matches:
-            digest.update(f"missing:{pattern}".encode())
+            raise ManifestError("cache input pattern has no matches")
         for path in matches:
-            _hash_file(path, digest)
+            _hash_file(root, path, digest)
     for name in command.cache_env:
         digest.update(name.encode())
         digest.update(os.environ.get(name, "<unset>").encode())
-    for probe in command.toolchain:
-        result = subprocess.run(
-            probe,
-            cwd=root,
-            text=True,
-            capture_output=True,
-            check=False,
-            env=command_environment(),
-        )
-        digest.update(json.dumps(probe).encode())
-        digest.update(str(result.returncode).encode())
-        digest.update(result.stdout.encode())
-        digest.update(result.stderr.encode())
     return digest.hexdigest()
 
 
@@ -322,16 +373,30 @@ def _run_one(root: Path, command: CommandSpec, manifest_identity: str, cache_dir
         cache_file = cache_dir / f"{key}.ok"
         if cache_file.is_file():
             return command, 0, "", True
-    result = subprocess.run(
-        command.argv,
-        cwd=root / command.cwd,
-        text=True,
-        capture_output=True,
-        check=False,
-        env=command_environment(),
-    )
-    output = result.stdout + result.stderr
-    if result.returncode == 0 and cache_file is not None:
+    try:
+        process = subprocess.Popen(
+            command.argv, cwd=root / command.cwd, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env=command_environment(), start_new_session=(os.name == "posix"),
+        )
+    except OSError as error:
+        return command, 127, f"command could not start: {error}", False
+    try:
+        stdout, stderr = process.communicate(timeout=command.timeout_seconds)
+        code = process.returncode
+        output = stdout + stderr
+    except subprocess.TimeoutExpired:
+        try:
+            if os.name == "posix":
+                os.killpg(process.pid, signal.SIGKILL)
+            else:
+                process.kill()
+        except ProcessLookupError:
+            pass
+        stdout, stderr = process.communicate()
+        code = 124
+        output = stdout + stderr + f"\ncommand timeout after {command.timeout_seconds}s"
+    if code == 0 and cache_file is not None:
         cache_file.parent.mkdir(parents=True, exist_ok=True)
         lock = cache_file.with_suffix(".lock")
         try:
@@ -347,16 +412,145 @@ def _run_one(root: Path, command: CommandSpec, manifest_identity: str, cache_dir
                 lock.rmdir()
             except OSError:
                 pass
-    return command, result.returncode, output, False
+    return command, code, output, False
 
 
-def execute_plan(root: Path, plan: list[CommandSpec], manifest_identity: str, jobs: int) -> int:
+def _git_bytes(root: Path, *args: str, check: bool = True) -> bytes:
+    result = subprocess.run(
+        ["git", *args], cwd=root, capture_output=True, check=check,
+        env=command_environment(), timeout=30,
+    )
+    return result.stdout
+
+
+def changed_paths(root: Path) -> list[str]:
+    """Cover the actual working state that checks execute, including unstaged and new paths."""
+    paths = set(_git_paths(root, "diff", "--cached", "--no-renames", "--name-only"))
+    paths.update(_git_paths(root, "diff", "--no-renames", "--name-only"))
+    paths.update(_git_paths(root, "ls-files", "--others", "--exclude-standard"))
+    return sorted(paths)
+
+
+def snapshot_identity(root: Path) -> dict[str, Any]:
+    flags = _git_bytes(root, "ls-files", "-v", "-z").split(b"\0")
+    if any(record[:1].islower() or record.startswith(b"S ") for record in flags if record):
+        raise ManifestError("snapshot incomplete: assume-unchanged or skip-worktree flags hide working files")
+    index = _git_bytes(root, "ls-files", "--stage", "-z").split(b"\0")
+    if any(record.startswith(b"160000 ") for record in index):
+        raise ManifestError("snapshot incomplete: submodule working content is unsupported")
+    revision = _git_bytes(root, "rev-parse", "--verify", "HEAD", check=False).decode().strip() or None
+    digest = hashlib.sha256(b"caphe-working-snapshot-v1\0")
+    digest.update((revision or "unborn").encode())
+    for args in (
+        ("diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv"),
+        ("diff", "--binary", "--no-ext-diff", "--no-textconv"),
+    ):
+        payload = _git_bytes(root, *args)
+        digest.update(len(payload).to_bytes(8, "big"))
+        digest.update(payload)
+    for relative in sorted(_git_paths(root, "ls-files", "--others", "--exclude-standard")):
+        path = root / relative
+        for parent in path.parents:
+            if parent == root:
+                break
+            if parent.is_symlink():
+                raise ManifestError("snapshot path has a symlinked parent")
+        name = os.fsencode(relative)
+        digest.update(len(name).to_bytes(8, "big"))
+        digest.update(name)
+        if path.is_symlink():
+            digest.update(b"link\0" + os.fsencode(os.readlink(path)))
+        elif path.is_file():
+            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(descriptor, "rb") as handle:
+                before = os.fstat(handle.fileno())
+                if not stat.S_ISREG(before.st_mode):
+                    raise ManifestError("snapshot path is not a regular file")
+                digest.update(f"file:{before.st_mode & 0o777}:{before.st_size}\0".encode())
+                for block in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(block)
+                after = os.fstat(handle.fileno())
+                if (before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+                    raise ManifestError("snapshot path changed during hashing")
+        else:
+            raise ManifestError(f"snapshot path changed or has unsupported type: {relative}")
+    return {"revision": revision, "snapshot_digest": digest.hexdigest(), "dirty": bool(changed_paths(root))}
+
+
+def _report_destination(path: Path) -> Path:
+    """Diagnostics stay owner-only outside repositories; they never attest their own authority."""
+    path = path.expanduser().absolute()
+    for component in (path, *path.parents):
+        if component.is_symlink():
+            raise ManifestError("report destination must not contain a symlink")
+    if '.git' in path.parts or any(left == '.codex' and right in ('sessions', 'memories')
+                                 for left, right in zip(path.parts, path.parts[1:])):
+        raise ManifestError("diagnostics cannot replace Git metadata or canonical records")
+    nearest = path.parent
+    while not nearest.exists():
+        nearest = nearest.parent
+    in_git = subprocess.run(
+        ["git", "-C", str(nearest), "rev-parse", "--is-inside-work-tree"],
+        capture_output=True, text=True, env=command_environment(), timeout=10,
+    )
+    if in_git.returncode == 0 and in_git.stdout.strip() == "true":
+        raise ManifestError("diagnostic report must be outside Git worktrees")
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    parent_stat = path.parent.stat()
+    if parent_stat.st_mode & 0o077 or parent_stat.st_uid != os.getuid():
+        raise ManifestError("diagnostic report parent must be owner-only")
+    return path
+
+
+def execute_plan(
+    root: Path, plan: list[CommandSpec], manifest_identity: str, jobs: int,
+    *, report_path: Path | None = None, mode: str = "affected",
+) -> int:
+    destination = _report_destination(report_path) if report_path is not None else None
+    before = snapshot_identity(root)
+    started = time.monotonic()
+    outcomes = []
     cache_dir = root / ".agent" / "cache" / "strict-gate"
     failures = 0
+    by_id = {f"{command.component}:{command.name}": command for command in plan}
+    if len(by_id) != len(plan) or any(set(command.after) - set(by_id) for command in plan):
+        raise ManifestError("execution plan has duplicate or missing command dependencies")
+    pending = dict(by_id)
+    finished = {}
+    running = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, jobs)) as executor:
-        futures = [executor.submit(_run_one, root, command, manifest_identity, cache_dir) for command in plan]
-        for future in futures:
-            command, code, output, cached = future.result()
+        while pending or running:
+            for identifier, command in list(pending.items()):
+                if not set(command.after).issubset(finished):
+                    continue
+                if any(finished[prior][1] != 0 for prior in command.after):
+                    finished[identifier] = (command, 126, "prerequisite check failed; command was not run", False)
+                    del pending[identifier]
+                elif len(running) < max(1, jobs):
+                    running[executor.submit(_run_one, root, command, manifest_identity, cache_dir)] = identifier
+                    del pending[identifier]
+            if running:
+                completed, _ = concurrent.futures.wait(running, return_when=concurrent.futures.FIRST_COMPLETED)
+                for future in completed:
+                    identifier = running.pop(future)
+                    try:
+                        finished[identifier] = future.result()
+                    except Exception as error:
+                        finished[identifier] = (by_id[identifier], 125, f"check execution failed: {error}", False)
+            elif pending:
+                # Failed prerequisites can unblock further skipped descendants on the next pass.
+                if any(set(command.after).issubset(finished) for command in pending.values()):
+                    continue
+                raise ManifestError("execution plan contains a dependency cycle")
+        for command in plan:
+            command, code, output, cached = finished[f"{command.component}:{command.name}"]
+            outcomes.append({
+                "component": command.component, "name": command.name,
+                "argv": list(command.argv), "cwd": command.cwd,
+                "after": list(command.after),
+                "exit_code": code, "cached": cached,
+                "output_sha256": hashlib.sha256(output.encode()).hexdigest(),
+            })
             label = f"{command.component}:{command.name}"
             if cached:
                 print(f"CACHE {label}")
@@ -367,12 +561,35 @@ def execute_plan(root: Path, plan: list[CommandSpec], manifest_identity: str, jo
                 print(f"FAIL  {label}", file=sys.stderr)
                 if output:
                     print(output.rstrip(), file=sys.stderr)
+    after = snapshot_identity(root)
+    stale = before != after
+    if stale:
+        failures += 1
+        print("FAIL  source changed while checks ran; rerun against the resulting snapshot", file=sys.stderr)
+    if destination is not None:
+        report = {
+            "schema_version": 1, "kind": "diagnostic-gate-report", "authoritative": False,
+            "authority_reason": "candidate execution has no independently trusted executor",
+            "mode": mode, "manifest_digest": manifest_identity,
+            "source_before": before, "source_after": after, "stale_source": stale,
+            "platform": {"system": platform.system(), "machine": platform.machine()},
+            "commands": outcomes, "exit_code": 1 if failures else 0,
+            "elapsed_ms": round((time.monotonic() - started) * 1000),
+        }
+        with tempfile.NamedTemporaryFile("w", dir=destination.parent, delete=False, encoding="utf-8") as handle:
+            json.dump(report, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            temporary = Path(handle.name)
+        try:
+            os.chmod(temporary, 0o600)
+            os.replace(temporary, destination)
+        finally:
+            temporary.unlink(missing_ok=True)
     return 1 if failures else 0
 
 
 def _git_paths(root: Path, *args: str) -> list[str]:
-    result = subprocess.run(["git", *args], cwd=root, text=True, capture_output=True, check=True)
-    return [line for line in result.stdout.splitlines() if line]
+    return [os.fsdecode(path) for path in _git_bytes(root, *args, "-z").split(b"\0") if path]
 
 
 def _relative_cwd(root: Path, manifest: Path) -> str:
@@ -714,6 +931,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--changed", action="append", default=[])
     parser.add_argument("--jobs", type=int, default=max(1, min(4, os.cpu_count() or 1)))
     parser.add_argument("--write-default-manifest", action="store_true")
+    parser.add_argument("--report", type=Path, help="owner-only diagnostic JSON outside Git; never an authoritative receipt")
     args = parser.parse_args(argv)
     root = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
     manifest_path = root / args.manifest
@@ -734,7 +952,7 @@ def main(argv: list[str] | None = None) -> int:
         data = validate_manifest(json.loads(raw))
         tracked = _git_paths(root, "ls-files")
         validate_path_coverage(data, tracked)
-        changed = args.changed or _git_paths(root, "diff", "--cached", "--name-only", "--diff-filter=ACMRD")
+        changed = sorted(set(args.changed) | set(changed_paths(root)))
         mode = "affected" if args.mode == "plan" else args.mode
         verified_dependencies = (
             verify_dependency_completeness(root, data) if mode == "affected" else set()
@@ -751,7 +969,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.mode == "plan":
         print(json.dumps([command._asdict() for command in plan], indent=2))
         return 0
-    code = execute_plan(root, plan, hashlib.sha256(raw).hexdigest(), args.jobs)
+    try:
+        code = execute_plan(root, plan, hashlib.sha256(raw).hexdigest(), args.jobs,
+                            report_path=args.report, mode=args.mode)
+    except (OSError, ManifestError, subprocess.SubprocessError) as error:
+        print(f"STRICT GATE EXECUTION ERROR: {error}", file=sys.stderr)
+        return 2
     if code:
         print("RED", file=sys.stderr)
     elif args.mode == "affected":
