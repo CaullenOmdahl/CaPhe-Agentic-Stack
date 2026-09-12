@@ -2,6 +2,8 @@ import copy
 from concurrent.futures import ThreadPoolExecutor
 import importlib.util
 import json
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -274,6 +276,53 @@ class StrictEvidenceTests(unittest.TestCase):
             for _ in range(3): encoded = quote(encoded, safe='')
             with self.subTest(raw=raw), self.assertRaises(strict_evidence.EvidenceError):
                 strict_evidence.validate_record(record(summary=encoded))
+
+    def test_duplicate_evidence_keys_reject_index_generation_without_replacing_index(self):
+        canonical = json.dumps(record())
+        cases = {
+            'id': canonical.replace('"id": "change-001"', '"id": "other-id", "id": "change-001"'),
+            'nested-status': canonical.replace('"validation": {"status": "pending"', '"validation": {"status": "failed", "status": "passed"', 1),
+            'identical-id': canonical.replace('"id": "change-001"', '"id": "change-001", "id": "change-001"'),
+        }
+        for kind, content in cases.items():
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve(); directory = root / '.agent/evidence'; directory.mkdir(parents=True)
+                path = directory / 'change-001.json'; path.write_text(content)
+                index = root / '.agent/traceability.md'; index.write_text('Prior index must survive.\n')
+                with self.assertRaises(strict_evidence.EvidenceError): strict_evidence.generate_index(root)
+                self.assertEqual(path.read_text(), content)
+                self.assertEqual(index.read_text(), 'Prior index must survive.\n')
+
+    def test_duplicate_existing_record_cannot_be_adopted_as_idempotent_write(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); item = record()
+            path = strict_evidence.write_record(root, item)
+            content = json.dumps(item).replace('"id": "change-001"', '"id": "other-id", "id": "change-001"')
+            path.write_text(content)
+            with self.assertRaisesRegex(strict_evidence.EvidenceError, 'duplicate keys'):
+                strict_evidence.write_record(root, item)
+            self.assertEqual(path.read_text(), content)
+
+    def test_cli_record_and_active_source_files_reject_duplicate_keys(self):
+        for kind in ('record', 'active-source'):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp:
+                base = Path(tmp).resolve(); root = base / 'repo'; root.mkdir()
+                incoming = base / 'incoming.json'
+                if kind == 'record':
+                    content = json.dumps(record()).replace('"id": "change-001"', '"id": "other-id", "id": "change-001"')
+                    arguments = [str(incoming)]
+                else:
+                    content = json.dumps(record()['source']).replace('"repository": "example/project"', '"repository": "other/project", "repository": "example/project"')
+                    arguments = ['--active-source', str(incoming)]
+                incoming.write_text(content)
+                result = subprocess.run([sys.executable, str(MODULE_PATH), '--root', str(root), *arguments],
+                                        capture_output=True, text=True, timeout=5)
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn('duplicate keys', result.stderr)
+                self.assertEqual(result.stdout, '')
+                self.assertFalse((root / '.agent/traceability.md').exists())
+                self.assertEqual(list(root.rglob('*.json')), [])
+                self.assertEqual(incoming.read_text(), content)
 
 
 if __name__ == '__main__':

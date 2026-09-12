@@ -377,11 +377,22 @@ def _canonical(record):
     return json.dumps(record, indent=2, sort_keys=True, allow_nan=False) + '\n'
 
 
+def _unique_json_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise EvidenceError('duplicate keys in evidence JSON')
+        result[key] = value
+    return result
+
+
 def _read(path):
     if path.is_symlink() or not path.is_file():
         raise EvidenceError('evidence records must be regular files')
     try:
-        return json.loads(path.read_text(encoding='utf-8'))
+        return json.loads(path.read_text(encoding='utf-8'), object_pairs_hook=_unique_json_object)
+    except EvidenceError:
+        raise
     except (ValueError, OSError) as error:
         raise EvidenceError('cannot read valid evidence JSON') from error
 
