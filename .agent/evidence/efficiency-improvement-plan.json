@@ -1,0 +1,14 @@
+{
+  "id": "efficiency-improvement-plan",
+  "decision": "docs/efficiency-improvement-plan.md (proposal; no runtime activation)",
+  "lane": "scoped-behavior",
+  "status": "proposed",
+  "review": "https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/pull/8",
+  "tests": [
+    "Full local strict-green-gate.sh --mode completion passed all four declared command groups for the roadmap",
+    "Relative Markdown links resolve; git diff --check passed",
+    "Public-safety gate and targeted private-identifier check passed",
+    "Six document-assessment findings addressed and rechecked; canonical PR review remains recorded on the pull request"
+  ],
+  "approval": "Research and documentation requested; model, architecture, schema, and activation decisions remain proposed"
+}
