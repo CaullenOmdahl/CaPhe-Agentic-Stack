@@ -209,6 +209,7 @@ def _public_text(value):
     elif isinstance(value, str):
         patterns = (
             r'/(?:Users|home|private|tmp|etc)/', r'(?<![A-Za-z0-9])[A-Za-z]:[\\/]', r'~/',
+            r'(?<!\\)\\\\[^\\/\s]+[\\/][^\\/\s]+',
             r'(?:sk-|gh[pousr]_|github_' r'pat_)[A-Za-z0-9_-]{16,}',
             r'BEGIN [A-Z ]*PRIVATE KEY', r'(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{8,}',
             r'(?i)\b(?:password|api[_-]?key|access[_-]?token|secret)\s*[:=]\s*\S+',

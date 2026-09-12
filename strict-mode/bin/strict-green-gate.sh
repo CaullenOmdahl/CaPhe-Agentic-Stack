@@ -7,7 +7,7 @@ set -euo pipefail
 unset GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_CONFIG GIT_CONFIG_COUNT \
   GIT_CONFIG_PARAMETERS GIT_DIR GIT_GRAFT_FILE GIT_IMPLICIT_WORK_TREE GIT_INDEX_FILE \
   GIT_NO_REPLACE_OBJECTS GIT_OBJECT_DIRECTORY GIT_PREFIX GIT_REPLACE_REF_BASE \
-  GIT_SHALLOW_FILE GIT_WORK_TREE
+  GIT_SHALLOW_FILE GIT_WORK_TREE GIT_CEILING_DIRECTORIES GIT_DISCOVERY_ACROSS_FILESYSTEM
 while IFS= read -r CAPHE_GATE_GIT_ENV_NAME; do
   if [[ "$CAPHE_GATE_GIT_ENV_NAME" =~ ^GIT_[A-Z0-9_]+$ ]]; then
     unset "$CAPHE_GATE_GIT_ENV_NAME"
@@ -15,16 +15,21 @@ while IFS= read -r CAPHE_GATE_GIT_ENV_NAME; do
 done < <(git rev-parse --local-env-vars 2>/dev/null || true)
 unset CAPHE_GATE_GIT_ENV_NAME
 
-ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+ROOT_IS_GIT=0
+if ROOT=$(git rev-parse --show-toplevel 2>/dev/null); then
+  ROOT_IS_GIT=1
+else
+  ROOT=$(pwd)
+fi
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 MARKER_REL=.agent/.strict-mode
 MARKER="$ROOT/$MARKER_REL"
 MARKER_TRACKED=0
-if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 &&
+if [ "$ROOT_IS_GIT" -eq 1 ] &&
    git -C "$ROOT" ls-files --error-unmatch -- "$MARKER_REL" >/dev/null 2>&1; then
   MARKER_TRACKED=1
 fi
-if [ -f "$MARKER" ] && [ "$MARKER_TRACKED" -eq 0 ] && head -1 "$MARKER" | grep -qx 'off'; then
+if [ "$ROOT_IS_GIT" -eq 1 ] && [ -f "$MARKER" ] && [ "$MARKER_TRACKED" -eq 0 ] && head -1 "$MARKER" | grep -qx 'off'; then
   echo "STRICT MODE: OFF (user-disabled)"
   exit 0
 fi

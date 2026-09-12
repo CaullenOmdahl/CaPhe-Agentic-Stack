@@ -117,8 +117,9 @@ class InstallContracts(unittest.TestCase):
             for a, b in [(alias / "source", root / "target"), (source, alias / "target")]:
                 with self.assertRaises(installer.InstallError): installer.plan_runtime_install(a, b)
             target = root / "target"; target.mkdir()
-            (target / "tools").symlink_to(outside, target_is_directory=True)
             plan = installer.plan_runtime_install(source, target)
+            (target / "tools").symlink_to(outside, target_is_directory=True)
+            with self.assertRaises(installer.InstallError): installer.plan_runtime_install(source, target)
             with self.assertRaises(installer.InstallError): installer.apply_runtime_plan(plan, inventory_root=root / "private")
             self.assertEqual(list(outside.iterdir()), [])
             self.assertFalse((root / "private").exists())
@@ -652,3 +653,78 @@ class InstallContracts(unittest.TestCase):
                 with self.subTest(destination='inventory'), self.assertRaises(installer.InstallError):
                     installer._private_preflight(root/'private',source,root/'runtime')
             self.assertFalse((root/'runtime').exists()); self.assertFalse((root/'private').exists())
+
+    def test_nested_git_payload_destination_rejects_plan_and_apply_before_writes(self):
+        for kind in ("normal", "malformed", "bare"):
+            for action in ("plan", "apply"):
+                with self.subTest(kind=kind, action=action), tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp).resolve(); source = self.fixture_source(root); target = root / "target"
+                    plan = installer.plan_runtime_install(source, target)
+                    nested = target / "tools"; nested.mkdir(parents=True)
+                    if kind == "malformed":
+                        (nested / ".git").write_text("not a valid Git marker\n")
+                    else:
+                        subprocess.run(["git", "init", "-q", *(["--bare"] if kind == "bare" else []), str(nested)], check=True)
+                    before = self.snapshot(target)
+                    with self.assertRaises(installer.InstallError):
+                        if action == "plan": installer.plan_runtime_install(source, target)
+                        else: installer.apply_runtime_plan(plan, inventory_root=root / "private")
+                    self.assertEqual(self.snapshot(target), before)
+                    self.assertFalse((root / "private").exists())
+
+    def test_nested_git_retired_destination_rejects_upgrade_and_repeat_verification(self):
+        for after_upgrade in (False, True):
+            with self.subTest(after_upgrade=after_upgrade), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve(); source = self.fixture_source(root); target = root / "target"
+                old = source / "tools/retired/item.py"; old.parent.mkdir(); old.write_text("retired\n")
+                subprocess.run(["git", "-C", str(source), "add", "."], check=True)
+                installer.apply_runtime_plan(installer.plan_runtime_install(source, target), inventory_root=root / "private")
+                subprocess.run(["git", "-C", str(source), "rm", "-q", "--cached", "tools/retired/item.py"], check=True)
+                old.unlink()
+                plan = installer.plan_runtime_install(source, target)
+                if after_upgrade:
+                    installer.apply_runtime_plan(plan, inventory_root=root / "private")
+                nested = target / "tools/retired"
+                subprocess.run(["git", "init", "-q", str(nested)], check=True)
+                before = self.snapshot(root)
+                with self.assertRaises(installer.InstallError):
+                    installer.apply_runtime_plan(plan, inventory_root=root / "private")
+                with self.assertRaises(installer.InstallError):
+                    installer.verify_runtime_plan(plan)
+                self.assertEqual(self.snapshot(root), before)
+
+    def test_existing_managed_boundary_probes_are_deduplicated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); source = self.fixture_source(root); target = root / "target"
+            installer.apply_runtime_plan(installer.plan_runtime_install(source, target), inventory_root=root / "private")
+            plan = installer.plan_runtime_install(source, target)
+            original = installer._outside_git
+            with mock.patch.object(installer, "_outside_git", wraps=original) as probe:
+                installer.verify_runtime_plan(plan)
+            directories = [call.args[0] for call in probe.call_args_list]
+            self.assertEqual(len(directories), len(set(directories)))
+
+    def test_git_directory_at_payload_or_metadata_leaf_rejects_without_mutation(self):
+        for relative in ("tools/tool.py", "VERSION", installer._MANIFEST):
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve(); source = self.fixture_source(root); target = root / "target"
+                plan = installer.plan_runtime_install(source, target)
+                nested = target / relative; nested.mkdir(parents=True)
+                subprocess.run(["git", "init", "-q", str(nested)], check=True)
+                before = self.snapshot(target)
+                with self.assertRaises(installer.InstallError):
+                    installer.apply_runtime_plan(plan, inventory_root=root / "private")
+                self.assertEqual(self.snapshot(target), before)
+                self.assertFalse((root / "private").exists())
+
+    def test_unmanaged_git_subtree_outside_managed_destinations_remains_untouched(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); source = self.fixture_source(root); target = root / "target"
+            unrelated = target / "user-notes"; unrelated.mkdir(parents=True)
+            subprocess.run(["git", "init", "-q", str(unrelated)], check=True)
+            (unrelated / "note").write_text("keep\n")
+            before = self.snapshot(unrelated)
+            plan = installer.plan_runtime_install(source, target)
+            installer.apply_runtime_plan(plan, inventory_root=root / "private")
+            self.assertTrue(installer.verify_runtime_plan(plan))
+            self.assertEqual(self.snapshot(unrelated), before)

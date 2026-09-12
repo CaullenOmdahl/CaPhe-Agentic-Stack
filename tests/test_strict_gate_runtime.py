@@ -29,6 +29,38 @@ def repository(path):
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_discovery_ceiling_cannot_select_a_subdirectory_disable_marker(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); repository(root)
+            (root / '.agent').mkdir()
+            manifest = {'version': 1, 'components': [{'name': 'fixture', 'paths': ['**'],
+                'commands': [{'name': 'check', 'run': [sys.executable, '-c', 'raise SystemExit(7)']}]}]}
+            (root / '.agent/strict-gate.json').write_text(json.dumps(manifest))
+            child = root / 'child'; (child / '.agent').mkdir(parents=True)
+            (child / '.agent/.strict-mode').write_text('off\n')
+            environment = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
+            environment.update(GIT_CEILING_DIRECTORIES=str(root), GIT_DISCOVERY_ACROSS_FILESYSTEM='0',
+                               GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM='1')
+            commands = ((sys.executable, str(ROOT / 'strict-mode/bin/strict_gate.py')),
+                        ('bash', str(ROOT / 'strict-mode/bin/strict-green-gate.sh')))
+            for command in commands:
+                with self.subTest(command=command[0]):
+                    result = subprocess.run([*command, '--mode', 'completion'], cwd=child,
+                                            env=environment, capture_output=True, text=True, timeout=15)
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    self.assertIn('FAIL  fixture:check', result.stderr)
+                    self.assertNotIn('user-disabled', result.stdout)
+
+    def test_wrapper_cannot_treat_a_nongit_disable_marker_as_completion(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); (root / '.agent').mkdir()
+            (root / '.agent/.strict-mode').write_text('off\n')
+            environment = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
+            result = subprocess.run(['bash', str(ROOT / 'strict-mode/bin/strict-green-gate.sh'), '--mode', 'completion'],
+                                    cwd=root, env=environment, capture_output=True, text=True, timeout=15)
+            self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertNotIn('user-disabled', result.stdout)
+
     def test_cli_and_wrapper_bind_invoking_checkout_despite_inherited_git_overrides(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp).resolve()

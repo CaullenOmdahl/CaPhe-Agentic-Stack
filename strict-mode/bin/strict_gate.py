@@ -29,11 +29,13 @@ MAX_SNAPSHOT_DEPTH = 16
 PROCESS_PLATFORM_ERROR = "Strict Gate process execution requires macOS or Linux/POSIX; use Linux under WSL on Windows."
 GIT_REPOSITORY_ENV_FALLBACK = (
     "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_CEILING_DIRECTORIES",
     "GIT_COMMON_DIR",
     "GIT_CONFIG",
     "GIT_CONFIG_COUNT",
     "GIT_CONFIG_PARAMETERS",
     "GIT_DIR",
+    "GIT_DISCOVERY_ACROSS_FILESYSTEM",
     "GIT_GRAFT_FILE",
     "GIT_IMPLICIT_WORK_TREE",
     "GIT_INDEX_FILE",
@@ -65,7 +67,7 @@ class CommandSpec(NamedTuple):
 
 @functools.lru_cache(maxsize=1)
 def git_repository_environment_names() -> tuple[str, ...]:
-    """Ask the active Git client for repository-local variables, with a portable fallback."""
+    """Clear repository discovery controls as well as Git's repository-local variables."""
     names = set(GIT_REPOSITORY_ENV_FALLBACK)
     try:
         result = subprocess.run(
