@@ -146,6 +146,30 @@ class InstallContracts(unittest.TestCase):
             installer.apply_runtime_plan(plan, inventory_root=root / "private")
             self.assertFalse((root / "target/tools/.env").exists())
 
+    def test_bootstrap_files_follow_tracked_inventory_for_install_and_retirement(self):
+        paths = ("tools/stack_install.py", "tools/stack_doctor.py",
+                 "tools/stack_prepare.py", "strict-mode/bin/strict_init.py")
+        for rel in paths:
+            with self.subTest(path=rel), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve(); source = self.fixture_source(root); target = root / "target"
+                candidate = source / rel
+                candidate.parent.mkdir(parents=True, exist_ok=True)
+                candidate.write_text("untracked bootstrap\n")
+                plan = installer.plan_runtime_install(source, target)
+                self.assertNotIn(rel, [entry[0] for entry in plan["payload"]])
+                subprocess.run(["git", "-C", str(source), "add", rel], check=True)
+                plan = installer.plan_runtime_install(source, target)
+                self.assertIn(rel, [entry[0] for entry in plan["payload"]])
+                installer.apply_runtime_plan(plan, inventory_root=root / "private")
+                subprocess.run(["git", "-C", str(source), "rm", "--cached", "-q", rel], check=True)
+                candidate.write_text("untracked local replacement\n")
+                upgrade = installer.plan_runtime_install(source, target)
+                self.assertNotIn(rel, [entry[0] for entry in upgrade["payload"]])
+                installer.apply_runtime_plan(upgrade, inventory_root=root / "private")
+                self.assertFalse((target / rel).exists())
+                self.assertEqual(candidate.read_text(), "untracked local replacement\n")
+                self.assertTrue(installer.verify_runtime_plan(upgrade))
+
     def test_managed_subset_preserves_secrets_and_runtime_replans_standalone(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve(); source = self.fixture_source(root); target = root / "target"

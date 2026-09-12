@@ -18,7 +18,6 @@ class InstallError(RuntimeError):
 
 _RUNTIME_DIRS = ("tools", "skills", "strict-mode", "schemas")
 _SUPPORT_DOCS = ("docs/efficiency-runtime.md", "docs/review-workflow.md", "docs/canon.md")
-_BOOTSTRAP = ("tools/stack_install.py", "tools/stack_doctor.py", "tools/stack_prepare.py", "strict-mode/bin/strict_init.py")
 _MANIFEST = ".caphe-runtime.json"
 
 
@@ -77,7 +76,6 @@ def _payload(root):
     if git.returncode == 0 and Path(git.stdout.strip()).resolve() == root:
         result = subprocess.run(["git", "-C", str(root), "ls-files", "-z", "--", *_RUNTIME_DIRS, *_SUPPORT_DOCS], capture_output=True, check=True, env=_git_env())
         names = set(result.stdout.decode().split("\0")) - {""}
-        names.update(rel for rel in _BOOTSTRAP if (root / rel).exists())
         names = {name for name in names if _public(name)}
     elif manifest.is_file() and not manifest.is_symlink():
         try:
