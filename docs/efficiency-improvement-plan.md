@@ -245,11 +245,16 @@ Implementation:
    a receipt. A missing/expired artifact is unavailable evidence.
 4. Add a receipt validator to existing evidence tooling. Bind the artifact/digest to the trusted
    repository and run using provider metadata or attestations. Authenticate both the workflow and an
-   independently approved verification policy/manifest identity from a protected base or trusted policy
-   artifact. Neither a PR-modified workflow nor a PR-modified manifest can authorize itself or shrink the
-   required matrix. Execute the trusted baseline requirements, or obtain separate approval for an updated
-   policy before certification. Validate revision/merge-base semantics, every trusted required command,
-   successful conclusions, environment scope, and check URLs. Reject untrusted/partial receipts.
+   independently approved verification bundle from a protected base or trusted policy artifact. Bind
+   the manifest, executable check implementations, receipt producer/validator, their transitive runner
+   dependencies, and check-selection configuration into that bundle. A trusted command name with a
+   weakened candidate script is insufficient. Execute protected-base check implementations against the
+   candidate checkout, or separately approve the changed bundle before certification. Candidate code
+   must not overwrite the trusted runner, producer, or result store; collect authoritative results across
+   an enforced isolation boundary. If that integrity or dependency closure cannot be established, this
+   receipt route is unavailable. Neither PR changes nor local fallback can approve their own verification
+   policy. Validate revision/merge-base semantics, every trusted required command, successful conclusions,
+   environment scope, and check URLs. Reject untrusted/partial receipts.
 5. Align canon, methodology, installed skill, and CLI messaging: completion requires every declared
    command covered by either validated authoritative CI evidence or a full uncached local run. Keep
    the existing local completion command exhaustive; put receipt selection in the evidence/orchestration
@@ -264,9 +269,10 @@ Acceptance: a real producer/validator round trip covers the complete matrix; loc
 all commands uncached. Selective plans detect shared-package regressions and unknown paths. Stale,
 partial, skipped, cancelled, fork-origin, altered-workflow, altered-manifest, expired, tampered, and
 different-platform CI receipts cannot certify completion. Specifically test command removal/weakening
-in a PR manifest, including an attempted local fallback using that same manifest. Add canon/CLI
-consistency checks to prevent contradictory installation output. Compare equal source states before
-calling two runs redundant.
+in a PR manifest, mutated check scripts and imported helpers, altered runner configuration, a compromised
+receipt producer, and candidate writes to the result store. Include attempts to regain trust through a
+local fallback using the same unapproved inputs. Add canon/CLI consistency checks to prevent contradictory
+installation output. Compare equal source states before calling two runs redundant.
 
 ### 5. Bounded delegation with model-and-effort routing — priority P1, effort M–L
 
