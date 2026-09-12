@@ -184,12 +184,15 @@ def _receipt_directory(root, requested, *, create=True):
     path = Path(requested).expanduser().absolute()
     try:
         _no_symlinks(path)
+        path = Path(os.path.normpath(path))
+        _no_symlinks(path)
     except StateError as error:
         raise PrepareError(str(error)) from error
     path = path.resolve()
     if path == root or root in path.parents:
         raise PrepareError('preparation receipts must be outside the source root')
-    if any(left == '.codex' and right in ('memories', 'sessions') for left, right in zip(path.parts, path.parts[1:])):
+    parts = tuple(part.casefold() for part in path.parts)
+    if any(left == '.codex' and right in ('memories', 'sessions') for left, right in zip(parts, parts[1:])):
         raise PrepareError('canonical records cannot store preparation receipts')
     try:
         _no_symlinks(path)

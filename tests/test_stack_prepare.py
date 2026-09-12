@@ -177,6 +177,25 @@ class PrepareContracts(unittest.TestCase):
                 prepare.run_prepare(root,manifest,receipt_root=requested)
             self.assertFalse((root/'receipts').exists())
 
+    def test_receipts_reject_canonical_store_case_variants(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp).resolve(); root = base / 'source'; root.mkdir()
+            for name in ('MeMoRiEs', 'SeSsIoNs'):
+                target = base / '.CoDeX' / name
+                with self.subTest(name=name), self.assertRaisesRegex(prepare.PrepareError, 'canonical records'):
+                    prepare._receipt_directory(root, target)
+                self.assertFalse(target.exists())
+
+    def test_receipts_reject_symlink_exposed_by_normalizing_missing_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp).resolve(); root = base / 'source'; root.mkdir()
+            private = base / 'private'; private.mkdir(mode=0o700)
+            (base / 'alias').symlink_to(private, target_is_directory=True)
+            target = base / 'missing' / '..' / 'alias' / 'receipts'
+            with self.assertRaisesRegex(prepare.PrepareError, 'symlink'):
+                prepare._receipt_directory(root, target)
+            self.assertFalse((private / 'receipts').exists())
+
     def test_manifest_rejects_shell_strings_and_env_copying(self):
         with self.assertRaises(prepare.PrepareError):
             prepare.validate_manifest({"argv": "echo unsafe", "cwd": ".", "inputs": [], "outputs": [], "toolchain": [], "env": {}})

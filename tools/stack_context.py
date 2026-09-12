@@ -123,6 +123,16 @@ def _hash_stream(digest, label: bytes, handle) -> None:
         digest.update(chunk)
 
 
+def _reject_embedded_git_root(directory_fd: int) -> None:
+    try:
+        os.stat(b'.git', dir_fd=directory_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    except OSError:
+        raise SnapshotFailure('embedded-git-root-unreadable') from None
+    raise SnapshotFailure('embedded-git-root-unsupported')
+
+
 def _hash_worktree_path(digest, root_fd: int, relative: bytes, *, allow_missing=False) -> None:
     parts = relative.split(b'/')
     if not parts or any(part in (b'', b'.', b'..') for part in parts):
@@ -144,6 +154,7 @@ def _hash_worktree_path(digest, root_fd: int, relative: bytes, *, allow_missing=
                     return
                 os.close(parent)
                 parent = child
+                _reject_embedded_git_root(parent)
             before = os.stat(parts[-1], dir_fd=parent, follow_symlinks=False)
         except FileNotFoundError:
             if not allow_missing:
@@ -153,6 +164,11 @@ def _hash_worktree_path(digest, root_fd: int, relative: bytes, *, allow_missing=
         if stat.S_ISDIR(before.st_mode) and allow_missing:
             # Git lists visible descendants separately. Directory size/mtime can change
             # because of ignored children, so only presence and mode enter the digest.
+            directory = os.open(parts[-1], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+            try:
+                _reject_embedded_git_root(directory)
+            finally:
+                os.close(directory)
             digest.update(f'{before.st_mode}:directory\0'.encode())
             after = os.stat(parts[-1], dir_fd=parent, follow_symlinks=False)
         elif stat.S_ISLNK(before.st_mode):

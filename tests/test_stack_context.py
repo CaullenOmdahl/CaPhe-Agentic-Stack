@@ -82,6 +82,50 @@ class ContextContracts(unittest.TestCase):
             fourth = context.collect_repository_context(repo)['identity']['before']['working_snapshot']
             self.assertNotEqual(third, fourth)
 
+    def test_embedded_git_root_under_tracked_directory_is_incomplete(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp).resolve()
+            initialize(repo)
+            nested = repo / 'nested'; nested.mkdir()
+            (nested / 'tracked').write_text('base\n')
+            git(repo, 'add', 'nested/tracked')
+            git(repo, 'commit', '-qm', 'track nested directory')
+            initialize(nested)
+            first = context.collect_repository_context(repo)
+            git(nested, 'commit', '--allow-empty', '-qm', 'nested head changes')
+            second = context.collect_repository_context(repo)
+            for result in (first, second):
+                self.assertFalse(result['complete'])
+                self.assertTrue(result['identity']['stale'])
+                self.assertEqual(result['identity']['before']['failure']['operation'], 'embedded-git-root-unsupported')
+
+    def test_embedded_git_root_replacing_a_tracked_file_is_incomplete(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp).resolve()
+            initialize(repo)
+            tracked = repo / 'tracked'; tracked.unlink(); tracked.mkdir()
+            initialize(tracked)
+            first = context.collect_repository_context(repo)
+            git(tracked, 'commit', '--allow-empty', '-qm', 'nested head changes')
+            second = context.collect_repository_context(repo)
+            for result in (first, second):
+                self.assertFalse(result['complete'])
+                self.assertTrue(result['identity']['stale'])
+                self.assertEqual(result['identity']['before']['failure']['operation'], 'embedded-git-root-unsupported')
+
+    def test_embedded_git_probe_does_not_follow_a_symlinked_parent(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as outside_tmp:
+            repo, outside = Path(tmp).resolve(), Path(outside_tmp).resolve()
+            initialize(repo); initialize(outside)
+            (repo / 'nested').symlink_to(outside, target_is_directory=True)
+            git(repo, 'add', 'nested')
+            git(repo, 'commit', '-qm', 'track nested symlink')
+            first = context._snapshot_identity(repo)
+            git(outside, 'commit', '--allow-empty', '-qm', 'outside head changes')
+            second = context._snapshot_identity(repo)
+            self.assertTrue(first['complete'] and second['complete'])
+            self.assertEqual(first['working_snapshot'], second['working_snapshot'])
+
     def test_tracked_bytes_and_modes_are_bound_when_git_normalizes_them(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp).resolve()

@@ -358,6 +358,33 @@ class StrictGatePlanTests(unittest.TestCase):
                     os.environ["STRICT_TEST_VALUE"] = old
             self.assertNotEqual(first, second)
 
+    def test_cache_environment_fields_have_unambiguous_boundaries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'input').write_text('input')
+            command = strict_gate.CommandSpec('fixture', 'cache', (sys.executable, '-c', 'pass'),
+                cache_allowed=True, cache_inputs=('input',),
+                cache_env=('CAPHE_TEST_A', 'CAPHE_TEST_B'), toolchain=((sys.executable, '--version'),))
+            with mock.patch.dict(os.environ, {'CAPHE_TEST_A': '', 'CAPHE_TEST_B': 'CAPHE_TEST_Bz'}):
+                first = strict_gate.cache_key(root, command, 'manifest')
+            with mock.patch.dict(os.environ, {'CAPHE_TEST_A': 'CAPHE_TEST_B', 'CAPHE_TEST_B': 'z'}):
+                second = strict_gate.cache_key(root, command, 'manifest')
+            self.assertNotEqual(first, second)
+
+    def test_cache_environment_absence_differs_from_literal_unset_value(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'input').write_text('input')
+            command = strict_gate.CommandSpec('fixture', 'cache', (sys.executable, '-c', 'pass'),
+                cache_allowed=True, cache_inputs=('input',),
+                cache_env=('CAPHE_TEST_A',), toolchain=((sys.executable, '--version'),))
+            with mock.patch.dict(os.environ):
+                os.environ.pop('CAPHE_TEST_A', None)
+                absent = strict_gate.cache_key(root, command, 'manifest')
+                os.environ['CAPHE_TEST_A'] = '<unset>'
+                present = strict_gate.cache_key(root, command, 'manifest')
+            self.assertNotEqual(absent, present)
+
     @unittest.skipUnless(os.name == 'posix', 'fixture requires detached POSIX sessions')
     def test_cache_probe_timeout_cannot_wait_for_detached_output_writer(self):
         with tempfile.TemporaryDirectory() as temporary:
