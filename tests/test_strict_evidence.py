@@ -87,7 +87,8 @@ class StrictEvidenceTests(unittest.TestCase):
                  '/container-client/result', '//mounted-client/result',
                  '/var/customer/result', '%2Fworkspace%2Fclient%2Fresult',
                  '%252Froot%252Fcustomer%252Fsecret',
-                 '%25252Fworkspace%25252Fcustomer%25252Fresult')
+                 '%25252Fworkspace%25252Fcustomer%25252Fresult',
+                 r'\\server\share\user\result.json', quote(r'\\server\share\user\result.json', safe=''))
         for path in paths:
             for field in ('summary', 'reason', 'criterion'):
                 with self.subTest(path=path, field=field), tempfile.TemporaryDirectory() as tmp:
@@ -110,9 +111,20 @@ class StrictEvidenceTests(unittest.TestCase):
                         strict_evidence.write_record(root, item)
                     self.assertFalse((root / '.agent').exists())
 
+    def test_unc_paths_are_rejected_by_legacy_write_validation(self):
+        for value in (r'\\server\share\user\result.json', quote(r'\\server\share\user\result.json', safe='')):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve()
+                legacy = {'id': 'legacy', 'decision': 'ADR-0001', 'lane': 'scoped-behavior',
+                          'status': 'verified', 'tests': ['python3 -m unittest'], 'review': value}
+                with self.assertRaises(strict_evidence.EvidenceError):
+                    strict_evidence.write_record(root, legacy)
+                self.assertFalse((root / '.agent').exists())
+
     def test_relative_paths_and_public_https_urls_remain_valid_in_prose(self):
         for summary in ('Read docs/plan.md and tests/test_example.py', 'Read docs/(public)/result.md',
                         'Compare pass/fail and 1/2 acceptance',
+                        r'Regex \\d+ matched docs/plan.md',
                         'Review https://github.com/example/project/pull/7',
                         'See https://example.org/reports/(public)/result'):
             with self.subTest(summary=summary):

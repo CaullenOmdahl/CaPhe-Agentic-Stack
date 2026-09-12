@@ -147,14 +147,34 @@ def _private_preflight(path, source, target):
     return path
 
 
-def plan_runtime_install(source, target):
+def _preflight_runtime_destinations(target, entries):
+    destinations = [target, target / _MANIFEST, target / "VERSION", *(target / item[0] for item in entries)]
+    directories = set()
+    for destination in destinations:
+        _safe_path(destination.parent)
+        # Leaf symlinks are rejected by write/metadata validation; do not follow
+        # their targets merely to discover repository boundaries.
+        if destination.is_symlink():
+            destination = destination.parent
+        # A retired file may become a parent directory. Probe the closest existing
+        # directory without treating that supported transition as a Git error.
+        directories.add(next(parent for parent in (destination, *destination.parents) if parent.is_dir()))
+    for directory in sorted(directories):
+        _outside_git(directory)
+
+
+def _runtime_plan(source, target, historical_payload=()):
     source, target = _safe_path(source), _safe_path(target)
     if _overlap(source, target):
         raise InstallError("runtime target must be outside source checkout")
-    _outside_git(target)
     payload = _payload(source)
     previous = _payload(target) if (target / _MANIFEST).exists() else []
+    _preflight_runtime_destinations(target, [*payload, *previous, *historical_payload])
     return {"action": "install-runtime", "source": str(source), "target": str(target), "source_digest": _entries_digest(payload), "payload": payload, "previous_payload": previous}
+
+
+def plan_runtime_install(source, target):
+    return _runtime_plan(source, target)
 
 
 def _retired_remaining(target, previous, payload):
@@ -191,7 +211,7 @@ def _validate_plan(plan, *, after_install=False):
         raise InstallError("invalid prior payload inventory")
     if [entry[0] for entry in previous] != sorted({entry[0] for entry in previous}):
         raise InstallError("prior inventory must be sorted and unique")
-    expected = plan_runtime_install(plan["source"], plan["target"])
+    expected = _runtime_plan(plan["source"], plan["target"], previous)
     already_applied = expected["previous_payload"] == plan["payload"] and not _retired_remaining(Path(plan["target"]), previous, plan["payload"])
     if after_install or already_applied:
         expected["previous_payload"] = previous
