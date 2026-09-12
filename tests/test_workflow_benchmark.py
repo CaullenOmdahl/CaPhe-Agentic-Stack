@@ -147,6 +147,19 @@ class BenchmarkTests(unittest.TestCase):
             result = aggregate_attempts([event(), candidate], card())
             self.assertEqual(result['quality_deltas']['status'], 'inconclusive')
 
+    def test_quality_requires_same_acceptance_across_all_repetitions_of_each_task(self):
+        events = [event('base-0'), event('candidate-0', config='candidate'),
+                  event('base-1', repetition=1, acceptance_digest='b' * 64),
+                  event('candidate-1', config='candidate', repetition=1, acceptance_digest='b' * 64)]
+        result = aggregate_attempts(events, card())
+        self.assertEqual(result['quality_deltas']['status'], 'inconclusive')
+        self.assertTrue(result['cost_eligible'])
+        for item in events:
+            item['acceptance_digest'] = 'a' * 64
+        stable = aggregate_attempts(events, card())
+        self.assertEqual(stable['quality_deltas']['status'], 'computed')
+        self.assertEqual(stable['quality_deltas']['comparisons']['candidate']['paired_tasks'], 2)
+
     def test_root_latency_and_external_wait_reported_separately(self):
         result = aggregate_attempts([event(latency_ms=2000, external_wait_ms=500)], card())
         self.assertEqual(result['latency_ms']['external_wait_median'], 500)

@@ -31,6 +31,15 @@ Do not treat flat PR review summaries as sufficient. Use thread-aware review dat
    - count a reviewer as active only when its integration is configured and has responded
      recently, or when a current check proves it ran.
 
+## Optional local preparation
+
+If a local reviewer is useful before the PR, start it without unrelated MCP
+servers using the installed `second-opinion` skill's process-scoped isolation.
+Do not edit normal server configuration, disable verification hooks, or wait
+repeatedly on an empty local run while a connected PR reviewer is available.
+Local tool isolation does not change the active GitHub reviewer set or replace
+current-head PR review.
+
 ## Review Loop
 
 Use this loop until certified or blocked:

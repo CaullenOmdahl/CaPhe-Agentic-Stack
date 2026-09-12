@@ -88,6 +88,13 @@ Do not treat local self-review as the canonical implementation-review path. Real
 
 Local review tools are useful for preparation and cleanup. They do not replace pull-request review.
 
+For local source reviews, omit unrelated tool servers from that reviewer process.
+Use a verified empty or minimal MCP configuration rather than changing the user's
+normal configuration. Built-in tool restrictions and ephemeral sessions do not
+by themselves disable MCP startup. Keep repository hooks and completion gates;
+require a bounded, non-empty headless result before counting a review as obtained.
+The installed `second-opinion` skill documents the tested Claude invocation.
+
 ## Memory Rule
 
 Preserve canonical source records and retrieve only task-relevant evidence. Derived indexes and summaries

@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 import shutil
 import stat
@@ -140,15 +141,30 @@ def plan_runtime_install(source, target):
         raise InstallError("runtime target must be outside source checkout")
     _outside_git(target)
     payload = _payload(source)
-    return {"action": "install-runtime", "source": str(source), "target": str(target), "source_digest": _entries_digest(payload), "payload": payload}
+    previous = _payload(target) if (target / _MANIFEST).exists() else []
+    return {"action": "install-runtime", "source": str(source), "target": str(target), "source_digest": _entries_digest(payload), "payload": payload, "previous_payload": previous}
 
 
-def _validate_plan(plan):
-    if not isinstance(plan, dict) or set(plan) != {"action", "source", "target", "source_digest", "payload"}:
+def _validate_plan(plan, *, after_install=False):
+    if not isinstance(plan, dict) or set(plan) != {"action", "source", "target", "source_digest", "payload", "previous_payload"}:
         raise InstallError("unsupported plan")
     if not all(isinstance(plan[key], str) for key in ("action", "source", "target", "source_digest")) or not isinstance(plan["payload"], list):
         raise InstallError("invalid plan types")
+    previous = plan["previous_payload"]
+    if not isinstance(previous, list) or any(
+            not isinstance(entry, list) or len(entry) != 3 or not _public(entry[0])
+            or not isinstance(entry[1], str) or not re.fullmatch(r"[0-9a-f]{64}", entry[1])
+            or type(entry[2]) is not int or not 0 <= entry[2] <= 0o777
+            for entry in previous):
+        raise InstallError("invalid prior payload inventory")
+    if [entry[0] for entry in previous] != sorted({entry[0] for entry in previous}):
+        raise InstallError("prior inventory must be sorted and unique")
     expected = plan_runtime_install(plan["source"], plan["target"])
+    current_names = {item[0] for item in plan["payload"]}
+    retired_paths = [_safe_path(Path(plan["target"]) / item[0]) for item in previous if item[0] not in current_names]
+    already_applied = expected["previous_payload"] == plan["payload"] and not any(path.exists() for path in retired_paths)
+    if after_install or already_applied:
+        expected["previous_payload"] = previous
     if plan != expected:
         raise InstallError("plan does not match current public source inventory")
     return Path(plan["source"]), Path(plan["target"])
@@ -156,16 +172,21 @@ def _validate_plan(plan):
 
 def verify_runtime_plan(plan):
     """Verify only managed files; unrelated local files and secrets remain untouched."""
-    _, target = _validate_plan(plan)
-    return [_file_entry(target, item[0]) for item in plan["payload"]] == plan["payload"]
+    _, target = _validate_plan(plan, after_install=True)
+    current = {item[0] for item in plan["payload"]}
+    retired = [_safe_path(target / item[0]) for item in plan["previous_payload"] if item[0] not in current]
+    return ([_file_entry(target, item[0]) for item in plan["payload"]] == plan["payload"]
+            and not any(path.exists() for path in retired))
 
 
 def apply_runtime_plan(plan, *, inventory_root, fail_after=None):
     source, target = _validate_plan(plan)
     inventory = _private_preflight(inventory_root, source, target)
     destinations = [target / item[0] for item in plan["payload"]] + [target / _MANIFEST, target / "VERSION"]
+    current = {item[0] for item in plan["payload"]}
+    retired = [item for item in plan["previous_payload"] if item[0] not in current]
     receipt_path = inventory / ("runtime-" + plan["source_digest"][:16] + ".json")
-    for destination in destinations + [receipt_path]:
+    for destination in destinations + [target / item[0] for item in retired] + [receipt_path]:
         _safe_path(destination)
         if destination.exists() and not destination.is_file():
             raise InstallError("destination is not a regular file: " + str(destination))
@@ -182,6 +203,16 @@ def apply_runtime_plan(plan, *, inventory_root, fail_after=None):
     stage = Path(tempfile.mkdtemp(prefix="caphe-stage-", dir=inventory))
     journal = []
     try:
+        # Only a verified prior inventory can authorize removal. Locally changed
+        # managed bytes reject the plan; unrelated runtime files remain untouched.
+        for item in retired:
+            destination = target / item[0]
+            if not destination.exists():
+                continue  # A verified identical plan was already applied.
+            if _file_entry(target, item[0]) != item:
+                raise InstallError("retired managed file changed before removal")
+            journal.append((destination, (destination.read_bytes(), item[2])))
+            destination.unlink()
         for rel, _, _ in plan["payload"]:
             staged = stage / rel
             staged.parent.mkdir(parents=True, exist_ok=True)
@@ -190,7 +221,7 @@ def apply_runtime_plan(plan, *, inventory_root, fail_after=None):
             raise InstallError("source changed while staging")
         (stage / "VERSION").write_text("3\n")
         (stage / _MANIFEST).write_text(json.dumps({"payload": plan["payload"], "source_digest": plan["source_digest"]}, sort_keys=True) + "\n")
-        receipt = {"action": "install-runtime", "source_digest": plan["source_digest"], "target": str(target), "verified": True}
+        receipt = {"action": "install-runtime", "source_digest": plan["source_digest"], "target": str(target), "verified": True, "retired_files": [item[0] for item in retired]}
         def write(destination, data, mode):
             _safe_path(destination)
             previous = (destination.read_bytes(), stat.S_IMODE(destination.stat().st_mode)) if destination.exists() else None

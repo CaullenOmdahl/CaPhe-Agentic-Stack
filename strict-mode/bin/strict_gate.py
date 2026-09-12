@@ -25,6 +25,7 @@ from typing import Any, Iterable, NamedTuple
 
 
 MANIFEST_PATH = ".agent/strict-gate.json"
+MAX_SNAPSHOT_DEPTH = 16
 GIT_REPOSITORY_ENV_FALLBACK = (
     "GIT_ALTERNATE_OBJECT_DIRECTORIES",
     "GIT_COMMON_DIR",
@@ -425,30 +426,51 @@ def _git_bytes(root: Path, *args: str, check: bool = True) -> bytes:
 
 def changed_paths(root: Path) -> list[str]:
     """Cover the actual working state that checks execute, including unstaged and new paths."""
-    paths = set(_git_paths(root, "diff", "--cached", "--no-renames", "--name-only"))
-    paths.update(_git_paths(root, "diff", "--no-renames", "--name-only"))
+    paths = set(_git_paths(root, "diff", "--cached", "--ignore-submodules=none", "--no-renames", "--name-only"))
+    paths.update(_git_paths(root, "diff", "--ignore-submodules=none", "--no-renames", "--name-only"))
     paths.update(_git_paths(root, "ls-files", "--others", "--exclude-standard"))
     return sorted(paths)
 
 
 def snapshot_identity(root: Path) -> dict[str, Any]:
+    return _snapshot_identity(root.absolute(), ())
+
+
+def _snapshot_identity(root: Path, ancestors: tuple[Path, ...]) -> dict[str, Any]:
+    """Bind each checkout independently; parent ignore rules cannot hide gitlink contents."""
+    if len(ancestors) > MAX_SNAPSHOT_DEPTH:
+        raise ManifestError("snapshot nested Git depth limit exceeded")
+    if root.is_symlink() or (root / ".git").is_symlink():
+        raise ManifestError("snapshot Git root must not use a symlink")
+    try:
+        top = Path(os.fsdecode(_git_bytes(root, "rev-parse", "--show-toplevel")).rstrip("\n"))
+        git_dir = Path(os.fsdecode(_git_bytes(root, "rev-parse", "--absolute-git-dir")).rstrip("\n")).resolve()
+    except (OSError, subprocess.SubprocessError):
+        raise ManifestError("snapshot checkout is not a valid Git root") from None
+    if top.resolve() != root.resolve():
+        raise ManifestError("snapshot checkout is not an independent Git root")
+    if git_dir in ancestors:
+        raise ManifestError("snapshot nested Git cycle detected")
+    ancestors = (*ancestors, git_dir)
     flags = _git_bytes(root, "ls-files", "-v", "-z").split(b"\0")
     if any(record[:1].islower() or record.startswith(b"S ") for record in flags if record):
         raise ManifestError("snapshot incomplete: assume-unchanged or skip-worktree flags hide working files")
     index = _git_bytes(root, "ls-files", "--stage", "-z").split(b"\0")
-    if any(record.startswith(b"160000 ") for record in index):
-        raise ManifestError("snapshot incomplete: submodule working content is unsupported")
+    if any(record.split(b"\t", 1)[0].rsplit(b" ", 1)[-1] != b"0" for record in index if record):
+        raise ManifestError("snapshot incomplete: unmerged Git index")
+    gitlinks = {os.fsdecode(record.split(b"\t", 1)[1]) for record in index if record.startswith(b"160000 ")}
+    tracked = {os.fsdecode(record.split(b"\t", 1)[1]) for record in index if record}
     revision = _git_bytes(root, "rev-parse", "--verify", "HEAD", check=False).decode().strip() or None
-    digest = hashlib.sha256(b"caphe-working-snapshot-v1\0")
+    if revision:
+        tree = _git_bytes(root, "ls-tree", "-r", "-z", "HEAD").split(b"\0")
+        gitlinks.update(os.fsdecode(record.split(b"\t", 1)[1]) for record in tree if record.startswith(b"160000 "))
+    digest = hashlib.sha256(b"caphe-working-snapshot-v2\0")
     digest.update((revision or "unborn").encode())
-    for args in (
-        ("diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv"),
-        ("diff", "--binary", "--no-ext-diff", "--no-textconv"),
-    ):
-        payload = _git_bytes(root, *args)
-        digest.update(len(payload).to_bytes(8, "big"))
-        digest.update(payload)
-    for relative in sorted(_git_paths(root, "ls-files", "--others", "--exclude-standard")):
+    index_bytes = b"\0".join(index)
+    digest.update(len(index_bytes).to_bytes(8, "big") + index_bytes)
+    others = {path.rstrip("/") for path in _git_paths(root, "ls-files", "--others", "--exclude-standard")}
+    dirty = False
+    for relative in sorted(tracked | gitlinks | others):
         path = root / relative
         for parent in path.parents:
             if parent == root:
@@ -458,10 +480,25 @@ def snapshot_identity(root: Path) -> dict[str, Any]:
         name = os.fsencode(relative)
         digest.update(len(name).to_bytes(8, "big"))
         digest.update(name)
-        if path.is_symlink():
-            digest.update(b"link\0" + os.fsencode(os.readlink(path)))
+        if relative in gitlinks or (not path.is_symlink() and path.is_dir()):
+            if path.is_symlink():
+                raise ManifestError("snapshot Git checkout must not be a symlink")
+            if relative in gitlinks and not path.exists():
+                digest.update(b"gitlink:absent\0")
+            elif relative in gitlinks and path.is_dir() and next(path.iterdir(), None) is None:
+                digest.update(b"gitlink:uninitialized-empty\0")
+            else:
+                nested = _snapshot_identity(path, ancestors)
+                payload = json.dumps(nested, sort_keys=True).encode()
+                digest.update(b"git-checkout\0" + len(payload).to_bytes(8, "big") + payload)
+                dirty = dirty or nested["dirty"]
+        elif path.is_symlink():
+            target = os.fsencode(os.readlink(path))
+            digest.update(b"link\0" + len(target).to_bytes(8, "big") + target)
+        elif relative in tracked and not path.exists():
+            digest.update(b"file:absent\0")
         elif path.is_file():
-            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
             with os.fdopen(descriptor, "rb") as handle:
                 before = os.fstat(handle.fileno())
                 if not stat.S_ISREG(before.st_mode):
@@ -470,11 +507,19 @@ def snapshot_identity(root: Path) -> dict[str, Any]:
                 for block in iter(lambda: handle.read(1024 * 1024), b""):
                     digest.update(block)
                 after = os.fstat(handle.fileno())
-                if (before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+                if (before.st_ino, before.st_mode, before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (after.st_ino, after.st_mode, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
                     raise ManifestError("snapshot path changed during hashing")
         else:
             raise ManifestError(f"snapshot path changed or has unsupported type: {relative}")
-    return {"revision": revision, "snapshot_digest": digest.hexdigest(), "dirty": bool(changed_paths(root))}
+    for args in (
+        ("diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "--ignore-submodules=none", "--submodule=short"),
+        ("diff", "--binary", "--no-ext-diff", "--no-textconv", "--ignore-submodules=none", "--submodule=short"),
+    ):
+        payload = _git_bytes(root, *args)
+        digest.update(len(payload).to_bytes(8, "big"))
+        digest.update(payload)
+    dirty = dirty or bool(changed_paths(root))
+    return {"revision": revision, "snapshot_digest": digest.hexdigest(), "dirty": dirty}
 
 
 def _report_destination(path: Path) -> Path:

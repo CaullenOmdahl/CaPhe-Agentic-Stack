@@ -126,6 +126,15 @@ class StackRouteTests(unittest.TestCase):
             request = contract(children=[worker('one', first), worker('two', second)])
             self.assertEqual(resolve_route(request, capabilities(), policy())['status'], 'resolved')
 
+    def test_write_and_exclusion_scopes_cannot_overlap_in_either_direction(self):
+        for allowed, excluded in ((['src'], ['src/secrets']), (['src/secrets'], ['src']),
+                                  (['src/secrets'], ['src/secrets'])):
+            request = contract(allowed_writes=allowed, exclusions=excluded)
+            with self.subTest(allowed=allowed, excluded=excluded), self.assertRaises(RouteError):
+                resolve_route(request, capabilities(), policy())
+        request = contract(allowed_writes=['src/public'], exclusions=['src/secrets'])
+        self.assertEqual(resolve_route(request, capabilities(), policy())['status'], 'resolved')
+
     def test_cli_roundtrip_and_schema_parity(self):
         import tools.stack_route as module
         self.assertEqual(json.loads(Path('schemas/delegation-contract-v1.json').read_text()), module.CONTRACT_SCHEMA)

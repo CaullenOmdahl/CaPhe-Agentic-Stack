@@ -39,7 +39,10 @@ Use a simple `git status --short` when only a clean/dirty answer is needed; a fu
 extra local I/O. Read the compact result before fetching more. An incomplete or stale result requires a targeted refresh;
 a matching pair of observations is not proof of filesystem isolation. Context and gate digests use
 separate versioned formats: never substitute one for the other. Hidden Git index flags and submodules
-must be resolved explicitly when the context collector reports them incomplete.
+must be resolved explicitly when the context collector reports them incomplete. The completion gate
+separately binds initialized nested Git repositories recursively, including their working changes.
+Absent and empty uninitialized gitlinks have explicit identities; required checks still determine
+whether their contents are needed. Nonempty invalid checkouts and hidden index flags fail closed.
 
 For history, feed `project_history_envelope` only caller-sanitized excerpts with source ID, coordinate,
 and digest. It rejects raw tool/reasoning records and malformed envelopes. Pattern redaction is a second
@@ -172,7 +175,9 @@ bindings; device claims additionally require semantic acceptance. Update state t
 Legacy records remain readable and explicitly unbound. Generate the index with `strict_evidence.py`.
 
 Install only a reviewed source payload. Plan first, apply with a private rollback journal, and verify
-exact managed bytes. Then merge global canon/skill updates while preserving user-specific authorization
+exact managed bytes. Upgrades remove retired files only from a verified prior runtime inventory, with
+rollback; changed managed files require reconciliation and unrelated files remain untouched.
+Then merge global canon/skill updates while preserving user-specific authorization
 and operational instructions. Keep duplicate discovered skill copies consistent. Refresh project markers
 and effective hooks using the new initializer; preserve dirty/staged/untracked work, custom hooks,
 manifests, symlinked instruction aliases, and explicit disable. Verify every target with doctor and a
