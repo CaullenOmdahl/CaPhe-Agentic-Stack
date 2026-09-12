@@ -233,6 +233,8 @@ Legacy records remain readable and explicitly unbound. Generate the index with `
 Install only a reviewed source payload. Plan first, apply with a private rollback journal, and verify
 exact managed bytes. Upgrades remove retired files only from a verified prior runtime inventory, with
 rollback; changed managed files require reconciliation and unrelated files remain untouched.
+Payload names use portable relative paths, and resolved payload locations must remain beneath their
+source, staging, or target root. Platform-specific separators cannot change that boundary.
 An initial install rejects existing files at managed destinations. Structural file/directory upgrades
 require the replaced subtree to belong entirely to the previous inventory; unrelated children block them.
 Then merge global canon/skill updates while preserving user-specific authorization

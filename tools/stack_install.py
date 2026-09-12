@@ -39,7 +39,7 @@ def _safe_path(value):
 
 
 def _public(rel):
-    if not isinstance(rel, str):
+    if not isinstance(rel, str) or any(char in rel for char in ("\\", ":", "\0")):
         return False
     path = PurePosixPath(rel)
     denied = {"__pycache__", "node_modules", "private", "secrets", "credentials", "cache", "caches"}
@@ -48,10 +48,18 @@ def _public(rel):
             and path.suffix not in {".pyc", ".pyo", ".pem", ".key"})
 
 
-def _file_entry(root, rel):
+def _payload_path(root, rel):
     if not _public(rel):
         raise InstallError("non-public payload path: " + str(rel))
+    root = _safe_path(root)
     path = _safe_path(root / rel)
+    if not path.is_relative_to(root) or not path.resolve().is_relative_to(root.resolve()):
+        raise InstallError("payload destination escapes selected root")
+    return path
+
+
+def _file_entry(root, rel):
+    path = _payload_path(root, rel)
     if not path.is_file():
         raise InstallError("payload must be a regular file: " + rel)
     mode = stat.S_IMODE(path.stat().st_mode)
@@ -148,7 +156,7 @@ def _private_preflight(path, source, target):
 
 
 def _preflight_runtime_destinations(target, entries):
-    destinations = [target, target / _MANIFEST, target / "VERSION", *(target / item[0] for item in entries)]
+    destinations = [target, target / _MANIFEST, target / "VERSION", *(_payload_path(target, item[0]) for item in entries)]
     directories = set()
     for destination in destinations:
         _safe_path(destination.parent)
@@ -181,7 +189,7 @@ def _retired_remaining(target, previous, payload):
     names = [item[0] for item in payload]
     return any(path.exists() and not (path.is_dir() and any(name.startswith(item[0] + "/") for name in names))
                for item in previous if item[0] not in names
-               for path in [_safe_path(target / item[0])])
+               for path in [_payload_path(target, item[0])])
 
 
 def _manifest_bytes(payload):
@@ -242,7 +250,7 @@ def runtime_receipt_path(inventory, source_digest, target):
 def apply_runtime_plan(plan, *, inventory_root, fail_after=None):
     source, target = _validate_plan(plan)
     inventory = _private_preflight(inventory_root, source, target)
-    destinations = [target / item[0] for item in plan["payload"]] + [target / _MANIFEST, target / "VERSION"]
+    destinations = [_payload_path(target, item[0]) for item in plan["payload"]] + [target / _MANIFEST, target / "VERSION"]
     current = {item[0] for item in plan["payload"]}
     retired = [item for item in plan["previous_payload"] if item[0] not in current]
     receipt_path = runtime_receipt_path(inventory, plan["source_digest"], target)
@@ -257,7 +265,7 @@ def apply_runtime_plan(plan, *, inventory_root, fail_after=None):
         rel = destination.relative_to(target).as_posix()
         if destination.is_dir():
             descendants = {name for name in removing if name.startswith(rel + "/")}
-            allowed_dirs = {parent for name in descendants for parent in (target / name).parents if parent == destination or destination in parent.parents}
+            allowed_dirs = {parent for name in descendants for parent in _payload_path(target, name).parents if parent == destination or destination in parent.parents}
             if not descendants:
                 raise InstallError("unowned destination directory: " + str(destination))
             for child in (destination, *destination.rglob("*")):
@@ -314,9 +322,9 @@ def apply_runtime_plan(plan, *, inventory_root, fail_after=None):
     journal.clear()
     try:
         for rel, _, _ in plan["payload"]:
-            staged = stage / rel
+            staged = _payload_path(stage, rel)
             staged.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source / rel, staged, follow_symlinks=False)
+            shutil.copy2(_payload_path(source, rel), staged, follow_symlinks=False)
         if [_file_entry(stage, item[0]) for item in plan["payload"]] != plan["payload"]:
             raise InstallError("source changed while staging")
         # Retire only the verified current files, never a replacement directory
@@ -324,7 +332,7 @@ def apply_runtime_plan(plan, *, inventory_root, fail_after=None):
         for item in retired:
             if item[0] not in removing:
                 continue
-            destination = target / item[0]
+            destination = _payload_path(target, item[0])
             if _file_entry(target, item[0]) != item:
                 raise InstallError("retired managed file changed before removal")
             journal.append(("file", destination, (destination.read_bytes(), item[2])))
@@ -351,7 +359,8 @@ def apply_runtime_plan(plan, *, inventory_root, fail_after=None):
                 if os.path.exists(name):
                     os.unlink(name)
         for index, destination in enumerate(destinations[:-1], 1):
-            staged = stage / destination.relative_to(target)
+            rel = destination.relative_to(target).as_posix()
+            staged = stage / _MANIFEST if rel == _MANIFEST else _payload_path(stage, rel)
             write(destination, staged.read_bytes(), stat.S_IMODE(staged.stat().st_mode))
             if fail_after == index:
                 raise InstallError("injected partial install failure")
