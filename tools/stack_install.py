@@ -145,6 +145,17 @@ def plan_runtime_install(source, target):
     return {"action": "install-runtime", "source": str(source), "target": str(target), "source_digest": _entries_digest(payload), "payload": payload, "previous_payload": previous}
 
 
+def _retired_remaining(target, previous, payload):
+    names = [item[0] for item in payload]
+    return any(path.exists() and not (path.is_dir() and any(name.startswith(item[0] + "/") for name in names))
+               for item in previous if item[0] not in names
+               for path in [_safe_path(target / item[0])])
+
+
+def _manifest_bytes(payload):
+    return (json.dumps({"payload": payload, "source_digest": _entries_digest(payload)}, sort_keys=True) + "\n").encode()
+
+
 def _validate_plan(plan, *, after_install=False):
     if not isinstance(plan, dict) or set(plan) != {"action", "source", "target", "source_digest", "payload", "previous_payload"}:
         raise InstallError("unsupported plan")
@@ -160,9 +171,7 @@ def _validate_plan(plan, *, after_install=False):
     if [entry[0] for entry in previous] != sorted({entry[0] for entry in previous}):
         raise InstallError("prior inventory must be sorted and unique")
     expected = plan_runtime_install(plan["source"], plan["target"])
-    current_names = {item[0] for item in plan["payload"]}
-    retired_paths = [_safe_path(Path(plan["target"]) / item[0]) for item in previous if item[0] not in current_names]
-    already_applied = expected["previous_payload"] == plan["payload"] and not any(path.exists() for path in retired_paths)
+    already_applied = expected["previous_payload"] == plan["payload"] and not _retired_remaining(Path(plan["target"]), previous, plan["payload"])
     if after_install or already_applied:
         expected["previous_payload"] = previous
     if plan != expected:
@@ -173,10 +182,8 @@ def _validate_plan(plan, *, after_install=False):
 def verify_runtime_plan(plan):
     """Verify only managed files; unrelated local files and secrets remain untouched."""
     _, target = _validate_plan(plan, after_install=True)
-    current = {item[0] for item in plan["payload"]}
-    retired = [_safe_path(target / item[0]) for item in plan["previous_payload"] if item[0] not in current]
     return ([_file_entry(target, item[0]) for item in plan["payload"]] == plan["payload"]
-            and not any(path.exists() for path in retired))
+            and not _retired_remaining(target, plan["previous_payload"], plan["payload"]))
 
 
 def apply_runtime_plan(plan, *, inventory_root, fail_after=None):
@@ -186,47 +193,101 @@ def apply_runtime_plan(plan, *, inventory_root, fail_after=None):
     current = {item[0] for item in plan["payload"]}
     retired = [item for item in plan["previous_payload"] if item[0] not in current]
     receipt_path = inventory / ("runtime-" + plan["source_digest"][:16] + ".json")
-    for destination in destinations + [target / item[0] for item in retired] + [receipt_path]:
+    installed = _payload(target) if (target / _MANIFEST).exists() else []
+    owned = {item[0] for item in installed}
+    removing = {item[0] for item in retired if item[0] in owned}
+    removed_dirs = set()
+    # A prior verified inventory authorizes only its files and directories needed
+    # to contain them. Even an unrelated empty directory blocks replacement.
+    for destination in destinations:
         _safe_path(destination)
-        if destination.exists() and not destination.is_file():
-            raise InstallError("destination is not a regular file: " + str(destination))
-        if any(parent.exists() and not parent.is_dir() for parent in destination.parents):
-            raise InstallError("destination parent is not a directory")
+        rel = destination.relative_to(target).as_posix()
+        if destination.is_dir():
+            descendants = {name for name in removing if name.startswith(rel + "/")}
+            allowed_dirs = {parent for name in descendants for parent in (target / name).parents if parent == destination or destination in parent.parents}
+            if not descendants:
+                raise InstallError("unowned destination directory: " + str(destination))
+            for child in (destination, *destination.rglob("*")):
+                _safe_path(child)
+                if child.is_dir() and child in allowed_dirs:
+                    removed_dirs.add(child)
+                elif not child.is_file() or child.relative_to(target).as_posix() not in descendants:
+                    raise InstallError("unmanaged child blocks directory replacement: " + str(child))
+        elif destination.exists():
+            if not destination.is_file():
+                raise InstallError("destination is not a regular file: " + str(destination))
+            if rel not in owned and not (installed and rel in (_MANIFEST, "VERSION")):
+                raise InstallError("unowned destination file: " + str(destination))
+        for parent in destination.parents:
+            if parent.exists() and not parent.is_dir() and (parent == target or target not in parent.parents or parent.relative_to(target).as_posix() not in removing):
+                raise InstallError("unmanaged destination parent is not a directory")
+    if installed:
+        for name, content in ((_MANIFEST, _manifest_bytes(installed)), ("VERSION", b"3\n")):
+            path = _safe_path(target / name)
+            if not path.is_file() or path.read_bytes() != content or stat.S_IMODE(path.stat().st_mode) != 0o644:
+                raise InstallError("runtime metadata differs from installed format: " + name)
+    receipt = {"action": "install-runtime", "source_digest": plan["source_digest"], "target": str(target), "verified": True, "retired_files": [item[0] for item in retired]}
+    receipt_data = (json.dumps(receipt, sort_keys=True) + "\n").encode()
+    _safe_path(receipt_path)
+    if receipt_path.exists():
+        try:
+            existing = json.loads(receipt_path.read_bytes()) if receipt_path.is_file() else None
+            known = (isinstance(existing, dict) and set(existing) == set(receipt)
+                     and all(existing[key] == receipt[key] for key in receipt if key != "retired_files")
+                     and existing["verified"] is True and isinstance(existing["retired_files"], list)
+                     and all(_public(name) for name in existing["retired_files"])
+                     and existing["retired_files"] == sorted(set(existing["retired_files"]))
+                     and installed == plan["payload"]
+                     and receipt_path.read_bytes() == (json.dumps(existing, sort_keys=True) + "\n").encode())
+            if stat.S_IMODE(receipt_path.stat().st_mode) != 0o600 or (receipt_path.read_bytes() != receipt_data and not known):
+                raise ValueError("unowned receipt")
+        except (ValueError, TypeError, OSError) as error:
+            raise InstallError("private receipt collision") from error
+    if any(parent.exists() and not parent.is_dir() for parent in receipt_path.parents):
+        raise InstallError("private receipt parent is not a directory")
     created = []
+    journal = []
     def mkdir(path, mode=0o755):
         if path.exists():
             return
         mkdir(path.parent, mode)
         path.mkdir(mode=mode)
         created.append(path)
+        journal.append(("created-directory", path, None))
     mkdir(inventory, 0o700)
     stage = Path(tempfile.mkdtemp(prefix="caphe-stage-", dir=inventory))
-    journal = []
+    # Inventory ancestors contain staging until finally; only target mutations
+    # belong in the reverse journal. Empty inventory ancestors are cleaned last.
+    journal.clear()
     try:
-        # Only a verified prior inventory can authorize removal. Locally changed
-        # managed bytes reject the plan; unrelated runtime files remain untouched.
-        for item in retired:
-            destination = target / item[0]
-            if not destination.exists():
-                continue  # A verified identical plan was already applied.
-            if _file_entry(target, item[0]) != item:
-                raise InstallError("retired managed file changed before removal")
-            journal.append((destination, (destination.read_bytes(), item[2])))
-            destination.unlink()
         for rel, _, _ in plan["payload"]:
             staged = stage / rel
             staged.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source / rel, staged, follow_symlinks=False)
         if [_file_entry(stage, item[0]) for item in plan["payload"]] != plan["payload"]:
             raise InstallError("source changed while staging")
+        # Retire only the verified current files, never a replacement directory
+        # occupying an old filename on an idempotent repeat.
+        for item in retired:
+            if item[0] not in removing:
+                continue
+            destination = target / item[0]
+            if _file_entry(target, item[0]) != item:
+                raise InstallError("retired managed file changed before removal")
+            journal.append(("file", destination, (destination.read_bytes(), item[2])))
+            destination.unlink()
+        for directory in sorted(removed_dirs, key=lambda path: len(path.parts), reverse=True):
+            mode = stat.S_IMODE(directory.stat().st_mode)
+            directory.rmdir()
+            journal.append(("removed-directory", directory, mode))
         (stage / "VERSION").write_text("3\n")
-        (stage / _MANIFEST).write_text(json.dumps({"payload": plan["payload"], "source_digest": plan["source_digest"]}, sort_keys=True) + "\n")
-        receipt = {"action": "install-runtime", "source_digest": plan["source_digest"], "target": str(target), "verified": True, "retired_files": [item[0] for item in retired]}
+        (stage / _MANIFEST).write_bytes(_manifest_bytes(plan["payload"]))
+        (stage / _MANIFEST).chmod(0o644)
         def write(destination, data, mode):
             _safe_path(destination)
             previous = (destination.read_bytes(), stat.S_IMODE(destination.stat().st_mode)) if destination.exists() else None
-            journal.append((destination, previous))
             mkdir(destination.parent)
+            journal.append(("file", destination, previous))
             fd, name = tempfile.mkstemp(prefix=".caphe-write-", dir=destination.parent)
             try:
                 with os.fdopen(fd, "wb") as stream:
@@ -247,13 +308,19 @@ def apply_runtime_plan(plan, *, inventory_root, fail_after=None):
         write(target / "VERSION", (stage / "VERSION").read_bytes(), 0o644)
         if fail_after == len(destinations):
             raise InstallError("injected activation failure")
-        write(receipt_path, (json.dumps(receipt, sort_keys=True) + "\n").encode(), 0o600)
+        if not receipt_path.exists():
+            write(receipt_path, receipt_data, 0o600)
         if fail_after == len(destinations) + 1:
             raise InstallError("injected receipt failure")
         return receipt
     except BaseException:
-        for destination, previous in reversed(journal):
-            if previous is None:
+        for kind, destination, previous in reversed(journal):
+            if kind == "created-directory":
+                destination.rmdir()
+            elif kind == "removed-directory":
+                destination.mkdir(mode=previous)
+                destination.chmod(previous)
+            elif previous is None:
                 destination.unlink(missing_ok=True)
             else:
                 destination.write_bytes(previous[0])
