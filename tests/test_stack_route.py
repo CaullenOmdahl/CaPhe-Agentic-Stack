@@ -105,6 +105,12 @@ class StackRouteTests(unittest.TestCase):
             with self.subTest(request=request), self.assertRaises(RouteError):
                 resolve_route(request, capabilities(), policy())
 
+    def test_protected_path_components_reject_case_aliases(self):
+        for path in ('.GIT/config', '.SsH/key'):
+            with self.subTest(path=path), self.assertRaises(RouteError):
+                resolve_route(contract(allowed_writes=[path]), capabilities(), policy())
+        self.assertEqual(resolve_route(contract(allowed_writes=['Git/config']), capabilities(), policy())['status'], 'resolved')
+
     def test_nested_delegation_and_concurrency_limits_rejected(self):
         child = {'task_id': 'worker-1', 'goal': 'Check a thing', 'acceptance': ['Report evidence'], 'allowed_writes': []}
         for request in (contract(max_workers=3), contract(children=[child], max_workers=0),
@@ -134,6 +140,29 @@ class StackRouteTests(unittest.TestCase):
                 resolve_route(request, capabilities(), policy())
         request = contract(allowed_writes=['src/public'], exclusions=['src/secrets'])
         self.assertEqual(resolve_route(request, capabilities(), policy())['status'], 'resolved')
+
+    def test_scope_comparisons_casefold_without_collapsing_components(self):
+        for allowed, excluded in ((['Secrets/config'], ['secrets']),
+                                  (['secrets'], ['Secrets/config'])):
+            request = contract(allowed_writes=allowed, exclusions=excluded)
+            with self.subTest(allowed=allowed, excluded=excluded), self.assertRaises(RouteError):
+                resolve_route(request, capabilities(), policy())
+
+        request = contract(allowed_writes=['src/foo'], exclusions=['src/foobar'])
+        self.assertEqual(resolve_route(request, capabilities(), policy())['status'], 'resolved')
+
+        def worker(identifier, writes):
+            return {'task_id': identifier, 'goal': 'Implement scoped change',
+                    'acceptance': ['Unit check'], 'allowed_writes': writes}
+        request = contract(children=[worker('one', ['tools/Secrets']),
+                                     worker('two', ['tools/secrets/config'])])
+        with self.assertRaises(RouteError):
+            resolve_route(request, capabilities(), policy())
+        request = contract(children=[worker('one', ['tools/foo']), worker('two', ['tools/foobar'])])
+        self.assertEqual(resolve_route(request, capabilities(), policy())['status'], 'resolved')
+        request = contract(children=[worker('one', ['TOOLS/file.py'])])
+        self.assertEqual(resolve_route(request, capabilities(), policy())['status'], 'resolved')
+        self.assertEqual(resolve_route(contract(), capabilities(), policy())['status'], 'resolved')
 
     def test_cli_roundtrip_and_schema_parity(self):
         import tools.stack_route as module

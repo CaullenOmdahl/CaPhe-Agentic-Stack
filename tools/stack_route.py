@@ -94,8 +94,13 @@ def _path(value):
     trimmed = value.removesuffix('/')
     path = PurePosixPath(trimmed)
     if (not trimmed or path.is_absolute() or '\\' in value or ':' in value or
-            any(part in ('', '.', '..', '.git', '.ssh') for part in trimmed.split('/'))):
+            any(part.casefold() in ('', '.', '..', '.git', '.ssh') for part in trimmed.split('/'))):
         raise RouteError('contract paths must be explicit relative paths without traversal')
+
+
+def _scope_path(value):
+    """Return the portable, case-insensitive form used for scope comparison."""
+    return PurePosixPath(value.casefold())
 
 
 def validate_contract(contract):
@@ -111,19 +116,19 @@ def validate_contract(contract):
     for child in contract['children']:
         for value in child['allowed_writes']:
             _path(value)
-            target = PurePosixPath(value)
-            if not any(target == PurePosixPath(parent) or PurePosixPath(parent) in target.parents for parent in contract['allowed_writes']):
+            target = _scope_path(value)
+            if not any(target == _scope_path(parent) or _scope_path(parent) in target.parents for parent in contract['allowed_writes']):
                 raise RouteError('child writes exceed parent scope')
     for index, child in enumerate(contract['children']):
         for other in contract['children'][index + 1:]:
-            for left in map(PurePosixPath, child['allowed_writes']):
-                for right in map(PurePosixPath, other['allowed_writes']):
+            for left in map(_scope_path, child['allowed_writes']):
+                for right in map(_scope_path, other['allowed_writes']):
                     if left == right or left in right.parents or right in left.parents:
                         raise RouteError('child write scopes must be disjoint')
     for value in contract['allowed_writes'] + [path for child in contract['children'] for path in child['allowed_writes']]:
-        target = PurePosixPath(value)
+        target = _scope_path(value)
         if any(target == exclusion or exclusion in target.parents or target in exclusion.parents
-               for exclusion in map(PurePosixPath, contract['exclusions'])):
+               for exclusion in map(_scope_path, contract['exclusions'])):
             raise RouteError('allowed writes overlap an exclusion')
 
 
