@@ -136,7 +136,7 @@ jobs:
           before_head=$(git rev-parse HEAD)
           before_index=$(git ls-files --stage -v -z | git hash-object --stdin)
           python3 -I "$policy/strict-mode/bin/strict_gate.py" \
-            --manifest "$policy/.agent/strict-gate.json" --mode completion
+            --manifest .agent/strict-gate.json --mode completion
           test "$(git rev-parse HEAD)" = "$before_head"
           test "$(git ls-files --stage -v -z | git hash-object --stdin)" = "$before_index"
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
