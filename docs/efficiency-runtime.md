@@ -66,6 +66,8 @@ The query must report the watched task's status; its own successful process exit
 finished. The first running observation establishes a baseline. Repeated unchanged observations consume
 no model calls. The tool never posts comments, schedules tasks, or sends messages. A zero timeout does
 not start a query. Use an app's purpose-built event wait when it already provides these guarantees.
+Process-backed watching requires POSIX; native Windows fails before launching a query and directs the
+caller to Linux or WSL. Parsing and comparing supplied observations does not launch processes.
 
 ## Preparation and checks
 
@@ -206,6 +208,13 @@ Use `PrivateStateStore` for next action, unresolved checks, source coordinates, 
 It rejects Git and canonical memory/transcript destinations. Authorization records preserve the user's
 statement; the agent still checks that the next action is covered. No automatic memory ingestion is added.
 
+The evidence CLI and `validate_record` require v2 snapshots. The deprecated Python `write_record` API
+also accepts closed, bounded legacy notes with the same public-text checks and immutable IDs. These
+notes remain explicitly unbound and stale; they cannot certify acceptance or participate in v2
+supersession. The index may retain a validated ADR identifier, but suppresses legacy status, tests,
+review text, and extra fields. Older records with unknown fields remain readable without becoming
+writable through this compatibility path.
+
 New public evidence writes use [schema v2](../schemas/public-evidence-v2.json). Record implementation,
 validation, review, merge, release, and external acceptance separately. Use explicit not-applicable
 reasons; source tests cannot imply device or release success. Artifact claims require matching artifact
@@ -243,10 +252,13 @@ A project without a proven affected graph retains its full checks. Do not replac
 manifest with a generated default. A machine update does not claim application release, hardware
 readiness, or a completed production deployment. Keep detailed rollout inventories and exceptions private.
 
-This repository's CI runs the required runner and manifest from the exact PR base commit against the
-candidate checkout. Pushes to main use the preceding main commit; missing baseline policy fails closed.
-Both checkouts disable persisted credentials. Candidate runner/manifest edits cannot remove the baseline
-checks. The job also rejects changed HEAD, index entries/flags, or nonignored source state after checks.
+This repository's CI retains `tests/`, `test/`, and `strict-mode/test/` from the exact PR base in a
+disposable checkout containing candidate product source. It runs the accepted runner and manifest there,
+then separately against the untouched candidate checkout to discover candidate-added tests even when
+the retained checks fail. Pushes to main use the preceding main commit; missing baseline policy fails
+closed. Both source checkouts disable persisted credentials. Candidate replacements cannot remove the
+accepted test implementations. The job rejects changed HEAD, index entries/flags, or nonignored source
+state after checks.
 The workflow and test sources still require independent review: this is not tamper-proof attestation or
 a trusted receipt service. Additions to the candidate's check matrix need separate verification until
 they become accepted baseline policy. GitHub's [PR event semantics](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request)

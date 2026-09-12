@@ -1,5 +1,6 @@
 import copy
 import importlib.util
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -20,6 +21,25 @@ def success():
 
 
 class WatchContracts(unittest.TestCase):
+    def test_native_windows_execution_is_rejected_before_starting_a_process(self):
+        with patch.object(watcher.os, 'name', 'nt'), patch.object(watcher.subprocess, 'Popen') as process:
+            with self.assertRaisesRegex(ValueError, 'POSIX.*WSL'):
+                watcher.run_process_observation(['query'], 1)
+            with self.assertRaisesRegex(ValueError, 'POSIX.*WSL'):
+                watcher.watch(['query'], timeout_seconds=1, poll_interval_seconds=.1)
+        process.assert_not_called()
+
+    def test_native_windows_cli_gives_an_actionable_platform_error(self):
+        stderr = io.BytesIO()
+        with patch.object(watcher.os, 'name', 'nt'), patch.object(watcher.subprocess, 'Popen') as process, \
+                patch.object(watcher.sys, 'stderr') as stream:
+            stream.buffer = stderr
+            self.assertEqual(watcher.main(['--timeout', '1', '--process', 'query']), 2)
+        process.assert_not_called()
+        error = json.loads(stderr.getvalue())
+        self.assertEqual(error['error'], 'UnsupportedPlatform')
+        self.assertIn('WSL', error['message'])
+
     def test_comparison_uses_bounded_projection_before_fingerprinting(self):
         first = {'status': 'RUNNING', 'logs': 'first', 'updatedAt': 'one'}
         second = {'status': 'RUNNING', 'logs': 'x' * 100000, 'updatedAt': 'two'}

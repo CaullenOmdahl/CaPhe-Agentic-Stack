@@ -87,6 +87,15 @@ PUBLIC_SCHEMA = {
 }
 
 
+LEGACY_WRITE_SCHEMA = _object({
+    'id': {'type': 'string', 'pattern': ID_PATTERN},
+    'decision': {'type': 'string', 'pattern': r'^ADR-[0-9]{4,32}$'},
+    'lane': PUBLIC_SCHEMA['properties']['lane'], 'status': TEXT,
+    'tests': {'type': 'array', 'maxItems': 80, 'items': TEXT},
+    'review': TEXT, 'schema_version': {'const': 1},
+}, ['id', 'decision', 'lane', 'status', 'tests', 'review'])
+
+
 # Conditional bindings are present in both the distributed schema and the stdlib validator.
 PUBLIC_SCHEMA['allOf'] = []
 for _phase in PHASES:
@@ -254,7 +263,7 @@ def validate_semantic_acceptance(record):
 
 def validate_record(record: dict[str, Any]) -> None:
     if not isinstance(record, dict) or record.get('schema_version') != 2:
-        raise EvidenceError('new writes require public evidence schema_version 2; legacy records are read-only and unbound')
+        raise EvidenceError('public snapshot writes require schema_version 2; legacy notes remain unbound')
     _validate(record, PUBLIC_SCHEMA)
     _public_text(record)
     for item in record['evidence']:
@@ -433,7 +442,12 @@ def _atomic_write(path, content, immutable=False):
 
 
 def write_record(root: Path, record: dict[str, Any]) -> Path:
-    validate_record(record)
+    """Write a v2 snapshot or an immutable, unbound note for legacy Python callers."""
+    if isinstance(record, dict) and record.get('schema_version') in (None, 1):
+        _validate(record, LEGACY_WRITE_SCHEMA)
+        _public_text(record)
+    else:
+        validate_record(record)
     directory = _directory(root)
     path = directory / (record['id'] + '.json')
     with _locked(directory):
@@ -467,7 +481,8 @@ def generate_index(root: Path) -> Path:
                     binding += ' superseded by ' + successors[record['id']]
                 cells = [record['id'], record['decision'], record['lane'], status, binding]
             else:
-                cells = [record['id'], 'legacy', 'unbound', 'unknown acceptance', 'legacy; provenance not promoted']
+                decision = record['decision'] if re.fullmatch(r'ADR-[0-9]{4,32}', record['decision']) else 'legacy'
+                cells = [record['id'], decision, 'unbound', 'unknown acceptance', 'legacy; provenance not promoted']
             lines.append('| ' + ' | '.join(_cell(cell) for cell in cells) + ' |')
         path = directory.parent / 'traceability.md'
         _atomic_write(path, '\n'.join(lines) + '\n')
@@ -491,7 +506,9 @@ def main() -> int:
             if not args.index_only:
                 if not args.record:
                     parser.error('record is required unless --index-only is used')
-                write_record(root, _read(Path(args.record)))
+                record = _read(Path(args.record))
+                validate_record(record)
+                write_record(root, record)
             generate_index(root)
     except (EvidenceError, OSError) as error:
         parser.exit(2, f'evidence rejected: {error}\n')

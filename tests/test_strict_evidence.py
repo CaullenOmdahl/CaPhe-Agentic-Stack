@@ -135,7 +135,7 @@ class StrictEvidenceTests(unittest.TestCase):
             with self.subTest(item=item), self.assertRaises(strict_evidence.EvidenceError):
                 strict_evidence.validate_record(item)
 
-    def test_legacy_is_readable_but_not_promoted_or_writable(self):
+    def test_loose_legacy_history_is_readable_but_not_promoted_or_rewritten(self):
         legacy = {'id': 'legacy', 'decision': 'ADR-0001', 'lane': 'scoped-behavior',
                   'status': 'verified', 'tests': ['python3 -m unittest'], 'review': 'old review',
                   'private_unknown': 'legacy annotation'}
@@ -150,6 +150,61 @@ class StrictEvidenceTests(unittest.TestCase):
             self.assertNotIn('private_unknown', index)
             with self.assertRaises(strict_evidence.EvidenceError):
                 strict_evidence.write_record(root, legacy)
+
+    def test_legacy_python_api_preserves_immutable_unbound_notes(self):
+        for version in ({}, {'schema_version': 1}):
+            with self.subTest(version=version), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve()
+                legacy = {'id': 'legacy', 'decision': 'ADR-0001', 'lane': 'scoped-behavior',
+                          'status': 'verified', 'tests': ['python3 -m unittest'],
+                          'review': 'https://example.invalid/pr/1', **version}
+                path = strict_evidence.write_record(root, legacy)
+                self.assertEqual(json.loads(path.read_text()), legacy)
+                modified = path.stat().st_mtime_ns
+                self.assertEqual(strict_evidence.write_record(root, legacy), path)
+                self.assertEqual(path.stat().st_mtime_ns, modified)
+                with self.assertRaises(strict_evidence.EvidenceError):
+                    strict_evidence.write_record(root, {**legacy, 'status': 'changed'})
+                index = strict_evidence.generate_index(root).read_text()
+                self.assertIn('ADR-0001', index)
+                self.assertIn('unbound', index)
+                for value in ('verified', 'python3 -m unittest', 'https://example.invalid/pr/1'):
+                    self.assertNotIn(value, index)
+                view = strict_evidence.build_active_view([legacy], record()['source'])
+                self.assertTrue(view[0]['legacy_unbound'])
+                self.assertTrue(view[0]['stale_source'])
+                with self.assertRaises(strict_evidence.EvidenceError):
+                    strict_evidence.write_record(root, record(supersedes=['legacy']))
+
+    def test_legacy_compatibility_writes_are_closed_bounded_and_public(self):
+        legacy = {'id': 'legacy', 'decision': 'ADR-0001', 'lane': 'scoped-behavior',
+                  'status': 'verified', 'tests': ['python3 -m unittest'],
+                  'review': 'https://example.invalid/pr/1'}
+        changes = [{'private_unknown': 'annotation'}, {'source': record()['source']},
+                   {'states': record()['states']}, {'supersedes': []},
+                   {'schema_version': None}, {'schema_version': True}, {'schema_version': 1.0},
+                   {'tests': ['x' * 1001]}, {'tests': ['test'] * 81},
+                   {'tests': ['Read /' + 'home/client/.env']}, {'review': 'api_key=private-fixture'},
+                   {'decision': 'ADR-0001 | private annotation'}]
+        for change in changes:
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve()
+                with self.assertRaises(strict_evidence.EvidenceError):
+                    strict_evidence.write_record(root, {**legacy, **change})
+                self.assertFalse((root / '.agent').exists())
+
+    def test_cli_remains_v2_only_for_valid_legacy_records(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            source = root / 'legacy.json'
+            source.write_text(json.dumps({'id': 'legacy', 'decision': 'ADR-0001',
+                'lane': 'scoped-behavior', 'status': 'verified', 'tests': ['python3 -m unittest'],
+                'review': 'https://example.invalid/pr/1'}))
+            result = subprocess.run([sys.executable, str(MODULE_PATH), str(source), '--root', str(root)],
+                                    text=True, capture_output=True, timeout=5)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn('schema_version 2', result.stderr)
+            self.assertFalse((root / '.agent').exists())
 
     def test_active_view_excludes_superseded_and_terminal_and_marks_stale(self):
         first = record('first')
