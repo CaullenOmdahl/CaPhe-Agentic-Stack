@@ -121,6 +121,8 @@ commands uncached, and a source change during checks requires a rerun against th
 Feedback cache v4 invalidates older markers and binds environment names, values, and absence unambiguously.
 New markers publish only after the final source snapshot
 is unchanged and only to Git-ignored, untracked destinations; otherwise the check remains uncached.
+Root discovery and child checks clear inherited repository-local Git overrides. Disable markers belong
+to the invoking checkout, even when the caller was previously operating on another repository.
 
 Gate process execution supports POSIX hosts; this distribution is verified on macOS and Linux.
 Native Windows execution fails before launching checks; use a Linux environment such as WSL.

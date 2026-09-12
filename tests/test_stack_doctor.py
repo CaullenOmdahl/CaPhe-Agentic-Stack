@@ -260,3 +260,21 @@ class DoctorContracts(unittest.TestCase):
                 self.assertFalse(report["project"]["managed"])
                 self.assertIn("hook_chain_mismatch", report["unresolved"])
                 self.assertEqual({str(p): p.read_bytes() for p in repo.rglob("*") if p.is_file()}, before)
+
+    def test_unrecorded_executable_hook_invalidates_doctor_without_mutation(self):
+        for mode in (0o755, 0o644):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp:
+                repo = Path(tmp).resolve() / "repo"; repo.mkdir()
+                subprocess.run(["git", "init", "-q", str(repo)], check=True)
+                activation.initialize(PATH.parents[1] / "strict-mode", repo)
+                hookdir = Path(subprocess.check_output(["git", "-C", str(repo), "config", "core.hooksPath"], text=True).strip())
+                hook = hookdir / "commit-msg"
+                hook.write_text("#!/bin/sh\nexit 17\n"); hook.chmod(mode)
+                before = {str(p): (p.read_bytes(), p.stat().st_mode) for p in repo.rglob("*") if p.is_file()}
+                report = doctor.inspect(repo, runtime=PATH.parents[1])
+                self.assertEqual(report["hooks"]["verified"], mode == 0o644)
+                if mode == 0o755:
+                    self.assertFalse(report["project"]["managed"])
+                    self.assertIn("hook_chain_mismatch", report["unresolved"])
+                    self.assertIn("unrecorded executable Git hook", report["hooks"]["chain"]["reason"])
+                self.assertEqual({str(p): (p.read_bytes(), p.stat().st_mode) for p in repo.rglob("*") if p.is_file()}, before)

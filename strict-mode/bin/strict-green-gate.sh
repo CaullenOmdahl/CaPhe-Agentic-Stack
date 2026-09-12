@@ -2,6 +2,19 @@
 # Strict Mode v3 gate. See ADR-0004.
 set -euo pipefail
 
+# Clear calling-hook repository state before selecting the root or its disable marker.
+# Keep global Git configuration and transport settings available to declared checks.
+unset GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_CONFIG GIT_CONFIG_COUNT \
+  GIT_CONFIG_PARAMETERS GIT_DIR GIT_GRAFT_FILE GIT_IMPLICIT_WORK_TREE GIT_INDEX_FILE \
+  GIT_NO_REPLACE_OBJECTS GIT_OBJECT_DIRECTORY GIT_PREFIX GIT_REPLACE_REF_BASE \
+  GIT_SHALLOW_FILE GIT_WORK_TREE
+while IFS= read -r CAPHE_GATE_GIT_ENV_NAME; do
+  if [[ "$CAPHE_GATE_GIT_ENV_NAME" =~ ^GIT_[A-Z0-9_]+$ ]]; then
+    unset "$CAPHE_GATE_GIT_ENV_NAME"
+  fi
+done < <(git rev-parse --local-env-vars 2>/dev/null || true)
+unset CAPHE_GATE_GIT_ENV_NAME
+
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 MARKER_REL=.agent/.strict-mode
