@@ -995,7 +995,13 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
     ]
     command_names = {"diff-check"}
 
-    pubspecs = sorted(path for path in root.rglob("pubspec.yaml") if ".dart_tool" not in path.parts and "build" not in path.parts)
+    def has_excluded_part(path: Path, excluded: set[str]) -> bool:
+        return any(part in excluded for part in path.relative_to(root).parts)
+
+    pubspecs = sorted(
+        path for path in root.rglob("pubspec.yaml")
+        if not has_excluded_part(path, {".dart_tool", "build"})
+    )
     workspace_members: set[Path] = set()
     root_pubspec = root / "pubspec.yaml"
     if root_pubspec in pubspecs:
@@ -1024,7 +1030,7 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
                 command_names.add(name)
 
     for package in sorted(root.rglob("package.json")):
-        if any(part in {"node_modules", "build", "dist", ".svelte-kit"} for part in package.parts):
+        if has_excluded_part(package, {"node_modules", "build", "dist", ".svelte-kit"}):
             continue
         try:
             scripts = json.loads(package.read_text(), object_pairs_hook=_unique_json_object).get("scripts", {})
@@ -1040,7 +1046,7 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
             commands.append({"name": name, "run": run, "cwd": cwd})
 
     cargo_manifests = [
-        path for path in sorted(root.rglob("Cargo.toml")) if "target" not in path.parts
+        path for path in sorted(root.rglob("Cargo.toml")) if not has_excluded_part(path, {"target"})
     ]
     cargo_workspaces = {
         path
@@ -1085,7 +1091,7 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
             ]
         )
     for go_mod in sorted(root.rglob("go.mod")):
-        if any(part in {"vendor", "build", "dist"} for part in go_mod.parts):
+        if has_excluded_part(go_mod, {"vendor", "build", "dist"}):
             continue
         cwd = _relative_cwd(root, go_mod)
         suffix = cwd
@@ -1110,7 +1116,7 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
         python_project_roots.update(
             config.parent
             for config in root.rglob(pattern)
-            if not any(part in excluded_python_parts for part in config.parts)
+            if not has_excluded_part(config, excluded_python_parts)
         )
 
     def owning_python_project(test_module: Path) -> Path:
@@ -1124,13 +1130,13 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
     python_test_roots = {
         owning_python_project(tests)
         for tests in root.rglob("tests")
-        if tests.is_dir() and not any(part in excluded_python_parts for part in tests.parts)
+        if tests.is_dir() and not has_excluded_part(tests, excluded_python_parts)
     }
     root_level_test_roots = {
         owning_python_project(test_module)
         for test_module in root.rglob("test*.py")
         if test_module.is_file()
-        and not any(part in excluded_python_parts for part in test_module.parts)
+        and not has_excluded_part(test_module, excluded_python_parts)
         and "tests" not in test_module.relative_to(root).parts[:-1]
     }
     python_test_roots.update(root_level_test_roots)
@@ -1144,7 +1150,7 @@ def discover_default_manifest(root: Path) -> dict[str, Any]:
             "requirements*.txt",
         )
         for config in root.rglob(pattern)
-        if not any(part in excluded_python_parts for part in config.parts)
+        if not has_excluded_part(config, excluded_python_parts)
         and _declares_pytest(config.parent)
     }
     python_test_roots.update(pytest_project_roots)
