@@ -265,14 +265,31 @@ A project without a proven affected graph retains its full checks. Do not replac
 manifest with a generated default. A machine update does not claim application release, hardware
 readiness, or a completed production deployment. Keep detailed rollout inventories and exceptions private.
 
-This repository's CI retains `tests/`, `test/`, and `strict-mode/test/` from the exact PR base in a
+When this repository's defined CI job runs, it retains `tests/`, `test/`, and `strict-mode/test/` from the exact PR base in a
 disposable checkout containing candidate product source. It runs the accepted runner and manifest there.
 A separate phase uses the accepted runner with the candidate manifest against the untouched candidate
 checkout, so newly declared commands and added tests run even when the retained checks fail. Pushes to
 main use the preceding main commit as the accepted baseline; missing baseline policy fails
-closed. Both source checkouts disable persisted credentials. Candidate replacements cannot remove the
-accepted test implementations. The job rejects changed HEAD, index entries/flags, or nonignored source
+closed. Both source checkouts disable persisted credentials. Candidate product files do not replace
+the accepted tests within that assembled harness. The job rejects changed HEAD, index entries/flags, or nonignored source
 state after checks.
-The workflow and test sources still require independent review: this is not tamper-proof attestation or
-a trusted receipt service. GitHub's [PR event semantics](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request)
-and [checkout configuration](https://github.com/actions/checkout) define the checkout boundary.
+The pull request can replace the workflow itself with successful no-ops under the same check names.
+These jobs therefore provide diagnostic feedback; they do not enforce their own invocation or certify
+completion. GitHub's [PR event semantics](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request)
+and [checkout configuration](https://github.com/actions/checkout) define that boundary.
+
+Until an independently protected executor is available, use the ADR-0004 procedural completion route:
+an owner-controlled controller outside the candidate pins the execution recipe, accepted baseline,
+runner, and required matrix before execution. A candidate-supplied digest or green status cannot select
+those pins. Reject changed recipes or requirements before launching checks; independently review and
+approve a policy change before accepting a new pin. Run both the retained accepted harness and the
+complete reviewed candidate matrix uncached against the exact candidate revision. Record recipe and
+matrix identities, source stability, command outcomes, and PR review separately. A local rerun of an
+unapproved candidate workflow or manifest cannot restore trust.
+
+Automatic GitHub enforcement and trusted CI receipt reuse remain unavailable in this distribution.
+An external required status must come from a separately controlled provider; GitHub supports
+[binding required checks to a specific App](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets#require-status-checks-to-pass-before-merging).
+Adding that service requires its own approved policy source, isolated execution and publishing
+credentials, repository rules, and verification. Merely calling a reusable workflow from candidate YAML
+does not enforce that the call occurs. Keep independent PR review and named human gates throughout.

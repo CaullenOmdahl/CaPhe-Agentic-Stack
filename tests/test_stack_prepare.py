@@ -116,6 +116,35 @@ class PrepareContracts(unittest.TestCase):
                 launch.assert_not_called()
             self.assertFalse(private.exists())
 
+    def test_native_windows_cli_rejects_before_loading_posix_state_or_launching(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / 'launched'
+            script = (
+                "import argparse, hashlib, importlib.abc, json, math, os, pathlib, re, runpy, selectors, signal, stat, subprocess, sys, tempfile, time, typing\n"
+                "from pathlib import Path\n"
+                "class BlockFcntl(importlib.abc.MetaPathFinder):\n"
+                "    def find_spec(self, fullname, path=None, target=None):\n"
+                "        if fullname == 'fcntl': raise ModuleNotFoundError('fcntl blocked')\n"
+                "sys.meta_path.insert(0, BlockFcntl())\n"
+                "sys.modules.pop('fcntl', None)\n"
+                "marker = Path(" + repr(str(marker)) + ")\n"
+                "def launched(*args, **kwargs):\n"
+                "    marker.write_text('launched')\n"
+                "    raise AssertionError('command launched')\n"
+                "subprocess.Popen = launched\n"
+                "sys.path[:0] = [" + repr(str(PATH.parent)) + ", " + repr(str(PATH.parents[1])) + "]\n"
+                "os.name = 'nt'\n"
+                "sys.argv = [" + repr(str(PATH)) + ", '--manifest', 'missing', '--receipt-root', 'missing']\n"
+                "runpy.run_path(sys.argv[0], run_name='__main__')\n"
+            )
+            result = subprocess.run([sys.executable, '-I', '-c', script], capture_output=True, text=True, timeout=3)
+            command_launched = marker.exists()
+        output = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 2, output)
+        self.assertRegex(output, 'POSIX.*WSL')
+        self.assertNotIn('Traceback', output)
+        self.assertFalse(command_launched)
+
     def test_cli_rejects_fabricated_checkout_receipt_before_identity_probes(self):
         with tempfile.TemporaryDirectory() as tmp:
             root,private,manifest_path,manifest,forged=self.receipt_fixture(Path(tmp).resolve())

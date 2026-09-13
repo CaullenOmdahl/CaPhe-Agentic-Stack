@@ -1,5 +1,8 @@
 name: quality
 
+# Diagnostic CI: a pull request can replace this workflow, including its run blocks.
+# Completion requires the independent, approved-policy route in ADR-0004.
+
 on:
   pull_request:
   push:
