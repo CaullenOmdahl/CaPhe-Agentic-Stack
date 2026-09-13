@@ -1,8 +1,10 @@
 # Traceability
 
-> Generated from `.agent/evidence/*.json`; edit the records, not this index.
+> Generated from `.agent/evidence/*.json`. Claims are not independent verification.
 
-| Change | Decision | Lane | Status | Review |
+| Record | Decision | Lane | Acceptance states | Binding |
 |---|---|---|---|---|
-| review-tool-capability-parity | ADR-0003 | full-risk | implementation-review-pending | pending pull request |
-| strict-memory-efficiency-v2 | ADR-0001; ADR-0002 | full-risk | implementation-review | https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/pull/6 |
+| efficiency-improvement-plan | legacy | unbound | unknown acceptance | legacy; provenance not promoted |
+| efficiency-runtime-implementation-v1 | ADR-0004 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: not_applicable; review: pending; validation: pending | 900ec066ea0c/30fefcf960c7 |
+| review-tool-capability-parity | legacy | unbound | unknown acceptance | legacy; provenance not promoted |
+| strict-memory-efficiency-v2 | legacy | unbound | unknown acceptance | legacy; provenance not promoted |

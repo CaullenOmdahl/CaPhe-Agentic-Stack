@@ -1,4 +1,4 @@
-# Strict Mode v2 — evidence-preserving efficiency
+# Strict Mode v3 — evidence-preserving efficiency
 
 ## Prime directive
 
@@ -39,6 +39,10 @@ irreversible actions, or a real unresolved fork. Nothing self-merges past a gate
 
 ## Verification
 
+Start with the smallest source-bound context that can decide the next action. The installed runtime's
+`tools/stack_context.py` collects bounded Git state; retrieve sanitized historical excerpts only for a
+specific unresolved question. Keep full histories canonical and outside this public distribution.
+
 `strict-green-gate.sh --mode affected` is fast feedback. It may use a manifest-proven dependency graph,
 parallel commands, and explicitly safe cache entries. It reports `FAST GREEN`, never completion.
 
@@ -48,8 +52,19 @@ absence or incomplete CI falls back to the complete local matrix.
 
 Manifest coverage is fail-closed. Uncovered paths block; unproven dependency completeness escalates local
 feedback to full. Cache is default-off and never participates in completion.
+Checks cover staged, unstaged, and non-ignored untracked working files. A changed source snapshot during
+execution is not green. Commands run in declared order within each component unless `parallel_safe: true`
+explicitly declares independence; selected dependent components wait for their prerequisites. Failed
+preparation blocks dependent checks. Use explicit timeouts for commands that can stall.
+Check and toolchain-probe working directories must resolve inside the repository. Custom dependency
+verifiers use `dependency_verification.timeout_seconds` (default 10); timeout leaves the dependency
+claim unproven and falls back to full checks.
+`--report` writes a private diagnostic outside Git. Candidate-produced reports cannot certify their own
+authority; automatic CI evidence reuse remains unavailable without an independently trusted executor.
+Run the uncached full local matrix when that independently verified CI evidence is absent.
 Generated default manifests assign Python test signals to their nearest declared project. Declared nested
-projects run independently and ancestor pytest commands ignore them, preventing duplicate collection.
+projects run independently and ancestor pytest/unittest commands exclude them before collection,
+preventing duplicate imports and execution.
 Pytest configuration or dependencies in PEP 621, standardized groups, Poetry tables, or requirements
 select `python -m pytest`; otherwise the project uses unittest discovery. Dart, Node, Cargo, and Go roots
 remain independently discovered.
@@ -59,6 +74,9 @@ remain independently discovered.
 Implementation review is PR-based on the actual diff. Local review prepares design/ADRs or serves as an
 explicitly recorded fallback when PR review is genuinely unavailable. Reviewing design is not reviewing
 implementation. At most two revise-and-re-review rounds are allowed before human tie-break.
+
+When a defect repeats across entrypoints, inspect sibling implementations for that same defect before
+pushing the repair. Bound this search to the defect class and add regressions at the affected boundaries.
 
 The packaged `strict-confer` peers are Claude Code, agy (Gemini-family), and Codex; direct Gemini CLI is
 not assumed equivalent. Reviewer models come from an owner-only per-machine configuration: agy requires a
@@ -82,8 +100,36 @@ before spending on later stages.
 
 ## Traceability
 
-Write one compact JSON record under `.agent/evidence/` per change. Include decision, evidence lane, tests,
-review URL, status, and named approval. Generate `.agent/traceability.md`; do not grow one hand-edited table.
+Write immutable v2 JSON snapshots under `.agent/evidence/`, bound to the source examined. Record
+implementation, validation, review, merge, release, and external acceptance separately. A new state gets
+a new ID and explicitly supersedes its predecessor; legacy records remain unbound history. Generate
+`.agent/traceability.md`. A declaration is not independent proof of its own claims.
+
+Store task continuation and the user's original scoped authorization in the installed runtime's
+`tools/stack_state.py` private store outside all Git worktrees. Preserve next action, subject source,
+remaining checks, and source coordinates; do not duplicate raw transcripts or modify canonical memory.
+Consult existing authorization before asking again. Deployment approval does not imply merge approval.
+
+## Delegation and preparation
+
+Treat model, effort, service tier, and context size as one route. Keep the incumbent for unqualified task
+classes. Probe live capabilities; a catalog label alone does not prove authentication. Use
+`tools/stack_route.py` to validate an explicit contract, observed capabilities, and trusted owner policy.
+The coordinator retains architecture, ambiguous acceptance, integration, and escalation. Use a fresh
+bounded child context for independent extraction or scoped work, with explicit model/effort, allowed
+writes, checks, acceptance, output limits, and one repair attempt. Cap ordinary execution at two workers;
+do not recursively delegate. Full-history forks inherit their model and effort.
+
+After a failed bounded repair, escalate the task or tighten its acceptance contract. Count that repair,
+parent inspection, and all children when evaluating savings. Independent canonical PR review stays on its
+approved reviewer route. A cheaper model is not promoted from a successful demonstration alone.
+
+For declared generation recipes, use `tools/stack_prepare.py`: probe toolchain, compare recipe/input/output
+identities, and rerun missing or stale preparation before focused checks. Receipts are private freshness
+metadata, never completion evidence. Use `tools/stack_watch.py` for bounded read-only JSON status queries;
+unchanged polling should not wake a model. Display masking is opt-in and preserves source bindings.
+
+See the installed `docs/efficiency-runtime.md` for commands, schema migration, benchmarks, and rollout.
 
 ## Relaxation
 

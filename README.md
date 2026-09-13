@@ -13,7 +13,7 @@ This repository provides:
 - thin agent-specific adapters for Codex, Claude, and Gemini / Antigravity;
 - reusable skills for intended behavior, review, branch orientation, and UX-first planning;
 - a pull-request-centered review workflow;
-- evidence-preserving Strict Mode v2 with focused feedback and full completion gates;
+- evidence-preserving Strict Mode v3 with bounded context, explicit model/effort routing, preparation receipts, and full completion gates;
 - a local MemPalace-derived memory adapter that preserves source citations and security-domain isolation;
 - CLI-first tool-selection rules that prefer the developer's existing environment over auth-dependent integrations;
 - an agent-facing install route for copying prompts, entrypoints, and skills into normal local config locations;
@@ -166,10 +166,13 @@ The public-safety rule is conservative by design: if a workflow needs private de
 
 ## External Workflow Research
 
-The stack includes two research documents:
+The stack includes these research documents:
 
 - [`docs/external-workflow-integrations.md`](docs/external-workflow-integrations.md): records external workflow ideas already integrated or rejected, including the jnsahaj gists that motivated the first skills.
 - [`docs/external-account-research.md`](docs/external-account-research.md): tracks public GitHub accounts and repositories worth monitoring, such as Vercel Labs agent-skill work, agent-agnostic repository guides, and multi-agent coordination catalogs.
+- [`docs/efficiency-improvement-plan.md`](docs/efficiency-improvement-plan.md): evaluates published efficiency results and proposes measured context, verification, and model-and-effort improvements with implementation instructions.
+
+[`docs/efficiency-runtime.md`](docs/efficiency-runtime.md) documents the implemented tools, conservative defaults, and installation steps.
 
 Research notes are not automatically adopted rules. Changes to the stack should still go through a focused PR.
 
@@ -199,7 +202,7 @@ The checked-in entrypoints are repository templates and use repo-relative paths 
 4. Rewrite any other repo-relative support references in copied adapters, such as review workflow docs, or remove those links if the supporting docs are not installed.
 5. Install only the skill directories, including any subdirectories, the machine needs into that tool's normal skill directories.
 6. Update installed skills so their canon reference points to the machine-level canon.
-7. Leave only the active installed files in normal config locations by default. Do not leave backup canons, runtime repo checkouts, or copied stack trees unless the user explicitly asks for rollback artifacts.
+7. Leave active installed files and the minimal verified runtime payload in normal config locations. Remove temporary install staging after verification; normal use does not require a source checkout.
 8. Store machine inventory and private operational notes only in local files outside this repository.
 
 Typical target roles are:
@@ -236,7 +239,7 @@ The current stack includes:
 - shared canon and root entrypoints;
 - Codex, Claude, and Gemini / Antigravity adapters;
 - seven workflow skills, including active-review discovery, strict-mode governance, and scoped memory recall;
-- Strict Mode v2 source, templates, tests, and completion tooling;
+- Strict Mode v3 source, templates, tests, and completion tooling;
 - a pinned, local-only MemPalace export/sync/benchmark adapter;
 - PR-review and public-safety documentation;
 - external workflow and account research notes.
