@@ -421,6 +421,75 @@ class StrictGatePlanTests(unittest.TestCase):
         )
         self.assertEqual(diff_check["run"], ["git", "diff", "--cached", "--check"])
 
+    def test_default_manifest_uses_paths_relative_to_root_for_excluded_directories(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "build" / "repo"
+            (root / "tests").mkdir(parents=True)
+            (root / "tests" / "test_failure.py").write_text(
+                "import unittest\n\nclass Failure(unittest.TestCase):\n    def test_failure(self): self.fail()\n"
+            )
+            (root / "pubspec.yaml").write_text("name: fixture\nenvironment:\n  sdk: ^3.0.0\n")
+            (root / "package.json").write_text(json.dumps({"scripts": {"test": "test"}}))
+            (root / "Cargo.toml").write_text("[package]\nname='fixture'\nversion='0.1.0'\n")
+            (root / "go.mod").write_text("module example.invalid/fixture\n")
+            app = root / "app"
+            (app / "tests").mkdir(parents=True)
+            (app / "pyproject.toml").write_text(
+                "[project]\nname='app'\nversion='0.1.0'\ndependencies=['pytest']\n"
+            )
+            (app / "tests" / "test_app.py").write_text("def test_app(): assert True\n")
+            excluded_fixtures = {
+                "build/pubspec.yaml": "name: ignored\nenvironment:\n  sdk: ^3.0.0\n",
+                ".dart_tool/pubspec.yaml": "name: ignored\nenvironment:\n  sdk: ^3.0.0\n",
+                "build/package.json": json.dumps({"scripts": {"test": "test"}}),
+                "node_modules/package/package.json": json.dumps({"scripts": {"test": "test"}}),
+                "target/Cargo.toml": "[package]\nname='ignored'\nversion='0.1.0'\n",
+                "vendor/go.mod": "module example.invalid/ignored\n",
+                "build/go.mod": "module example.invalid/ignored\n",
+                "build/tests/test_ignored.py": (
+                    "import unittest\n\nclass Ignored(unittest.TestCase):\n"
+                    "    def test_ignored(self): self.fail()\n"
+                ),
+                "build/pyproject.toml": (
+                    "[project]\nname='ignored'\nversion='0.1.0'\ndependencies=['pytest']\n"
+                ),
+                "build/tests/test_pytest.py": "def test_ignored(): assert False\n",
+            }
+            for relative, content in excluded_fixtures.items():
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content)
+            data = strict_gate.discover_default_manifest(root)
+            commands = data["components"][0]["commands"]
+            names = {command["name"] for command in commands}
+            self.assertTrue({"dart-test-.", "npm-test-.", "cargo-test-.", "go-test-.", "python-unittest"} <= names)
+            self.assertIn("python-pytest-app", names)
+            for prefix, excluded in (
+                ("dart-", (".dart_tool", "build")), ("npm-", ("node_modules", "build")),
+                ("cargo-", ("target",)), ("go-", ("vendor", "build")), ("python-", ("build",)),
+            ):
+                with self.subTest(prefix=prefix):
+                    self.assertFalse(any(
+                        command["name"].startswith(prefix)
+                        and command.get("cwd", ".").split("/", 1)[0] in excluded
+                        for command in commands
+                    ))
+            python = next(command for command in commands if command["name"] == "python-unittest")
+            result = subprocess.run(python["run"], cwd=root, capture_output=True, text=True, timeout=5)
+            cargo_root = Path(tmp) / "target" / "cargo-repo"
+            cargo_root.mkdir(parents=True)
+            (cargo_root / "Cargo.toml").write_text("[package]\nname='fixture'\nversion='0.1.0'\n")
+            cargo_names = {
+                command["name"]
+                for command in strict_gate.discover_default_manifest(cargo_root)["components"][0]["commands"]
+            }
+        output = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 1, output)
+        self.assertIn("FAIL: test_failure", output)
+        self.assertIn("Ran 1 test", output)
+        self.assertIn("failures=1", output)
+        self.assertIn("cargo-test-.", cargo_names)
+
     def test_default_manifest_keeps_python_tests_in_hybrid_dart_repo(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
