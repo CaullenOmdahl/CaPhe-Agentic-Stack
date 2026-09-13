@@ -18,10 +18,11 @@ import tempfile
 import time
 from typing import Any, Mapping
 
-try:
-    from stack_state import StateError, _json_object, _mkdir, _outside_git, _no_symlinks, _owned
-except ModuleNotFoundError:
-    from tools.stack_state import StateError, _json_object, _mkdir, _outside_git, _no_symlinks, _owned
+if os.name == 'posix':
+    try:
+        from stack_state import StateError, _json_object, _mkdir, _outside_git, _no_symlinks, _owned
+    except ModuleNotFoundError:
+        from tools.stack_state import StateError, _json_object, _mkdir, _outside_git, _no_symlinks, _owned
 
 
 class PrepareError(ValueError):

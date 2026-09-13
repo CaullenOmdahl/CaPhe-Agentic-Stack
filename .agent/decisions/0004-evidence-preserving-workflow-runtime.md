@@ -29,6 +29,14 @@ nonauthoritative reporting without an automatic CI receipt
 consumer or certifier; retain uncached local completion. Do not turn missing infrastructure into a claim
 that receipt-based certification is implemented or enabled.
 
+The same boundary applies to invocation: a PR can replace its workflow with no-ops while preserving
+check names. Retained-harness logic inside that workflow is a conditional safeguard, not automatic
+anti-weakening enforcement. Procedural completion uses an owner-controlled controller outside the
+candidate, with independently selected recipe and accepted-policy pins checked before execution.
+It runs the retained requirements and complete reviewed candidate matrix uncached and rejects policy
+changes until independently approved. Record this as local procedural evidence; do not describe it as
+a protected GitHub required status, a fix for candidate-controlled workflow enforcement, or CI attestation.
+
 Install explicit routing controls with the incumbent as the fallback. Promote only task-class routes
 supported by held-out acceptance and attributable usage evidence. Capability probes and parser fixtures
 do not demonstrate model quality or whole-task savings. Keep observation masking opt-in and disabled
