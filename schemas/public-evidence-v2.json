@@ -1,0 +1,1166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "states": {
+            "properties": {
+              "implementation": {
+                "properties": {
+                  "scope": {
+                    "const": "artifact"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "artifact"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "states": {
+            "properties": {
+              "implementation": {
+                "properties": {
+                  "scope": {
+                    "const": "device"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "artifact"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "states": {
+            "properties": {
+              "implementation": {
+                "properties": {
+                  "scope": {
+                    "const": "device"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "semantic_acceptance": {
+            "properties": {
+              "scope": {
+                "properties": {
+                  "kind": {
+                    "const": "hardware"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "semantic_acceptance"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "states": {
+            "properties": {
+              "validation": {
+                "properties": {
+                  "scope": {
+                    "const": "artifact"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "artifact"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "states": {
+            "properties": {
+              "validation": {
+                "properties": {
+                  "scope": {
+                    "const": "device"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "artifact"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "states": {
+            "properties": {
+              "validation": {
+                "properties": {
+                  "scope": {
+                    "const": "device"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "semantic_acceptance": {
+            "properties": {
+              "scope": {
+                "properties": {
+                  "kind": {
+                    "const": "hardware"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "semantic_acceptance"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "states": {
+            "properties": {
+              "review": {
+                "properties": {
+                  "scope": {
+                    "const": "artifact"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "artifact"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "states": {
+            "properties": {
+              "review": {
+                "properties": {
+                  "scope": {
+                    "const": "device"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "artifact"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "states": {
+            "properties": {
+              "review": {
+                "properties": {
+                  "scope": {
+                    "const": "device"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "semantic_acceptance": {
+            "properties": {
+              "scope": {
+                "properties": {
+                  "kind": {
+                    "const": "hardware"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "semantic_acceptance"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "states": {
+            "properties": {
+              "merge": {
+                "properties": {
+                  "scope": {
+                    "const": "artifact"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "artifact"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "states": {
+            "properties": {
+              "merge": {
+                "properties": {
+                  "scope": {
+                    "const": "device"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "artifact"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "states": {
+            "properties": {
+              "merge": {
+                "properties": {
+                  "scope": {
+                    "const": "device"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "semantic_acceptance": {
+            "properties": {
+              "scope": {
+                "properties": {
+                  "kind": {
+                    "const": "hardware"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "semantic_acceptance"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "states": {
+            "properties": {
+              "release": {
+                "properties": {
+                  "scope": {
+                    "const": "artifact"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "artifact"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "states": {
+            "properties": {
+              "release": {
+                "properties": {
+                  "scope": {
+                    "const": "device"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "artifact"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "states": {
+            "properties": {
+              "release": {
+                "properties": {
+                  "scope": {
+                    "const": "device"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "semantic_acceptance": {
+            "properties": {
+              "scope": {
+                "properties": {
+                  "kind": {
+                    "const": "hardware"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "semantic_acceptance"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "states": {
+            "properties": {
+              "external_acceptance": {
+                "properties": {
+                  "scope": {
+                    "const": "artifact"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "artifact"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "states": {
+            "properties": {
+              "external_acceptance": {
+                "properties": {
+                  "scope": {
+                    "const": "device"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "artifact"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "states": {
+            "properties": {
+              "external_acceptance": {
+                "properties": {
+                  "scope": {
+                    "const": "device"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "semantic_acceptance": {
+            "properties": {
+              "scope": {
+                "properties": {
+                  "kind": {
+                    "const": "hardware"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "semantic_acceptance"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "states": {
+            "properties": {
+              "release": {
+                "properties": {
+                  "status": {
+                    "const": "passed"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "states": {
+            "properties": {
+              "release": {
+                "properties": {
+                  "scope": {
+                    "enum": [
+                      "artifact",
+                      "device"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "states": {
+            "properties": {
+              "external_acceptance": {
+                "properties": {
+                  "status": {
+                    "const": "passed"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "states": {
+            "properties": {
+              "external_acceptance": {
+                "properties": {
+                  "scope": {
+                    "enum": [
+                      "artifact",
+                      "device"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "reference": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sha256",
+        "reference"
+      ],
+      "type": "object"
+    },
+    "change_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "type": "string"
+    },
+    "decision": {
+      "pattern": "^ADR-[0-9]{4,}$",
+      "type": "string"
+    },
+    "evidence": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "file",
+              "url",
+              "digest",
+              "check"
+            ]
+          },
+          "reference": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "reference"
+        ],
+        "type": "object"
+      },
+      "maxItems": 80,
+      "minItems": 1,
+      "type": "array"
+    },
+    "id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "type": "string"
+    },
+    "lane": {
+      "enum": [
+        "mechanically-proven",
+        "scoped-behavior",
+        "full-risk"
+      ]
+    },
+    "schema_version": {
+      "const": 2
+    },
+    "semantic_acceptance": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "artifact": {
+          "additionalProperties": false,
+          "properties": {
+            "reference": {
+              "maxLength": 1000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "sha256",
+            "reference"
+          ],
+          "type": "object"
+        },
+        "display_contract": {
+          "additionalProperties": false,
+          "properties": {
+            "criteria": {
+              "items": {
+                "maxLength": 1000,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 40,
+              "minItems": 1,
+              "type": "array"
+            },
+            "intended": {
+              "maxLength": 1000,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "intended",
+            "criteria"
+          ],
+          "type": "object"
+        },
+        "observations": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "file",
+                  "url",
+                  "digest",
+                  "check"
+                ]
+              },
+              "reference": {
+                "maxLength": 1000,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "reference"
+            ],
+            "type": "object"
+          },
+          "maxItems": 40,
+          "minItems": 1,
+          "type": "array"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "scope": {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "kind": {
+                    "const": "visual"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "viewport"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "kind": {
+                    "const": "hardware"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "device"
+                ]
+              }
+            }
+          ],
+          "properties": {
+            "device": {
+              "additionalProperties": false,
+              "properties": {
+                "family": {
+                  "maxLength": 1000,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "identifier": {
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "family",
+                "identifier"
+              ],
+              "type": "object"
+            },
+            "kind": {
+              "enum": [
+                "visual",
+                "hardware"
+              ]
+            },
+            "viewport": {
+              "additionalProperties": false,
+              "properties": {
+                "height": {
+                  "maximum": 32768,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "width": {
+                  "maximum": 32768,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "width",
+                "height"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        "source": {
+          "additionalProperties": false,
+          "properties": {
+            "repository": {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}/[A-Za-z0-9][A-Za-z0-9._-]{0,99}$",
+              "type": "string"
+            },
+            "revision": {
+              "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+              "type": "string"
+            },
+            "snapshot_digest": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository",
+            "revision",
+            "snapshot_digest"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "schema_version",
+        "source",
+        "artifact",
+        "display_contract",
+        "scope",
+        "observations"
+      ],
+      "title": "Semantic acceptance declaration, not verification",
+      "type": "object"
+    },
+    "source": {
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}/[A-Za-z0-9][A-Za-z0-9._-]{0,99}$",
+          "type": "string"
+        },
+        "revision": {
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+          "type": "string"
+        },
+        "snapshot_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repository",
+        "revision",
+        "snapshot_digest"
+      ],
+      "type": "object"
+    },
+    "states": {
+      "additionalProperties": false,
+      "properties": {
+        "external_acceptance": {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "status": {
+                    "const": "not_applicable"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "reason"
+                ]
+              }
+            }
+          ],
+          "properties": {
+            "reason": {
+              "maxLength": 1000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "scope": {
+              "enum": [
+                "source",
+                "artifact",
+                "device"
+              ]
+            },
+            "status": {
+              "enum": [
+                "pending",
+                "passed",
+                "failed",
+                "blocked",
+                "not_applicable"
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "scope"
+          ],
+          "type": "object"
+        },
+        "implementation": {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "status": {
+                    "const": "not_applicable"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "reason"
+                ]
+              }
+            }
+          ],
+          "properties": {
+            "reason": {
+              "maxLength": 1000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "scope": {
+              "enum": [
+                "source",
+                "artifact",
+                "device"
+              ]
+            },
+            "status": {
+              "enum": [
+                "pending",
+                "passed",
+                "failed",
+                "blocked",
+                "not_applicable"
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "scope"
+          ],
+          "type": "object"
+        },
+        "merge": {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "status": {
+                    "const": "not_applicable"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "reason"
+                ]
+              }
+            }
+          ],
+          "properties": {
+            "reason": {
+              "maxLength": 1000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "scope": {
+              "enum": [
+                "source",
+                "artifact",
+                "device"
+              ]
+            },
+            "status": {
+              "enum": [
+                "pending",
+                "passed",
+                "failed",
+                "blocked",
+                "not_applicable"
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "scope"
+          ],
+          "type": "object"
+        },
+        "release": {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "status": {
+                    "const": "not_applicable"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "reason"
+                ]
+              }
+            }
+          ],
+          "properties": {
+            "reason": {
+              "maxLength": 1000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "scope": {
+              "enum": [
+                "source",
+                "artifact",
+                "device"
+              ]
+            },
+            "status": {
+              "enum": [
+                "pending",
+                "passed",
+                "failed",
+                "blocked",
+                "not_applicable"
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "scope"
+          ],
+          "type": "object"
+        },
+        "review": {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "status": {
+                    "const": "not_applicable"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "reason"
+                ]
+              }
+            }
+          ],
+          "properties": {
+            "reason": {
+              "maxLength": 1000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "scope": {
+              "enum": [
+                "source",
+                "artifact",
+                "device"
+              ]
+            },
+            "status": {
+              "enum": [
+                "pending",
+                "passed",
+                "failed",
+                "blocked",
+                "not_applicable"
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "scope"
+          ],
+          "type": "object"
+        },
+        "validation": {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "status": {
+                    "const": "not_applicable"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "reason"
+                ]
+              }
+            }
+          ],
+          "properties": {
+            "reason": {
+              "maxLength": 1000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "scope": {
+              "enum": [
+                "source",
+                "artifact",
+                "device"
+              ]
+            },
+            "status": {
+              "enum": [
+                "pending",
+                "passed",
+                "failed",
+                "blocked",
+                "not_applicable"
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "scope"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "implementation",
+        "validation",
+        "review",
+        "merge",
+        "release",
+        "external_acceptance"
+      ],
+      "type": "object"
+    },
+    "summary": {
+      "maxLength": 1000,
+      "minLength": 1,
+      "type": "string"
+    },
+    "supersedes": {
+      "items": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+        "type": "string"
+      },
+      "maxItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "schema_version",
+    "id",
+    "change_id",
+    "decision",
+    "lane",
+    "source",
+    "states",
+    "summary",
+    "evidence",
+    "supersedes"
+  ],
+  "title": "Public evidence snapshot v2",
+  "type": "object"
+}

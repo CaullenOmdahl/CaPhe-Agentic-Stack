@@ -23,6 +23,11 @@ Do not hard-code or wait on a retired or unresponsive reviewer. Record the revie
 
 Do not claim review is complete unless the relevant review path actually ran or the user explicitly accepted a fallback.
 
+Inspect both inline review threads and review-summary bodies. Some integrations put actionable findings
+only in the summary, so an empty unresolved-thread list is not sufficient. Retain a compact disposition
+for each finding, linked to its source review, fix commit, and verification. Carry unresolved findings
+forward across heads; pagination or truncated history cannot establish that review is clear.
+
 ## Local Review
 
 Local review prompts and skills are preparation aids. They are useful for catching issues before PR review, especially:

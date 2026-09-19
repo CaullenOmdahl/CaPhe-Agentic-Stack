@@ -1,0 +1,63 @@
+{
+  "change_id": "efficiency-methodology",
+  "decision": "ADR-0004",
+  "evidence": [
+    {
+      "kind": "file",
+      "reference": "docs/efficiency-runtime.md"
+    },
+    {
+      "kind": "file",
+      "reference": ".agent/decisions/0004-evidence-preserving-workflow-runtime.md"
+    },
+    {
+      "kind": "check",
+      "reference": "uncached local completion - all four groups passed"
+    },
+    {
+      "kind": "digest",
+      "reference": "034d8cf2dcf4ec622b37800372a22c885f858178e7986b0b287b48d033696abf"
+    }
+  ],
+  "id": "efficiency-runtime-implementation-v1",
+  "lane": "full-risk",
+  "schema_version": 2,
+  "source": {
+    "repository": "CaullenOmdahl/CaPhe-Agentic-Stack",
+    "revision": "900ec066ea0c80d75d0ca54e76cc4c2af019e768",
+    "snapshot_digest": "30fefcf960c7bdb2a7600c75cfa0ef643359d2f168eb8756c3e15fad7a92294e"
+  },
+  "states": {
+    "external_acceptance": {
+      "reason": "No hardware or external product artifact is part of this runtime implementation.",
+      "scope": "source",
+      "status": "not_applicable"
+    },
+    "implementation": {
+      "scope": "source",
+      "status": "passed"
+    },
+    "merge": {
+      "reason": "No merge authorization; task branch delivery is authorized.",
+      "scope": "source",
+      "status": "pending"
+    },
+    "release": {
+      "reason": "No application release or production deployment requested. Host methodology activation is recorded privately.",
+      "scope": "source",
+      "status": "not_applicable"
+    },
+    "review": {
+      "reason": "Design and bounded integration assessments are complete; independent PR review remains pending.",
+      "scope": "source",
+      "status": "pending"
+    },
+    "validation": {
+      "reason": "Full uncached local matrix passed; current PR platform matrix remains pending.",
+      "scope": "source",
+      "status": "pending"
+    }
+  },
+  "summary": "Implemented bounded execution, explicit model and effort contracts, immutable evidence, full gates, and verified installation. No cheaper route promotion or automatic CI certification.",
+  "supersedes": []
+}

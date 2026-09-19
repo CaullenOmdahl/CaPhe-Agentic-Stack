@@ -73,11 +73,27 @@ Use a lightweight strict sequence for non-trivial work:
 Focused local checks optimize feedback. Completion still requires the full declared matrix in authoritative
 CI, or an uncached full local run when CI is absent or incomplete.
 
+## Efficient Execution
+
+Collect bounded, source-linked context once per decision; refresh on source changes. Keep private task
+continuation and existing scoped authorization outside Git. Delegate independent bounded work with an
+explicit model, effort, acceptance contract, and one repair attempt; preserve coordinator ownership and
+the approved independent review route. Use deterministic preparation and status queries for routine work.
+Promote cheaper routes only from paired accepted-task evidence that includes parent, retry, and child
+cost. Follow the installed Strict Mode methodology for runtime commands and evidence formats.
+
 ## Review Rule
 
 Do not treat local self-review as the canonical implementation-review path. Real code changes should go through a pull request with independent review.
 
 Local review tools are useful for preparation and cleanup. They do not replace pull-request review.
+
+For local source reviews, omit unrelated tool servers from that reviewer process.
+Use a verified empty or minimal MCP configuration rather than changing the user's
+normal configuration. Built-in tool restrictions and ephemeral sessions do not
+by themselves disable MCP startup. Keep repository hooks and completion gates;
+require a bounded, non-empty headless result before counting a review as obtained.
+The installed `second-opinion` skill documents the tested Claude invocation.
 
 ## Memory Rule
 

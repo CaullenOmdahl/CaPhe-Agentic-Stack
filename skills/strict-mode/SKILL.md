@@ -6,7 +6,9 @@ description: Govern non-trivial or high-risk repository work with evidence-prese
 # Strict Mode
 
 Read `~/strict-mode/methodology.md`. Check `.agent/.strict-version`; run
-`~/strict-mode/bin/strict-init.sh` only when scaffolding is absent or the installed version changed.
+`~/strict-mode/bin/strict-init.sh` only when scaffolding is absent, its version changed, or the effective
+hook/source probe shows drift. A version marker alone does not prove activation. Preserve custom hooks,
+project instructions, dirty work, and explicit user disable.
 
 Classify from deterministic evidence:
 
@@ -20,4 +22,8 @@ on the actual diff; local peer review is design help or a recorded fallback.
 
 Pre-commit `FAST GREEN` is focused feedback only. Before completion, run
 `~/strict-mode/bin/strict-green-gate.sh --mode completion`, verify the real artifact when tests cannot,
-and write compact `.agent/evidence/` provenance with the PR evidence.
+and write immutable v2 `.agent/evidence/` snapshots with the PR evidence. Keep continuation and scoped
+authorization private outside Git. Use the installed runtime tools for bounded context, declared
+preparation, status polling, and explicit model/effort routing; read `docs/efficiency-runtime.md` in that
+runtime only when those operations are needed. Retain the incumbent until paired workflow evidence
+qualifies a cheaper route, and include parent, retry, and child cost in the comparison.

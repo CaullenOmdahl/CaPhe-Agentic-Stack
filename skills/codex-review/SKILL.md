@@ -19,6 +19,17 @@ that exact model with this client before the review. Record the resolved model w
 Model rejection or a message that the model requires a newer CLI means the route is unavailable until
 the client/configuration is corrected. Do not reinterpret it as a completed review.
 
+## Tool servers
+
+Keep source/diff reviews free of unrelated MCP servers using a verified,
+process-scoped CLI configuration or the existing isolated review boundary.
+`--ephemeral` prevents session persistence; it is not evidence of MCP isolation.
+Do not delete normal server configuration or copy credentials into a review
+snapshot. Check the installed CLI's supported controls before choosing flags.
+A stalled or empty run is unavailable, not approval. See the installed
+`second-opinion` skill for the tested Claude MCP-only isolation command when
+using that independent reviewer instead.
+
 ## Review commands
 
 ```bash

@@ -25,6 +25,30 @@ Treat availability as machine-local and current:
 Direct Gemini CLI is not the default Gemini-family route. Use `agy`; it is the supported headless route
 when its live probe succeeds.
 
+## Tool-server isolation for local reviews
+
+Start source/diff reviews with no MCP servers. For Claude Code, pass
+`--strict-mcp-config --mcp-config '{"mcpServers":{}}'` on each review invocation.
+`--tools` controls built-in tools; it does not prevent MCP server startup. Use
+`--tools 'Read,Glob,Grep'` for file inspection, or `--tools ''` when the complete
+review material is supplied in the prompt. If a review actually needs an external
+service, keep strict mode and pass a minimal explicit MCP configuration for only
+that service. Never delete or rewrite the user's normal MCP configuration.
+
+For other reviewer CLIs, verify their current isolation flags or use the existing
+isolated `strict-confer` boundary; do not assume Claude flags are portable. Keep
+model authentication available through the supported client mechanism without
+copying credential files into the review input. Do not disable repository hooks
+or completion gates to speed up review. Claude's broader `--safe-mode` also drops
+instructions and hooks, so it is not a substitute for MCP-only isolation in an
+ordinary repository review.
+
+Use a bounded headless probe before a long review. On a stall, inspect stderr and
+child-process startup for unrelated servers or hooks. Empty output and timeout
+are failed reviews, never approval. MCP isolation removes that startup path; it
+does not prove that every delay was caused by MCP. Preserve the repository's PR
+review requirement instead of repeatedly waiting on an unavailable local route.
+
 ## Commands
 
 ### Claude Code
@@ -34,6 +58,7 @@ out=$(mktemp "${TMPDIR:-/tmp}/second-opinion-claude.XXXXXX")
 claude_model=$(awk -F= '$1 == "STRICT_CONFER_CLAUDE_MODEL" {sub(/^[^=]*=/, ""); print; exit}' ~/.config/caphe/review-models.conf)
 test -n "$claude_model"
 claude -p "PROMPT" --model "$claude_model" --no-session-persistence --permission-mode plan --add-dir "$PWD" \
+  --strict-mcp-config --mcp-config '{"mcpServers":{}}' --tools 'Read,Glob,Grep' \
   > "$out" 2> "${out}.err"
 ```
 
