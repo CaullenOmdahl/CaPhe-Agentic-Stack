@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CaPhe public model registry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "models"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "models": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["vendor", "family", "client", "vendor_model", "tier", "roles", "classes", "efforts", "rates", "context_window", "status", "lifecycle", "rationale", "decision_refs"],
+        "properties": {
+          "vendor": {"type": "string"}, "family": {"type": "string"},
+          "client": {"enum": ["codex", "claude", "agy", "gemini", "local"]},
+          "vendor_model": {"type": "string"}, "tier": {"enum": ["frontier", "strong", "standard", "light", "local"]},
+          "roles": {"type": "array", "items": {"type": "string"}}, "classes": {"type": "array", "items": {"type": "string"}},
+          "efforts": {"type": "array", "items": {"type": "string"}},
+          "rates": {"type": "object"}, "context_window": {"type": "integer", "minimum": 1},
+          "status": {"enum": ["candidate", "pilot", "active", "deprecated", "retired"]},
+          "lifecycle": {"type": "object"}, "rationale": {"type": "string"}, "decision_refs": {"type": "array", "items": {"type": "string"}},
+          "predecessor": {"type": "string"}, "successor": {"type": "string"}
+        }
+      }
+    }
+  }
+}
