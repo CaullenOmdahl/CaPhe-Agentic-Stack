@@ -1,0 +1,7 @@
+{
+  "schema_version": 2,
+  "roles": {"hypervisor": "codex-terra", "planner": "codex-astra"},
+  "incumbent": {"model":"codex-terra","config":"incumbent","effort":"medium","service_tier":"standard"},
+  "routes": {},
+  "lane_ceilings": {"mechanical":"mechanically-proven","lookup-extraction":"full-risk","settled-implementation":"scoped-behavior","difficult-implementation":"scoped-behavior","test-authoring":"scoped-behavior","coordination":"full-risk","planning-architecture":"full-risk"}
+}
