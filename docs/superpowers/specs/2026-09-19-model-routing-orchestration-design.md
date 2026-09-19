@@ -94,6 +94,8 @@ strings, so a replacement or deprecation is one registry edit plus one policy ed
   and service tiers each client accepted, probe timestamp, and client versions. Never committed.
 
 Route resolution requires a model to be present in both layers with status `active` or `pilot`.
+An owner may admit a named low-risk class to a labeled, time-bounded `pilot` before paired benchmark
+evidence exists. That admission gathers evidence; it is not a promotion.
 
 ### Registry entry fields
 
@@ -118,7 +120,7 @@ Route resolution requires a model to be present in both layers with status `acti
 | Transition | Trigger | Who decides | Effect on routing |
 | --- | --- | --- | --- |
 | new model released | Anyone adds an entry as `candidate` with rates, tier hypothesis, and rationale by PR | Owner review of the PR | Not routable |
-| `candidate` to `pilot` | Owner approves a labeled pilot for named low-risk classes | Owner, recorded in ADR | Routable for those classes only; every dispatch is telemetry |
+| `candidate` to `pilot` | Owner admits a labeled, time-bounded pilot for named low-risk classes | Owner, recorded in ADR | Routable for those classes only; every dispatch is telemetry |
 | `pilot` to `active` | Paired benchmark evidence for the class meets the owner's predeclared tolerance | Owner, recorded in ADR | Routable as promoted |
 | any to `deprecated` | Vendor announces sunset | Anyone by PR | Still routable; route review flags every route using it and the sunset date |
 | `deprecated` to `retired` | Sunset date passes or vendor removes it | Anyone by PR, or route review flags overdue | Not routable; resolution fails closed to the incumbent; a retired incumbent halts routing and asks the owner |
@@ -168,7 +170,10 @@ artifact pointers. No conversation history, no transcript excerpts, no secrets.
 Workers with write scopes run in a dedicated worktree, or the hypervisor serializes them; the contract
 validator already requires disjoint child write scopes. Read-only classes run with the client's read-only
 or plan mode. CLI workers start with no MCP servers unless the contract names one. Sandbox flags per
-client are recorded in the dispatcher, not left to client defaults.
+client are recorded in the dispatcher, not left to client defaults. A remote worker receives only a frozen,
+tracked-only source snapshot classified `public` or `sanitized`; unknown, ignored, untracked, credential,
+secret-bearing, and transcript inputs fail closed before invocation. A client without freshly observed
+authentication and enforceable isolation remains a catalog candidate, not a dispatcher backend.
 
 ### Result and telemetry
 
@@ -257,7 +262,7 @@ the owner approves any pilot. Live runs are evidence for the owner, not test-sui
 
 | Phase | Scope | Exit criterion |
 | --- | --- | --- |
-| 1, proof of concept | Registry schema and catalog seeded with currently available remote models; probe tool; route schema v2 and registry binding; dispatcher with `cli` backend for codex, claude, agy, gemini; policy template; orchestrate skill; `docs/model-routing.md`; unit tests | One mechanical and one lookup-extraction task dispatched end to end through each client, each producing a valid event, with the hypervisor on Terra medium |
+| 1, proof of concept | Registry schema and catalog seeded with remote-model candidates; probe tool; route schema v2 and registry binding; dispatcher with a capability-gated CLI backend; policy template; orchestrate skill; `docs/model-routing.md`; unit tests | One mechanical and one lookup-extraction task dispatched end to end through each freshly authenticated and isolation-verified client, each producing a valid event, with the hypervisor on Terra medium |
 | 2, review loop | Route review tool and skill; intake and deprecation procedure documented; `native` backend guidance; first pilot ADR | First route review report over real telemetry; owner decides first promotion or demotion |
 | 3, local | Local backend and offload host overlay | Owner decision after phase 2 evidence |
 
@@ -265,10 +270,9 @@ the owner approves any pilot. Live runs are evidence for the owner, not test-sui
 
 1. Hypervisor and incumbent worker route are Terra medium; planner is Astra high. Both are registry
    assignments and can change without code edits.
-2. Pilot promotions for `mechanical` and `lookup-extraction` will be approved by ADR once the phase 1
-   live runs succeed, so those classes can generate evidence. Every other class stays on the incumbent.
-   This is a deliberate, labeled relaxation of the no-promotion-without-evidence rule, limited to the two
-   lowest-risk classes.
+2. A labeled, time-bounded pilot admission for `mechanical` and `lookup-extraction` may be approved by ADR
+   after a fresh authenticated and isolation-capability probe. It gathers evidence; it is not a promotion.
+   Every other class stays on the incumbent.
 3. Code, schemas, skills, registry catalog, and docs are public in this repository. Policy, overlay,
    telemetry, and corpus are private in the owner-only store.
 4. The proof of concept uses remote models only.

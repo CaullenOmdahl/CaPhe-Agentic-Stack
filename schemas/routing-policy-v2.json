@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CaPhe private routing policy v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "roles", "incumbent", "routes", "lane_ceilings"],
+  "properties": {
+    "schema_version": {"const": 2},
+    "roles": {"type":"object","additionalProperties":false,"required":["hypervisor","planner"],"properties":{"hypervisor":{"type":"string"},"planner":{"type":"string"}}},
+    "incumbent": {"$ref":"#/$defs/route"},
+    "routes": {"type":"object","additionalProperties":{"type":"object","additionalProperties":false,"required":["route","pilot_approved"],"properties":{"route":{"$ref":"#/$defs/route"},"pilot_approved":{"type":"boolean"}}}},
+    "lane_ceilings": {"type":"object","additionalProperties":{"enum":["mechanically-proven","scoped-behavior","full-risk"]}}
+  },
+  "$defs": {"route":{"type":"object","additionalProperties":false,"required":["model","config","effort","service_tier"],"properties":{"model":{"type":"string"},"config":{"type":"string"},"effort":{"type":"string"},"service_tier":{"type":"string"}}}}
+}
