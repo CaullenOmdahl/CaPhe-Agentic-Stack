@@ -15,9 +15,9 @@ Mandatory explicit approval (record approver + date in the ADR):
 
 ## Lower-risk behavioral work
 
-May proceed after independent pull-request review of the actual diff and the full completion gate.
-Local peer review may prepare a design or be recorded as a fallback, but it is not implementation-review
-approval. Any material dissent escalates to the human approver.
+May proceed after one independent implementation review of the actual diff and the full completion gate.
+Prefer remote PR review; independent local fallback is sufficient when remote is unavailable.
+Do not require both routes. Preserve branch protections; material dissent escalates to the human approver.
 
 ## Notes
 - Approvals are per-decision and recorded in the ADR `Approver` + `Status` fields.

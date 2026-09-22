@@ -31,7 +31,7 @@ Adaptation:
 - framed as a local review lens, not a completion gate;
 - explicitly subordinate to `docs/canon.md`;
 - requires searching local patterns before claiming reuse or inconsistency;
-- preserves PR review as the canonical implementation-review route.
+- preserves one implementation-review route: remote preferred, independent local fallback on unavailability.
 
 ### Prepare branch context
 

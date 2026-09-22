@@ -84,16 +84,28 @@ cost. Follow the installed Strict Mode methodology for runtime commands and evid
 
 ## Review Rule
 
-Do not treat local self-review as the canonical implementation-review path. Real code changes should go through a pull request with independent review.
+Use one implementation-review route: remote PR review is preferred; one independent local
+reviewer is the fallback for unavailability, quota limits, or one bounded response timeout.
+A successful local fallback satisfies the workflow review gate. Do not routinely run local
+preparation review plus remote review, or require remote review again after local fallback.
+Preserve actual GitHub-required approvals/checks and human merge/release gates.
 
-Local review tools are useful for preparation and cleanup. They do not replace pull-request review.
+Follow `docs/review-workflow.md` in the installed runtime (or this source checkout). Check
+persistent UTC cooldowns and existing requests before triggering a reviewer; select one responsive
+reviewer and reserve attempts atomically. Never request the retired consumer Gemini GitHub reviewer.
+Provider reset times and estimated recheck times must be distinguished; keep account-wide limits
+shared across repositories. These helpers guide agent requests; they do not intercept GitHub directly.
 
-For local source reviews, omit unrelated tool servers from that reviewer process.
-Use a verified empty or minimal MCP configuration rather than changing the user's
-normal configuration. Built-in tool restrictions and ephemeral sessions do not
-by themselves disable MCP startup. Keep repository hooks and completion gates;
-require a bounded, non-empty headless result before counting a review as obtained.
-The installed `second-opinion` skill documents the tested Claude invocation.
+Batch related fixes and retain source identity internally. At most two fix-and-rereview rounds after
+the initial review, across both routes, then human arbitration. Carry unresolved inline and summary
+findings forward; changing heads or reviewers does not reset the review budget. Keep routine reports
+focused on defects, fixes, checks and blockers rather than repeated SHA/certification announcements.
+
+Local self-review and same-family audits are not independent fallback. For local source reviews,
+omit unrelated tool servers using a verified empty/minimal MCP configuration; preserve repository
+hooks and completion checks. Require a bounded, successful, non-empty review of the actual diff.
+The `second-opinion` skill documents the tested Claude invocation. Explicitly requested design or
+writing assessments remain separate from the single implementation-review route.
 
 ## Memory Rule
 

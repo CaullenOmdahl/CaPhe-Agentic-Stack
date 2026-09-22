@@ -21,14 +21,14 @@ Anything uncertain is scoped behavior. An agent cannot self-attest a mechanical 
 ### Scoped behavior
 
 Capture the observable contract or delta, demonstrate that a test/check detects the old defect, run
-affected local checks, put the behavioral diff through independent PR review, and obtain the complete
+affected local checks, put the behavioral diff through independent implementation review, and obtain the complete
 uncached verification matrix before completion.
 
 ### Full risk
 
 Use for architecture/platform choices and named human gates. Write an abstraction, optimize/audit it,
 record an ADR with alternatives, obtain adversarial design review, record human acceptance, implement
-with defect-detection evidence, verify the real artifact, obtain PR implementation review, and run the
+with defect-detection evidence, verify the real artifact, obtain independent implementation review, and run the
 complete matrix.
 
 ## Human gates
@@ -71,9 +71,14 @@ remain independently discovered.
 
 ## Review
 
-Implementation review is PR-based on the actual diff. Local review prepares design/ADRs or serves as an
-explicitly recorded fallback when PR review is genuinely unavailable. Reviewing design is not reviewing
-implementation. At most two revise-and-re-review rounds are allowed before human tie-break.
+Implementation review uses one route on the actual diff: prefer remote PR review; fall back to one
+independent local reviewer when remote is unavailable, quota-limited, or times out once. Successful
+local fallback satisfies this workflow gate; required GitHub checks and human gates remain binding.
+Do not routinely run both routes or demand remote review after a successful fallback. Review design
+and implementation separately when risk requires design review; design review alone is not approval
+of code. Follow `docs/review-workflow.md` in the runtime for persistent cooldowns, retired reviewers,
+atomic request reservations, source-bound evidence and concise reporting. At most two fix-and-rereview
+rounds after the initial implementation review are allowed across both routes before human tie-break.
 
 When a defect repeats across entrypoints, inspect sibling implementations for that same defect before
 pushing the repair. Bound this search to the defect class and add regressions at the affected boundaries.

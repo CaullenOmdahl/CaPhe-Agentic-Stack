@@ -126,11 +126,11 @@ The `skills/` directory contains reusable public workflow skills:
 - [`skills/strict-mode`](skills/strict-mode/SKILL.md): apply evidence-preserving work lanes, human gates, PR review, and full completion checks.
 - [`skills/ux-flow-plan`](skills/ux-flow-plan/SKILL.md): map current and desired product flows before attaching implementation files.
 
-These skills are local workflow aids. They do not replace tests, artifact verification, or independent PR review.
+These skills preserve tests and artifact verification while selecting one independent review route.
 
 ## Review Model
 
-This stack treats pull requests as the canonical implementation-review path.
+Use one independent implementation-review route: remote PR review preferred, local fallback when remote is unavailable or quota-limited.
 
 The default route is:
 
@@ -145,7 +145,9 @@ The default route is:
 
 See [`docs/review-workflow.md`](docs/review-workflow.md) for the detailed route.
 
-Local review tools are useful preparation. They are not proof that implementation review is complete.
+Successful independent local fallback satisfies the workflow review gate; do not routinely run both.
+Persistent UTC cooldowns and atomic request reservations prevent duplicate requests across tasks.
+Provider reset times are distinguished from estimated recheck times. Required branch protections remain binding.
 
 ## Public Safety
 
