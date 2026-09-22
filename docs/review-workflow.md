@@ -73,7 +73,7 @@ separate repo scope and check both account and repo state before requesting revi
 ```
 python3 "$CAPHE_RUNTIME/tools/stack_review_cooldown.py" status --key KEY --subject OWNER/REPO/PR@HEAD
 python3 "$CAPHE_RUNTIME/tools/stack_review_cooldown.py" claim --key KEY --subject OWNER/REPO/PR@HEAD
-python3 "$CAPHE_RUNTIME/tools/stack_review_cooldown.py" blocked --key KEY --reason quota --evidence RESPONSE_URL --observed-at RFC3339 --reset-at RFC3339
+python3 "$CAPHE_RUNTIME/tools/stack_review_cooldown.py" blocked --key KEY --reason quota --token TOKEN --evidence RESPONSE_URL --observed-at RFC3339 --reset-at RFC3339
 python3 "$CAPHE_RUNTIME/tools/stack_review_cooldown.py" success --key KEY --subject OWNER/REPO/PR@HEAD --token TOKEN --evidence REVIEW_URL
 ```
 
@@ -82,7 +82,9 @@ again. On `wait_existing_request`, observe that request or continue other work.
 On `local_fallback`, switch locally without sending a remote trigger. A reservation
 lasts ten minutes to prevent simultaneous agents or abandoned tasks causing duplicate
 requests. Save the returned token and supply it when recording that attempt's result.
-Use `success` for a real completed review, even one with findings: it restores
+While a reservation exists, `blocked` requires its matching token too. Tokenless
+external failure observations are accepted only when no reservation exists; they
+must not cancel another task's request. Use `success` for a real completed review, even one with findings: it restores
 availability, not approval. Acknowledgements, reactions and empty outputs do not count.
 
 For a blocked response record its actual timestamp and source link, not the time an

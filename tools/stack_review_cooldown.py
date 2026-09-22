@@ -43,7 +43,7 @@ def transition(record, action, now, subject=None, reason=None, evidence=None,
         record.update(subject=subject, token=uuid.uuid4().hex,
                       requested_at=iso(now), lease_until=iso(now + timedelta(minutes=10)))
         return record, 'request_reserved'
-    if token and token != record.get('token'):
+    if (record.get('token') or token) and token != record.get('token'):
         raise ValueError('stale request token')
     if action == 'success':
         if not token or subject != record.get('subject'):

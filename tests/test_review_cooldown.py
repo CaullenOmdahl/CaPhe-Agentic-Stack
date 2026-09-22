@@ -86,6 +86,23 @@ class CooldownTests(unittest.TestCase):
                         self.fail('invalid ledger must fail closed')
                 path.unlink()
 
+    def test_tokenless_failure_cannot_cancel_newer_reservation(self):
+        record, _ = transition({}, 'claim', self.now, subject='repo/1@old')
+        record, _ = transition(record, 'claim', self.now + timedelta(minutes=11), subject='repo/1@new')
+        with self.assertRaisesRegex(ValueError, 'token'):
+            transition(record, 'blocked', self.now + timedelta(minutes=12),
+                       reason='timeout', evidence='old-worker')
+        completed, _ = transition(record, 'success', self.now + timedelta(minutes=13),
+                                  subject='repo/1@new', token=record['token'], evidence='review-url')
+        self.assertEqual(completed['failures'], 0)
+
+    def test_matching_failure_can_end_its_reservation(self):
+        record, _ = transition({}, 'claim', self.now, subject='repo/1@abc')
+        record, _ = transition(record, 'blocked', self.now + timedelta(minutes=7),
+                               reason='timeout', evidence='response', token=record['token'])
+        self.assertEqual(decide(record, self.now + timedelta(minutes=8)), 'local_fallback')
+        self.assertIsNone(record['token'])
+
     def test_concurrent_claims_have_one_winner(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
