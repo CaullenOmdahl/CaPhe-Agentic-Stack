@@ -19,7 +19,7 @@ Classify from deterministic evidence:
 Never self-attest a mechanical exemption. Pause at `.agent/OWNERS.md` gates. Use failing regression or
 equivalent defect-detection evidence before production behavior changes. Implementation review uses one route on the actual diff: remote PR review preferred,
 independent local fallback when remote is unavailable. Follow the review policy at
-`~/.local/share/caphe/runtime/docs/review-workflow.md` for cooldowns and bounded rounds;
+`~/.local/share/caphe/runtime/docs/review-workflow.md` for failure cooldowns and continued remediation;
 do not require both routes or all reviewer integrations. Keep source identity in evidence.
 
 Pre-commit `FAST GREEN` is focused feedback only. Before completion, run

@@ -15,10 +15,10 @@ shared implementation-review policy for the canon, skills and project templates.
 - Inspect existing reviews/checks and private cooldown state before posting a trigger.
   A pending request is not a reason to post another. Atomically reserve an attempt
   with the helper below before triggering; only `request_reserved` permits sending.
-- If remote review is unavailable, quota-limited, or has no result after one bounded
-  window of at most seven minutes, record why and use one independent local reviewer.
-  Do not wait through repeated windows. Observe asynchronously or in tool waits of
-  at most 60 seconds; unchanged polls do not warrant model work or status narration.
+- If remote review explicitly fails, is unavailable or quota-limited, record the
+  evidence and use one independent local reviewer. Elapsed time or a pending status
+  alone is not unavailability. Let an active review finish; use short polling calls
+  for responsiveness without imposing an overall review deadline or posting again.
 - The local reviewer inspects the complete current implementation diff against its
   actual PR base plus necessary context, with a frozen source identity. Require a
   successful, non-empty result; use the second-opinion skill's isolated invocation.
@@ -26,7 +26,7 @@ shared implementation-review policy for the canon, skills and project templates.
   report the review blocker; never call missing review approval.
 - Before launching a local fallback, check/reserve its machine-scoped availability
   key (for example `local:agy:ACCOUNT:machine`) with the same helper. Record
-  local timeouts or unavailable clients too; a new task must not repeatedly relaunch
+  actual client failures or unavailable clients too; a new task must not repeatedly relaunch
   a known unavailable fallback. This key is separate from the remote account quota.
 - Local fallback satisfies the workflow's implementation-review requirement. Do not
   subsequently obtain remote review merely to duplicate it, including after quota
@@ -38,10 +38,11 @@ shared implementation-review policy for the canon, skills and project templates.
   delta and affected context; retain prior review for unchanged material. Do not
   repeatedly ask for the entire diff to be rereviewed after each small repair.
   Deterministically proven docs/generated-only changes may use the mechanical lane.
-- At most two fix-and-rereview rounds after the initial review, across both routes.
-  Then stop for a concise human decision with unresolved findings. Do not use an
-  unavailable provider attempt as a completed review round. Do not reset the counter
-  on a new head or a switch to local.
+- Continue fixing actionable findings and reviewing the changed code until clean.
+  There is no fixed review duration or repair/review-round limit. Do not ask for
+  permission to continue merely because time or an iteration count has elapsed.
+  Escalate only genuine conflicting requirements, missing access, demonstrated
+  non-progress after credible alternatives, or an existing human decision gate.
 - Batch related verified fixes, inspect siblings for the same defect class, and keep
   unrelated features/release work in separate PRs. Avoid changes to evidence files
   solely to stamp each new SHA and thereby create another review cycle.
@@ -79,9 +80,9 @@ python3 "$CAPHE_RUNTIME/tools/stack_review_cooldown.py" success --key KEY --subj
 
 Before `claim`, reuse a review already present for the subject; do not request it
 again. On `wait_existing_request`, observe that request or continue other work.
-On `local_fallback`, switch locally without sending a remote trigger. A reservation
-lasts ten minutes to prevent simultaneous agents or abandoned tasks causing duplicate
-requests. Save the returned token and supply it when recording that attempt's result.
+On `local_fallback`, switch locally without sending a remote trigger. The ten-minute reservation lease coordinates request submission; it is not a review
+deadline. Lease expiry never authorizes a duplicate request while provider review
+is pending/running. Recheck provider status before reclaiming an expired lease. Save the returned token and supply it when recording that attempt's result.
 While a reservation lease is active, `blocked` requires its matching token too. Tokenless
 external failure observations are accepted when no live reservation exists (including an abandoned, expired lease); they
 must not cancel another task's request. Use `success` for a real completed review, even one with findings: it restores
@@ -103,5 +104,5 @@ fallback selected. If state cannot be read, stop remote requests and report the
 state error; do not delete it or assume the provider is available.
 
 For private continuation use the existing stack_state task record: PR/base/head,
-selected route and reason, review round count, finding dispositions and next action.
+selected route and reason, review history, finding dispositions and next action.
 Availability state is shared by quota scope; per-PR review progress is separate.

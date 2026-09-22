@@ -85,7 +85,7 @@ cost. Follow the installed Strict Mode methodology for runtime commands and evid
 ## Review Rule
 
 Use one implementation-review route: remote PR review is preferred; one independent local
-reviewer is the fallback for unavailability, quota limits, or one bounded response timeout.
+reviewer is the fallback for explicit failure, unavailability or quota limits.
 A successful local fallback satisfies the workflow review gate. Do not routinely run local
 preparation review plus remote review, or require remote review again after local fallback.
 Preserve actual GitHub-required approvals/checks and human merge/release gates.
@@ -96,14 +96,14 @@ reviewer and reserve attempts atomically. Never request the retired consumer Gem
 Provider reset times and estimated recheck times must be distinguished; keep account-wide limits
 shared across repositories. These helpers guide agent requests; they do not intercept GitHub directly.
 
-Batch related fixes and retain source identity internally. At most two fix-and-rereview rounds after
-the initial review, across both routes, then human arbitration. Carry unresolved inline and summary
+Batch related fixes and retain source identity internally. Continue remediation and review until clean, without arbitrary elapsed-time or round-count limits.
+A pending/running review is not unavailable merely because it is slow. Carry unresolved inline and summary
 findings forward; changing heads or reviewers does not reset the review budget. Keep routine reports
 focused on defects, fixes, checks and blockers rather than repeated SHA/certification announcements.
 
 Local self-review and same-family audits are not independent fallback. For local source reviews,
 omit unrelated tool servers using a verified empty/minimal MCP configuration; preserve repository
-hooks and completion checks. Require a bounded, successful, non-empty review of the actual diff.
+hooks and completion checks. Require a successful, non-empty review of the actual diff.
 The `second-opinion` skill documents the tested Claude invocation. Explicitly requested design or
 writing assessments remain separate from the single implementation-review route.
 

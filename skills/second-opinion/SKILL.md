@@ -94,6 +94,10 @@ codex exec review --uncommitted --skip-git-repo-check --ephemeral -m "$codex_mod
 
 ## Review discipline
 
+Do not impose an overall deadline on a running review. Bounded capability probes and
+short polling calls are operational checks, not review-duration limits. Elapsed time
+alone does not justify killing the reviewer or switching routes.
+
 - Send a neutral task description, not your preferred conclusion.
 - Verify findings against current code before acting.
 - Report the reviewer, executable version, resolved model, whether the headless call succeeded, and any

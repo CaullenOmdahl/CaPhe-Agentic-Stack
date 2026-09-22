@@ -72,13 +72,15 @@ remain independently discovered.
 ## Review
 
 Implementation review uses one route on the actual diff: prefer remote PR review; fall back to one
-independent local reviewer when remote is unavailable, quota-limited, or times out once. Successful
+independent local reviewer when remote explicitly fails, is unavailable or quota-limited. Successful
 local fallback satisfies this workflow gate; required GitHub checks and human gates remain binding.
 Do not routinely run both routes or demand remote review after a successful fallback. Review design
 and implementation separately when risk requires design review; design review alone is not approval
 of code. Follow `docs/review-workflow.md` in the runtime for persistent cooldowns, retired reviewers,
-atomic request reservations, source-bound evidence and concise reporting. At most two fix-and-rereview
-rounds after the initial implementation review are allowed across both routes before human tie-break.
+atomic request reservations, source-bound evidence and concise reporting. Continue actionable repairs
+and review until clean, without fixed duration or review-round caps. Pending/running reviews may take
+as long as needed. Escalate genuine ambiguity, missing access, or demonstrated non-progress after
+credible alternatives; elapsed time and iteration count alone never require human reauthorization.
 
 When a defect repeats across entrypoints, inspect sibling implementations for that same defect before
 pushing the repair. Bound this search to the defect class and add regressions at the affected boundaries.
