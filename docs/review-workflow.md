@@ -82,8 +82,8 @@ again. On `wait_existing_request`, observe that request or continue other work.
 On `local_fallback`, switch locally without sending a remote trigger. A reservation
 lasts ten minutes to prevent simultaneous agents or abandoned tasks causing duplicate
 requests. Save the returned token and supply it when recording that attempt's result.
-While a reservation exists, `blocked` requires its matching token too. Tokenless
-external failure observations are accepted only when no reservation exists; they
+While a reservation lease is active, `blocked` requires its matching token too. Tokenless
+external failure observations are accepted when no live reservation exists (including an abandoned, expired lease); they
 must not cancel another task's request. Use `success` for a real completed review, even one with findings: it restores
 availability, not approval. Acknowledgements, reactions and empty outputs do not count.
 

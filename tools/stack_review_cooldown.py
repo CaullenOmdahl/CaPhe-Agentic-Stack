@@ -34,7 +34,7 @@ def decide(record, now, subject=None):
 
 
 def transition(record, action, now, subject=None, reason=None, evidence=None,
-               reset_at=None, token=None):
+               reset_at=None, token=None, checked_at=None):
     record = dict(record)
     if action == 'claim':
         decision = decide(record, now, subject)
@@ -43,7 +43,9 @@ def transition(record, action, now, subject=None, reason=None, evidence=None,
         record.update(subject=subject, token=uuid.uuid4().hex,
                       requested_at=iso(now), lease_until=iso(now + timedelta(minutes=10)))
         return record, 'request_reserved'
-    if (record.get('token') or token) and token != record.get('token'):
+    lease_active = (record.get('lease_until') is not None
+                    and (checked_at or now) < timestamp(record['lease_until']))
+    if (token or lease_active) and token != record.get('token'):
         raise ValueError('stale request token')
     if action == 'success':
         if not token or subject != record.get('subject'):
@@ -155,7 +157,7 @@ def main():
                 decision = decide(record, now, args.subject)
             else:
                 record, decision = transition(record, args.action, observed,
-                    args.subject, args.reason, args.evidence, args.reset_at, args.token)
+                    args.subject, args.reason, args.evidence, args.reset_at, args.token, checked_at=now)
                 record.update(schema_version=1, key=args.key)
                 save(path, record)
             print(json.dumps({'decision': decision, 'now': iso(now), 'record': record}))

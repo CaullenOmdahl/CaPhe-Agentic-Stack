@@ -96,6 +96,21 @@ class CooldownTests(unittest.TestCase):
                                   subject='repo/1@new', token=record['token'], evidence='review-url')
         self.assertEqual(completed['failures'], 0)
 
+    def test_external_failure_after_abandoned_lease_sets_cooldown(self):
+        record, _ = transition({}, 'claim', self.now, subject='repo/1@abc')
+        record, _ = transition(record, 'blocked', self.now + timedelta(minutes=11),
+                               reason='quota', evidence='provider-status')
+        self.assertEqual(decide(record, self.now + timedelta(minutes=12)), 'local_fallback')
+        self.assertIsNone(record['token'])
+
+    def test_old_failure_within_lease_can_be_observed_after_expiry(self):
+        record, _ = transition({}, 'claim', self.now, subject='repo/1@abc')
+        record, _ = transition(record, 'blocked', self.now + timedelta(minutes=1),
+                               reason='quota', evidence='provider-status',
+                               checked_at=self.now + timedelta(minutes=11))
+        self.assertEqual(record['blocked_at'], '2026-09-22T10:01:00Z')
+        self.assertEqual(decide(record, self.now + timedelta(minutes=12)), 'local_fallback')
+
     def test_matching_failure_can_end_its_reservation(self):
         record, _ = transition({}, 'claim', self.now, subject='repo/1@abc')
         record, _ = transition(record, 'blocked', self.now + timedelta(minutes=7),
