@@ -86,3 +86,22 @@ become defect-detecting acceptance cases; a non-empty design assessment is not i
 
 The owner has already authorized settling and implementing this methodology. The resolutions preserve
 the requested scope and quality bar and require no broader operational permission.
+
+
+## Worker ceiling amendment — 2026-09-23
+
+Status: accepted by the owner; implementation and rollout require verification and PR review.
+Approver: Caullen Omdahl, 2026-09-23.
+Approval scope: replace the two-worker limit with 64 workers or the active agent environment limit,
+whichever is lower, including the public delegation contract bounds. The owner explicitly requested
+verification and merge of PR 13, followed by deployment to the designated consumer on the secondary
+machine. This authorization is specific to the worker-cap change and its verified rollout.
+
+The amended contract accepts up to 64 children and an optional observed available-worker capacity.
+Known host limits remain binding. Existing callers may omit capacity, but omission never overrides
+host admission limits. No recursive delegation or shared write-scope relaxation is authorized.
+
+The retained baseline test that rejects three workers represents the superseded two-worker policy.
+Record its expected failure separately from implementation regressions. The replacement boundary tests
+must accept 64, reject 65, and enforce lower observed capacity. Keep all other retained requirements and
+the complete uncached candidate matrix; do not disable the retained harness or hide its diagnostic result.
