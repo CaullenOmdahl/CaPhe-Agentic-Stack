@@ -164,7 +164,11 @@ capability-validated incumbent; unsupported incumbents fail instead of silently 
 Owner approval metadata binds the exact route digest and evaluation references; the caller must supply
 trusted policy. The JSON is a declaration, not cryptographic proof of approval.
 
-Use at most two ordinary workers, no recursive delegation, and disjoint write scopes. A fresh context
+Use at most 64 ordinary workers or the active agent environment limit, whichever is lower, with no
+recursive delegation and disjoint write scopes. Account for the coordinator and occupied slots when the
+host limit includes them. Pass observed remaining capacity as `capabilities.available_worker_slots`,
+set `max_workers` within that capacity, and refresh capacity before each spawn. The validator does not
+reserve slots globally; omission of the optional capacity field does not override known host limits. A fresh context
 contains the contract and relevant evidence, not full conversation history. Dispatch the resolved model
 and effort explicitly through the available agent tool. Full-history forks inherit model/effort and are
 not a cheap-route mechanism. After one failed repair, tighten the contract or escalate. Independent PR

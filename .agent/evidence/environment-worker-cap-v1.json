@@ -1,0 +1,56 @@
+{
+  "change_id": "environment-worker-cap",
+  "decision": "ADR-0004",
+  "evidence": [
+    {
+      "kind": "check",
+      "reference": "17 routing tests pass with pre-implementation failure evidence"
+    },
+    {
+      "kind": "check",
+      "reference": "Full uncached local completion matrix passed"
+    }
+  ],
+  "id": "environment-worker-cap-v1",
+  "lane": "scoped-behavior",
+  "schema_version": 2,
+  "source": {
+    "repository": "CaullenOmdahl/CaPhe-Agentic-Stack",
+    "revision": "54c9f759ce484c24f77bd303db0fab4eeefabb49",
+    "snapshot_digest": "52729237428eadd38933c69551818c731ba70aeb145ac254bb564aa042e09045"
+  },
+  "states": {
+    "external_acceptance": {
+      "reason": "No external artifact.",
+      "scope": "source",
+      "status": "not_applicable"
+    },
+    "implementation": {
+      "reason": "Rules and validator updated.",
+      "scope": "source",
+      "status": "passed"
+    },
+    "merge": {
+      "reason": "Merge not authorized.",
+      "scope": "source",
+      "status": "pending"
+    },
+    "release": {
+      "reason": "Installed runtime update awaits review.",
+      "scope": "source",
+      "status": "pending"
+    },
+    "review": {
+      "reason": "PR review pending.",
+      "scope": "source",
+      "status": "pending"
+    },
+    "validation": {
+      "reason": "Candidate completion passed. Retained baseline conflicts with authorized limit.",
+      "scope": "source",
+      "status": "pending"
+    }
+  },
+  "summary": "User-authorized ceiling of 64 workers bounded by active environment capacity. Candidate full local matrix passed. Retained baseline rejects three workers and requires policy reconciliation.",
+  "supersedes": []
+}

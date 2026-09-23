@@ -43,8 +43,8 @@ CONTRACT_SCHEMA = {'$schema': 'https://json-schema.org/draft/2020-12/schema', **
     'repair_budget': _object({'max_repairs': {'type': 'integer', 'minimum': 0, 'maximum': 1}}),
     'escalation': {'const': 'parent'}, 'task_class': ID, 'parent_id': ID,
     'canonical_review_role': {'type': 'boolean'},
-    'max_workers': {'type': 'integer', 'minimum': 0, 'maximum': 2},
-    'children': _list(_object({'task_id': ID, 'goal': TEXT, 'acceptance': _list(TEXT, 1), 'allowed_writes': _list(TEXT)}), 0, 2),
+    'max_workers': {'type': 'integer', 'minimum': 0, 'maximum': 64},
+    'children': _list(_object({'task_id': ID, 'goal': TEXT, 'acceptance': _list(TEXT, 1), 'allowed_writes': _list(TEXT)}), 0, 64),
 }, ['schema_version', 'source', 'goal', 'acceptance', 'allowed_writes', 'exclusions', 'lane', 'canon_refs',
     'required_checks', 'output_limits', 'repair_budget', 'escalation', 'task_class', 'parent_id', 'children', 'max_workers'])}
 ROUTE_SCHEMA = _object({'config': ID, 'model': ID, 'effort': {'enum': EFFORTS}, 'service_tier': ID})
@@ -157,7 +157,13 @@ def _capability_reason(route, models):
 
 def resolve_route(contract, capabilities, policy):
     validate_contract(contract)
-    _closed(capabilities, ['models'])
+    _closed(capabilities, ['models'], ['available_worker_slots'])
+    if 'available_worker_slots' in capabilities:
+        slots = capabilities['available_worker_slots']
+        if type(slots) is not int or slots < 0:
+            raise RouteError('available_worker_slots must be a nonnegative integer')
+        if contract['max_workers'] > slots:
+            raise RouteError('declared workers exceed active environment capacity')
     if not isinstance(capabilities['models'], dict):
         raise RouteError('models must be a capability map')
     for identifier, capability in capabilities['models'].items():

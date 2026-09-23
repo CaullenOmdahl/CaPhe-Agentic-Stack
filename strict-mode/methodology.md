@@ -117,7 +117,7 @@ classes. Probe live capabilities; a catalog label alone does not prove authentic
 `tools/stack_route.py` to validate an explicit contract, observed capabilities, and trusted owner policy.
 The coordinator retains architecture, ambiguous acceptance, integration, and escalation. Use a fresh
 bounded child context for independent extraction or scoped work, with explicit model/effort, allowed
-writes, checks, acceptance, output limits, and one repair attempt. Cap ordinary execution at two workers;
+writes, checks, acceptance, output limits, and one repair attempt. Cap ordinary execution at 64 workers or the active agent environment limit, whichever is lower;
 do not recursively delegate. Full-history forks inherit their model and effort.
 
 After a failed bounded repair, escalate the task or tighten its acceptance contract. Count that repair,
