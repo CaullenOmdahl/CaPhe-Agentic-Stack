@@ -7,6 +7,7 @@
 | efficiency-improvement-plan | legacy | unbound | unknown acceptance | legacy; provenance not promoted |
 | efficiency-runtime-implementation-v1 | ADR-0004 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: not_applicable; review: pending; validation: pending | 900ec066ea0c/30fefcf960c7 |
 | environment-worker-cap-v1 | ADR-0004 | scoped-behavior | external_acceptance: not_applicable; implementation: passed; merge: pending; release: pending; review: pending; validation: pending | 54c9f759ce48/52729237428e superseded by environment-worker-cap-v2 |
-| environment-worker-cap-v2 | ADR-0004 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: pending; review: pending; validation: pending | f03f01c845c4/6429c8c79e58 |
+| environment-worker-cap-v2 | ADR-0004 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: pending; review: pending; validation: pending | f03f01c845c4/6429c8c79e58 superseded by environment-worker-cap-v3 |
+| environment-worker-cap-v3 | ADR-0004 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: pending; review: pending; validation: pending | a461ab4a6d18/9ae3c276de42 |
 | review-tool-capability-parity | ADR-0003 | unbound | unknown acceptance | legacy; provenance not promoted |
 | strict-memory-efficiency-v2 | legacy | unbound | unknown acceptance | legacy; provenance not promoted |
