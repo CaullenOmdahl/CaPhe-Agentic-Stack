@@ -6,5 +6,6 @@
 |---|---|---|---|---|
 | efficiency-improvement-plan | legacy | unbound | unknown acceptance | legacy; provenance not promoted |
 | efficiency-runtime-implementation-v1 | ADR-0004 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: not_applicable; review: pending; validation: pending | 900ec066ea0c/30fefcf960c7 |
-| review-tool-capability-parity | legacy | unbound | unknown acceptance | legacy; provenance not promoted |
+| environment-worker-cap-v1 | ADR-0004 | scoped-behavior | external_acceptance: not_applicable; implementation: passed; merge: pending; release: pending; review: pending; validation: pending | 54c9f759ce48/52729237428e |
+| review-tool-capability-parity | ADR-0003 | unbound | unknown acceptance | legacy; provenance not promoted |
 | strict-memory-efficiency-v2 | legacy | unbound | unknown acceptance | legacy; provenance not promoted |

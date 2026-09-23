@@ -132,7 +132,7 @@ agent configuration can affect resolution. In the current collaboration tool, fu
 the parent and do not accept model overrides. A cheaper worker therefore needs explicit model and effort
 with a fresh or bounded context, plus the applicable canon and scoped source pointers.
 
-Start with at most two concurrent workers and no nested delegation in the pilot. Shared-directory
+Use at most 64 concurrent workers or the active agent environment limit, whichever is lower, with no nested delegation. Shared-directory
 agents do not automatically have isolated write permissions. Use separate worktrees for parallel writers,
 or serialize overlapping edits. Read-only workers can share a checkout. A successful capability probe
 establishes availability only; this research session's lower-model extraction tasks were not a controlled

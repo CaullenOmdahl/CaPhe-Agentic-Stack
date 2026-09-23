@@ -113,10 +113,29 @@ class StackRouteTests(unittest.TestCase):
 
     def test_nested_delegation_and_concurrency_limits_rejected(self):
         child = {'task_id': 'worker-1', 'goal': 'Check a thing', 'acceptance': ['Report evidence'], 'allowed_writes': []}
-        for request in (contract(max_workers=3), contract(children=[child], max_workers=0),
+        for request in (contract(max_workers=65), contract(children=[child], max_workers=0),
                         contract(children=[{**child, 'children': [child]}])):
             with self.assertRaises(RouteError):
                 resolve_route(request, capabilities(), policy())
+
+    def test_worker_ceiling_accepts_64_and_rejects_65_children(self):
+        children = [{'task_id': f'worker-{i}', 'goal': 'Inspect scoped input',
+                     'acceptance': ['Report evidence'], 'allowed_writes': []} for i in range(65)]
+        self.assertEqual(resolve_route(contract(max_workers=64, children=children[:64]),
+                                       capabilities(), policy())['status'], 'resolved')
+        with self.assertRaises(RouteError):
+            resolve_route(contract(max_workers=64, children=children), capabilities(), policy())
+
+    def test_active_environment_slots_bound_declared_workers(self):
+        for slots in (0, 1, 3, 64, 100):
+            caps = {**capabilities(), 'available_worker_slots': slots}
+            limit = min(64, slots)
+            self.assertEqual(resolve_route(contract(max_workers=limit), caps, policy())['status'], 'resolved')
+            with self.assertRaises(RouteError):
+                resolve_route(contract(max_workers=limit + 1), caps, policy())
+        for slots in (-1, True, '3', None):
+            with self.subTest(slots=slots), self.assertRaises(RouteError):
+                resolve_route(contract(), {**capabilities(), 'available_worker_slots': slots}, policy())
 
     def test_worker_write_scopes_must_be_disjoint_including_ancestor_paths(self):
         def worker(identifier, writes):
