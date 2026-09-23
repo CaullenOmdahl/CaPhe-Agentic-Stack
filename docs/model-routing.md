@@ -39,15 +39,22 @@ freely within an equivalent tier.
 
 A substitution is only valid if the executing harness can set tier *and* effort for each dispatch.
 Where a harness exposes tier per dispatch but takes effort from a static agent definition, effort is
-resolved by that definition, not by the dispatcher. The session must then either:
+resolved by that definition, not by the dispatcher, and the definition becomes the effort lever. The
+session must then either:
 
-- ensure the definitions it dispatches declare an explicit effort, or
+- ensure the definitions it dispatches declare an explicit effort, with one definition per effort a
+  domain is needed at, or
 - record effort as an inherited default and treat it as unresolved.
 
 Canon requires model and effort to be resolved explicitly, so an unresolved effort is a recorded gap
 that bounds which lanes the substitution may serve. It must not be reported as a resolved value.
-Definitions that pin a model also silently override a requested tier; a dispatcher that cannot
-override them has not achieved the substitution it claims.
+Definitions that pin a model also silently override a requested tier unless the dispatcher passes
+the tier on every call; a dispatcher that cannot override them has not achieved the substitution it
+claims.
+
+Each client adapter states how its harness realises these levers. For Claude Code, see
+`adapters/claude/ROUTING.md`; the registry keys `claude-fable`, `claude-opus`, `claude-sonnet` and
+`claude-haiku` are the routable Claude tiers (ADR-0006).
 
 ### What survives a substitution unchanged
 
