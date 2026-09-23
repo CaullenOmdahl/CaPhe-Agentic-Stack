@@ -1,0 +1,74 @@
+{
+  "change_id": "environment-worker-cap",
+  "decision": "ADR-0004",
+  "evidence": [
+    {
+      "kind": "check",
+      "reference": "17 routing tests pass with pre-implementation failure evidence"
+    },
+    {
+      "kind": "check",
+      "reference": "Full uncached local completion matrix passed"
+    },
+    {
+      "kind": "file",
+      "reference": ".agent/decisions/0004-evidence-preserving-workflow-runtime.md"
+    },
+    {
+      "kind": "url",
+      "reference": "https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/pull/13"
+    },
+    {
+      "kind": "check",
+      "reference": "Complete uncached candidate matrix passed on macOS and Fedora"
+    },
+    {
+      "kind": "check",
+      "reference": "Retained baseline rejects the superseded three-worker policy"
+    }
+  ],
+  "id": "environment-worker-cap-v2",
+  "lane": "full-risk",
+  "schema_version": 2,
+  "source": {
+    "repository": "CaullenOmdahl/CaPhe-Agentic-Stack",
+    "revision": "f03f01c845c449bd7978ce3764aa06ad8bc5fa7c",
+    "snapshot_digest": "6429c8c79e58c87a1debd43653f05c16e7bd816e0378d4b7d8884977cb840a7a"
+  },
+  "states": {
+    "external_acceptance": {
+      "reason": "No external artifact.",
+      "scope": "source",
+      "status": "not_applicable"
+    },
+    "implementation": {
+      "reason": "Rules and validator updated.",
+      "scope": "source",
+      "status": "passed"
+    },
+    "merge": {
+      "reason": "Owner explicitly authorized verified merge of PR 13 on 2026-09-23. Final review pending.",
+      "scope": "source",
+      "status": "pending"
+    },
+    "release": {
+      "reason": "Owner authorized deployment to the designated secondary-machine consumer after verified merge.",
+      "scope": "source",
+      "status": "pending"
+    },
+    "review": {
+      "reason": "PR design and implementation review found approval provenance, guide alignment and lane classification issues. All addressed. Final evidence review pending.",
+      "scope": "source",
+      "status": "pending"
+    },
+    "validation": {
+      "reason": "Full candidate gates passed on macOS and Fedora. Retained baseline failure is the superseded two-worker policy documented in the owner-approved ADR amendment.",
+      "scope": "source",
+      "status": "pending"
+    }
+  },
+  "summary": "Full-risk public delegation schema amendment. Owner-approved ceiling of 64 bounded by known active environment capacity. Supersedes the incorrect scoped-behavior classification. ADR-0004 records design and named approval.",
+  "supersedes": [
+    "environment-worker-cap-v1"
+  ]
+}
