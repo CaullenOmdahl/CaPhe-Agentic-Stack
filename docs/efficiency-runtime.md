@@ -296,6 +296,8 @@ correct inherited generic wording where it applies; retain named approvers, cust
 owner/reviewer routes. If authorization to change a deliberate owner policy is absent, obtain it.
 An explicit native-worker exception leaves the customized file intact. A clean diagnostic identifies
 known stale text only; agents must still read and obey the actual project owner policy.
+The doctor's `project.managed` field describes hook and instruction activation. Overall health is
+determined by its exit status and `unresolved` list; missing, blank, or unreadable owner policies fail it.
 
 Git resolves [relative hook paths](https://git-scm.com/docs/git-config#Documentation/git-config.txt-corehooksPath)
 from the hook's execution directory; [receive hooks run from the Git directory](https://git-scm.com/docs/githooks#_description).

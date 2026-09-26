@@ -27,7 +27,7 @@ def install_empty_chain(repo, hooks, runtime):
 
 
 class DoctorContracts(unittest.TestCase):
-    def test_deleted_owner_policy_is_unresolved_and_project_is_not_managed(self):
+    def test_deleted_or_blank_owner_policy_fails_health_without_changing_activation(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve(); repo = root / "repo"
             subprocess.run(["git", "init", "-q", str(repo)], check=True)
@@ -37,13 +37,17 @@ class DoctorContracts(unittest.TestCase):
             owners.unlink()
             result = doctor.inspect(repo, runtime=PATH.parents[1])
             self.assertIn("owner_policy_missing", result["unresolved"])
-            self.assertFalse(result["project"]["managed"])
+            self.assertTrue(result["project"]["managed"])
+            with mock.patch("builtins.print"):
+                self.assertEqual(doctor.main(["--repo", str(repo), "--runtime", str(PATH.parents[1])]), 1)
             self.assertFalse(owners.exists())
             for content in (b"", b" \r\n\t"):
                 owners.write_bytes(content)
                 result = doctor.inspect(repo, runtime=PATH.parents[1])
                 self.assertIn("owner_policy_empty", result["unresolved"])
-                self.assertFalse(result["project"]["managed"])
+                self.assertTrue(result["project"]["managed"])
+                with mock.patch("builtins.print"):
+                    self.assertEqual(doctor.main(["--repo", str(repo), "--runtime", str(PATH.parents[1])]), 1)
                 self.assertEqual(owners.read_bytes(), content)
 
     def test_existing_legacy_owner_gate_is_reported_read_only_without_policy_content(self):
@@ -59,7 +63,6 @@ class DoctorContracts(unittest.TestCase):
                 result = doctor.inspect(repo, runtime=PATH.parents[1])
                 self.assertEqual(result["owners"]["status"], expected)
                 self.assertIn("legacy_owner_model_gate", result["unresolved"])
-                self.assertFalse(result["project"]["managed"])
                 self.assertEqual(owners.read_bytes(), content)
                 self.assertNotIn("SECRET_OWNER_CANARY", str(result))
             custom = b"Explicit owner constraint: keep the approved reviewer model.\n"
@@ -69,7 +72,6 @@ class DoctorContracts(unittest.TestCase):
             owners.unlink(); owners.symlink_to(outside)
             result = doctor.inspect(repo, runtime=PATH.parents[1])
             self.assertIn("owner_policy_unreadable", result["unresolved"])
-            self.assertFalse(result["project"]["managed"])
             self.assertNotIn("SECRET_OWNER_CANARY", str(result))
 
     def test_inspect_is_read_only_and_reports_missing_runtime(self):

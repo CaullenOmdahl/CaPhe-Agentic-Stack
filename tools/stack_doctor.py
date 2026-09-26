@@ -178,7 +178,8 @@ def inspect(repo, *, runtime, git_config=None):
     result = {
         "runtime": {"path": str(runtime), "version": version, "source_digest": digest},
         "hooks": {"effective_path": str(hookdir) if hookdir else None, "configured": hook_path is not None, "verified": verified, "chain": chain, "files": comparisons, "hook_digest": comparisons["pre-commit"]["actual"], "gate_digest": comparisons["strict-green-gate.sh"]["actual"]},
-        "project": {"path": str(repo), "managed": bool(top and marked and marker_version == "3" and verified and instructions["verified"] and owners["status"] == "preserved"), "marker_present": marked, "managed_version": marker_version},
+        # Managed describes hook/instruction activation; unresolved determines overall health.
+        "project": {"path": str(repo), "managed": bool(top and marked and marker_version == "3" and verified and instructions["verified"]), "marker_present": marked, "managed_version": marker_version},
         "instructions": instructions,
         "owners": owners,
         "duplicate_skills": find_duplicate_skills([runtime / "skills", repo / ".codex/skills", repo / ".claude/skills"]),
