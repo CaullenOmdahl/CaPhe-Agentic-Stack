@@ -99,6 +99,8 @@ def _owners(repo):
         validator = _initializer()
         validator.safe(path)
         content = path.read_bytes()
+        if not content.strip():
+            return {"status": "empty", "sha256": hashlib.sha256(content).hexdigest()}
         return {"status": validator.owner_route_state(content), "sha256": hashlib.sha256(content).hexdigest()}
     except (OSError, ValueError, RuntimeError):
         return {"status": "unreadable", "sha256": None}
@@ -164,6 +166,10 @@ def inspect(repo, *, runtime, git_config=None):
     owners = _owners(repo)
     if owners["status"] in {"legacy_generated", "legacy_conflict"}:
         unresolved.append("legacy_owner_model_gate")
+    elif owners["status"] == "missing":
+        unresolved.append("owner_policy_missing")
+    elif owners["status"] == "empty":
+        unresolved.append("owner_policy_empty")
     elif owners["status"] == "unreadable":
         unresolved.append("owner_policy_unreadable")
     digest = tree_digest(runtime) if runtime.is_dir() else None
@@ -172,7 +178,7 @@ def inspect(repo, *, runtime, git_config=None):
     result = {
         "runtime": {"path": str(runtime), "version": version, "source_digest": digest},
         "hooks": {"effective_path": str(hookdir) if hookdir else None, "configured": hook_path is not None, "verified": verified, "chain": chain, "files": comparisons, "hook_digest": comparisons["pre-commit"]["actual"], "gate_digest": comparisons["strict-green-gate.sh"]["actual"]},
-        "project": {"path": str(repo), "managed": bool(top and marked and marker_version == "3" and verified and instructions["verified"]), "marker_present": marked, "managed_version": marker_version},
+        "project": {"path": str(repo), "managed": bool(top and marked and marker_version == "3" and verified and instructions["verified"] and owners["status"] == "preserved"), "marker_present": marked, "managed_version": marker_version},
         "instructions": instructions,
         "owners": owners,
         "duplicate_skills": find_duplicate_skills([runtime / "skills", repo / ".codex/skills", repo / ".claude/skills"]),

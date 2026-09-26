@@ -101,6 +101,8 @@ def owner_route_state(content):
 
 
 def refresh_owner_gate(content):
+    if not content.strip():
+        raise InitError(".agent/OWNERS.md is empty; reconcile the project owner policy before initialization")
     state = owner_route_state(content)
     if state == "legacy_conflict":
         raise InitError(".agent/OWNERS.md has a customized legacy model gate; reconcile it with the "

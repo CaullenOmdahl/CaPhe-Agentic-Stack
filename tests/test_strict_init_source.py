@@ -38,11 +38,11 @@ class StrictInitSourceTests(unittest.TestCase):
                 initializer.initialize(ROOT / "strict-mode", repo)
                 self.assertEqual(owners.read_bytes(), upgraded)
 
-    def test_custom_legacy_owner_conflict_fails_before_any_writes(self):
+    def test_custom_or_empty_owner_conflict_fails_before_any_writes(self):
         legacy = (ROOT / "tests/fixtures/owners-legacy.md").read_bytes()
         variants = (legacy.replace(b"<name>", b"Named owner"), legacy.replace(b"\n", b"\r\n"),
                     legacy.replace(b"architecture, model,", b"architecture,  model,"),
-                    b'- The "model"/architecture or language choice (ADR phase 2)\n')
+                    b'- The "model"/architecture or language choice (ADR phase 2)\n', b"", b" \r\n\t")
         for old in variants:
             with self.subTest(old=old), tempfile.TemporaryDirectory() as tmp:
                 repo = self.repo(Path(tmp).resolve())
