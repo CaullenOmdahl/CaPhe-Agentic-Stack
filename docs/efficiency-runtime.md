@@ -170,8 +170,16 @@ worker contract. Escalate when scope or risk warrants it; a task label such as "
 security-sensitive or domain-critical behavior. Keep explicit user and owner route constraints binding.
 Do not restart completed workers simply to change their model.
 
-Use fresh or bounded context and explicit model/effort arguments. A full-history fork inherits the
-parent route and therefore cannot implement a cheaper worker choice. When the preferred route is
+Inspect the active spawn tool's schema before dispatch. In harnesses that expose `spawn_agent.model`
+and `spawn_agent.reasoning_effort`, pass both explicitly with `fork_turns="none"` or a bounded fork;
+put the contract and relevant source pointers in the message. A model named only in the message does
+not select it. Some harnesses expose no model/effort overrides: use an already authorized supported
+selection mechanism, or retain the task with the coordinator and report that routing is unavailable.
+Do not spawn an inherited frontier worker and describe it as a lightweight/workhorse selection. Do not
+activate an external provider or bypass a remote-dispatch gate to work around a missing native control.
+
+A full-history fork inherits the parent route and therefore cannot implement a cheaper worker choice.
+When the preferred route is
 unavailable, choose the next suitable supported route and state why; do not silently make that fallback
 the default for unrelated tasks. A successful native invocation verifies availability for that invocation,
 not general quality or savings. External clients still require a successful authenticated probe of the

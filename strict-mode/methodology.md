@@ -121,7 +121,10 @@ lowest supported effort adequate for the acceptance contract; the parent's model
 worker default. This routine selection needs no separate benchmark or human approval unless an explicit
 user or owner route constraint applies. It does not change the coordinator, pinned policy, or reviewer.
 
-Check the active harness's model and effort support. A successful native invocation establishes only
+Check both available routes and the active spawn tool's model/effort arguments. Naming a model in a
+prompt does not select it. If those controls are absent, use an already authorized supported selection
+mechanism or keep the task with the coordinator and report the limitation; do not claim an inherited
+worker used a different route or bypass remote-dispatch gates. A successful native invocation establishes only
 that invocation's availability; external clients require an authenticated compatibility probe. If a
 preferred route is unavailable, use the next suitable supported route and state the fallback reason.
 Use `tools/stack_route.py` when resolving a trusted evaluated owner policy: its incumbent fallback and

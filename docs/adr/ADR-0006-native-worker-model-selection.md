@@ -22,6 +22,11 @@ acceptance, and escalation; one failed repair escalates or tightens the contract
 work is not restarted to change models. Changes affect future spawns and are reversible by restoring
 the instruction payload. Already running tasks may retain earlier instructions until refreshed.
 
+The selection mechanism must be present in the active tool schema. A harness with `model` and
+`reasoning_effort` spawn arguments can select a route with a fresh or bounded fork; a harness without
+them must use an already authorized supported mechanism or retain the work in the coordinator and
+report the limitation. Mentioning a model in a prompt is not a selection mechanism.
+
 ## Decision and alternatives
 
 The incumbent-retention rule governs evaluated policy promotion, not every native worker choice.
@@ -46,3 +51,12 @@ and canonical review. Validate that the first two need no benchmark promotion, w
 their explicit constraints. Run the complete unchanged verification matrix, including existing resolver
 approval, fallback, and reviewer tests. Obtain PR review before installing the changed instruction
 payload, preserve local custom instructions, and verify installed bytes with a private rollback journal.
+
+## Native invocation evidence
+
+The implementation session's collaboration tool exposed `model`, `reasoning_effort`, and `fork_turns`.
+It accepted a fresh `gpt-6-sol` / `medium` routing audit and a fresh `gpt-6-luna` / `low` seven-scenario
+instruction check. Both returned bounded results; the scenario check needed one repair for incorrect
+file citations. This demonstrates successful explicit selection requests on that harness, not provider
+telemetry, measured savings, or support in another harness. The PR reviewer's different tool surface
+motivated the explicit missing-controls fallback above; no universal override support is assumed.

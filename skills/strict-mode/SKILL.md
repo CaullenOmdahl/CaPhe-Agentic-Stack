@@ -28,7 +28,10 @@ preparation, status polling, and explicit model/effort routing; read `docs/effic
 runtime only when those operations are needed. For native workers, select model and effort per bounded
 task before spawning: lightweight for routine copy/extraction, workhorse for settled implementation,
 frontier for ambiguous or high-risk reasoning. Use live supported choices, explicit arguments, and fresh
-context; do not uniformly inherit the coordinator's model. This task-level selection needs no separate
+context; do not uniformly inherit the coordinator's model. Inspect the spawn tool's schema: prompt text
+does not select a model. If native overrides are absent, use an already authorized supported mechanism
+or keep the task with the coordinator and report the limitation; preserve remote-dispatch gates.
+This task-level selection needs no separate
 benchmark or approval unless an explicit user or owner route constraint applies. Retaining the incumbent
 until paired evidence qualifies a cheaper route applies to evaluated routing-policy promotion, not all
 native delegation. Preserve pinned owner policies and the independent reviewer route; include parent,
