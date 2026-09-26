@@ -1,0 +1,88 @@
+{
+  "change_id": "native-worker-routing",
+  "decision": "ADR-0006",
+  "evidence": [
+    {
+      "kind": "file",
+      "reference": "docs/adr/ADR-0006-native-worker-model-selection.md"
+    },
+    {
+      "kind": "url",
+      "reference": "https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/pull/15"
+    },
+    {
+      "kind": "check",
+      "reference": "Full uncached Python suite and shell syntax and isolation and public-safety matrix passed"
+    },
+    {
+      "kind": "check",
+      "reference": "20 focused routing regressions passed"
+    },
+    {
+      "kind": "check",
+      "reference": "Test harness and runner and manifest unchanged from accepted base d4832a1"
+    },
+    {
+      "kind": "check",
+      "reference": "Native Sol medium audit completed without repair using a fresh context"
+    },
+    {
+      "kind": "check",
+      "reference": "Native Luna low seven-scenario check completed with one citation repair using a fresh context"
+    },
+    {
+      "kind": "check",
+      "reference": "Native spawn accepted explicit model and reasoning_effort arguments"
+    },
+    {
+      "kind": "check",
+      "reference": "PR finding r4111912078 addressed by fb4bd6e schema check and missing-controls fallback"
+    },
+    {
+      "kind": "check",
+      "reference": "PR findings r4111928199 and r4111928203 await canon clarification and immutable evidence review"
+    }
+  ],
+  "id": "native-worker-routing-v1",
+  "lane": "full-risk",
+  "schema_version": 2,
+  "source": {
+    "repository": "CaullenOmdahl/CaPhe-Agentic-Stack",
+    "revision": "fb4bd6ecd481210f5eeff7dbb0e848cf45df77ad",
+    "snapshot_digest": "f9f7132651945f337d2c860c228151aa332721e0bee33538489081d62a6752ec"
+  },
+  "states": {
+    "external_acceptance": {
+      "reason": "No product or hardware behavior is changed.",
+      "scope": "source",
+      "status": "not_applicable"
+    },
+    "implementation": {
+      "reason": "Native task-level selection and missing-controls fallback implemented at this revision. Subsequent binding-canon clarification is not covered.",
+      "scope": "source",
+      "status": "passed"
+    },
+    "merge": {
+      "reason": "No merge authorization.",
+      "scope": "source",
+      "status": "pending"
+    },
+    "release": {
+      "reason": "Local installation waits for review clearance. No remote rollout.",
+      "scope": "source",
+      "status": "pending"
+    },
+    "review": {
+      "reason": "PR 15 requested binding-canon fallback and immutable evidence. Follow-up review pending.",
+      "scope": "source",
+      "status": "pending"
+    },
+    "validation": {
+      "reason": "Full uncached completion passed for this clean revision. Seven scenarios cover copy, lookup, settled error mapping, ambiguous safety, unavailable preferred route, pinned policy and canonical review.",
+      "scope": "source",
+      "status": "passed"
+    }
+  },
+  "summary": "Pre-install evidence. During the 68849ad implementation session the native tool accepted routing_audit with model gpt-6-sol, reasoning_effort medium, fork_turns none and instruction_scenarios with model gpt-6-luna, reasoning_effort low, fork_turns none. Both returned bounded results; the scenario check required one citation repair. These observations establish accepted native selection requests in this harness only, not provider telemetry, measured savings or universal support. This snapshot does not certify later revisions.",
+  "supersedes": []
+}
