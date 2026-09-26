@@ -9,6 +9,7 @@
 | environment-worker-cap-v1 | ADR-0004 | scoped-behavior | external_acceptance: not_applicable; implementation: passed; merge: pending; release: pending; review: pending; validation: pending | 54c9f759ce48/52729237428e superseded by environment-worker-cap-v2 |
 | environment-worker-cap-v2 | ADR-0004 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: pending; review: pending; validation: pending | f03f01c845c4/6429c8c79e58 superseded by environment-worker-cap-v3 |
 | environment-worker-cap-v3 | ADR-0004 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: pending; review: pending; validation: pending | a461ab4a6d18/9ae3c276de42 |
-| native-worker-routing-v1 | ADR-0006 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: pending; review: pending; validation: passed | fb4bd6ecd481/f9f713265194 |
+| native-worker-routing-v1 | ADR-0006 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: pending; review: pending; validation: passed | fb4bd6ecd481/f9f713265194 superseded by native-worker-routing-v2 |
+| native-worker-routing-v2 | ADR-0006 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: passed; review: passed; validation: passed | 10679e381faa/113260333a56 |
 | review-tool-capability-parity | ADR-0003 | unbound | unknown acceptance | legacy; provenance not promoted |
 | strict-memory-efficiency-v2 | legacy | unbound | unknown acceptance | legacy; provenance not promoted |
