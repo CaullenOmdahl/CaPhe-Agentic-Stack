@@ -7,7 +7,9 @@ description: Run Codex CLI review for a non-Codex author, or an explicitly reque
 
 Codex reviewing Codex is not an independent audit gate. Do not auto-run this after ordinary Codex
 implementation work. Use it for a non-Codex author or when the user explicitly requests a same-family
-audit, and label the result accurately. It never replaces pull-request implementation review.
+audit, and label the result accurately. For a non-Codex author it may satisfy the independent
+local fallback under `~/.local/share/caphe/runtime/docs/review-workflow.md` when remote review
+is unavailable. Codex-on-Codex remains a same-family audit, not independent fallback.
 
 ## Capability check
 

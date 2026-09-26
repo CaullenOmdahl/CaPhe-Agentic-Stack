@@ -1,4 +1,4 @@
 interface:
   display_name: "GitHub Review Certify Loop"
-  short_description: "Loop active GitHub PR reviews to green"
-  default_prompt: "Use $gh-review-certify-loop to run the repository's active GitHub review integrations until the PR is clear, then merge only if explicitly requested."
+  short_description: "Remote-first review with cooldown and local fallback"
+  default_prompt: "Use $gh-review-certify-loop for one remote-first review with recorded cooldowns and local fallback; merge only when explicitly authorized."

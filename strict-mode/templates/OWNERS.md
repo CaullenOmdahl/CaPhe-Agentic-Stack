@@ -10,7 +10,9 @@ Record project-specific approvers. Explicit human acceptance is required for:
 - production, hardware, financial, legal, payroll, or external-readiness claims;
 - irreversible or outward-facing actions.
 
-Lower-risk behavioral work may proceed after its independent PR review and full completion gate.
+Lower-risk behavioral work may proceed after one independent implementation review and the full completion gate.
+Prefer remote PR review; successful independent local fallback is sufficient when remote is unavailable.
+Do not require both routes; preserve actual repository branch protection requirements.
 Nothing self-merges past a named gate.
 
 **Approver(s):** <name>
