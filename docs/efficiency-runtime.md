@@ -9,6 +9,7 @@ work per total cost, including parent inspection and repairs. A lower token pric
 | Operation | Implementation | Acceptance boundary |
 | --- | --- | --- |
 | Gather context | `tools/stack_context.py` | Bounded UTF-8 output, source identity, explicit omissions/incomplete state |
+| Review availability | `tools/stack_review_cooldown.py` | Persistent UTC cooldowns and atomic request reservations; not review approval |
 | Wait for work | `tools/stack_watch.py` | Read-only JSON query, total deadline, status changes and actionable failures |
 | Continue a task | `tools/stack_state.py` | Owner-only, repository-scoped state outside Git; original authorization preserved |
 | Prepare generated files | `tools/stack_prepare.py` | Recipe, input, toolchain, environment and output freshness; failures never count as fresh |

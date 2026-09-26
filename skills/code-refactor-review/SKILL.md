@@ -5,7 +5,8 @@ description: Review diffs and pull requests for reuse, composition, codebase con
 
 # Code Refactor Review
 
-Use this as a local quality lens for an existing diff. It supplements pull-request review; it does not replace independent PR review.
+Use this as a local quality lens for an existing diff. Use its lens within the selected implementation-review route, not as a mandatory extra review pass.
+Follow the runtime `docs/review-workflow.md`: remote preferred, independent local fallback on unavailability.
 
 ## Precedence
 

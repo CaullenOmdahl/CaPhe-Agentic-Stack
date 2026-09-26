@@ -7,8 +7,12 @@ description: Obtain an independent AI assessment for code, architecture, writing
 
 Use another model family for independent assessment. In a Codex session, prefer Claude Code for
 correctness-focused code review and agy for Gemini-family product, architecture, or writing review.
-Codex is a same-family fallback and must be labeled that way. Local review never substitutes for the
-repository's pull-request implementation-review gate.
+Codex is a same-family fallback and must be labeled that way. For implementation review,
+read `~/.local/share/caphe/runtime/docs/review-workflow.md`: prefer one remote PR reviewer;
+use this independent local route only when remote review is unavailable/quota-limited, or the user
+explicitly requests local review. Successful local fallback satisfies the workflow review gate.
+Do not run local preparation review and remote review routinely or repeat remote review after fallback.
+Explicit design/writing second-opinion requests remain in scope.
 
 ## Capability check
 
@@ -46,8 +50,8 @@ ordinary repository review.
 Use a bounded headless probe before a long review. On a stall, inspect stderr and
 child-process startup for unrelated servers or hooks. Empty output and timeout
 are failed reviews, never approval. MCP isolation removes that startup path; it
-does not prove that every delay was caused by MCP. Preserve the repository's PR
-review requirement instead of repeatedly waiting on an unavailable local route.
+does not prove that every delay was caused by MCP. If the selected independent local fallback is
+unavailable, report the review blocker instead of repeatedly launching unavailable reviewers.
 
 ## Commands
 
@@ -89,6 +93,10 @@ codex exec review --uncommitted --skip-git-repo-check --ephemeral -m "$codex_mod
 ```
 
 ## Review discipline
+
+Do not impose an overall deadline on a running review. Bounded capability probes and
+short polling calls are operational checks, not review-duration limits. Elapsed time
+alone does not justify killing the reviewer or switching routes.
 
 - Send a neutral task description, not your preferred conclusion.
 - Verify findings against current code before acting.
