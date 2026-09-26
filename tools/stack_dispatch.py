@@ -10,7 +10,10 @@ from tools.model_routing import RoutingError, load_json, source_safe
 def argv_for(route, prompt):
     model, effort = route["vendor_model"], route["effort"]
     if route["client"] == "codex": return ["codex", "exec", "--json", "--sandbox", "read-only", "--model", model, "--config", "model_reasoning_effort=" + effort, prompt]
-    if route["client"] == "claude": return ["claude", "-p", prompt, "--output-format", "json", "--model", model, "--effort", effort]
+    if route["client"] == "claude":
+        argv = ["claude", "-p", prompt, "--output-format", "json", "--model", model]
+        if effort != "none": argv.extend(("--effort", effort))
+        return argv
     if route["client"] == "agy": return ["agy", "--sandbox", "--mode", "plan", "--dangerously-skip-permissions", "--model", model, "--effort", effort, "--print=" + prompt]
     if route["client"] == "gemini": return ["gemini", "-p", prompt, "--model", model]
     raise RoutingError("unsupported dispatcher client")

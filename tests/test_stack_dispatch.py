@@ -15,6 +15,10 @@ class DispatchTests(unittest.TestCase):
         args=argv_for(route,"prompt")
         self.assertEqual(args[args.index("--effort")+1],"high")
 
+    def test_claude_cli_route_omits_effort_flag_for_none(self):
+        route={"client":"claude","vendor_model":"claude-haiku-4-5-20251001","effort":"none"}
+        self.assertNotIn("--effort",argv_for(route,"prompt"))
+
     def test_dry_run_emits_valid_event_without_contacting_client(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory); digest="a"*64
