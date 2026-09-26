@@ -16,14 +16,18 @@ only to report recommendations. Owner decisions belong in an ADR and an owner-po
 
 ## Client-availability route substitution
 
-A routing policy names routes, and every route belongs to a client. A session can only dispatch
-routes whose client it is itself running under. When a plan names routes belonging to a client the
-executing session cannot dispatch, that is an availability problem, not a licence to pick
-substitute models.
+A routing policy names routes, and every route belongs to a client. A native session tool can only
+dispatch routes for clients it supports. The remote dispatcher can also select the corresponding
+client CLI (`codex`, `claude`, `agy` or `gemini`) for a route; use it when that CLI is installed,
+authenticated and its required isolation is verified. Do not call a route undispatchable merely
+because the coordinating session uses another client. If neither supported path is available, that
+is an availability problem, not a licence to pick substitute models.
 
-Substitution is never silent. The session must hold, state which named routes are undispatchable
-and why, and obtain an owner decision before dispatching. The owner may instead move execution to a
-host running the required client, which keeps the original routes intact.
+Substitution is never silent. If a named route cannot be dispatched through either supported path,
+the session must hold, state which named routes are undispatchable and why, and obtain an owner
+decision before substituting. The owner may instead move execution to a host running the required
+client, which keeps the original routes intact. Cross-client CLI dispatch of the already-resolved
+route is not a model substitution.
 
 ### Equivalence is drawn on tier, effort and class
 

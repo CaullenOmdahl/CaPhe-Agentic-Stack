@@ -56,6 +56,12 @@ model other than the registered one. Built-in agents without frontmatter remain 
 class tolerates inherited effort. The light tier carries the lineup's earliest retirement date and
 needs a recorded successor before it.
 
+The private host overlay accepts a concrete Claude model ID only when the operator supplies an ID
+observed from an authenticated invocation. The resolver rejects missing or mismatched IDs. The
+baseline probe records this observation but does not send a model request or claim to discover the
+provider's alias mapping itself. Cross-client execution of an already-resolved route remains
+available through its authenticated client CLI; it does not count as model substitution.
+
 Rollback is removing the four entries and the adapter file; no policy route is activated by this ADR.
 
 ## Alternatives considered

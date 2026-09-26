@@ -10,7 +10,7 @@ ROOT = Path(__file__).parents[1]
 REGISTRY = json.loads((ROOT / "registry/models.json").read_text())
 
 def overlay():
-    return {"schema_version": 1, "models": {key: {"available": True, "efforts": value["efforts"], "service_tiers": ["standard"], "client_version": "test", "probed_at": "2026-09-19T00:00:00Z", "isolation": True} for key, value in REGISTRY["models"].items()}}
+    return {"schema_version": 1, "models": {key: {"available": True, "efforts": value["efforts"], "service_tiers": ["standard"], "client_version": "test", "probed_at": "2026-09-19T00:00:00Z", "isolation": True, **({"resolved_model": value["vendor_model"]} if value["client"] == "claude" else {})} for key, value in REGISTRY["models"].items()}}
 def contract(task_class="mechanical", lane="mechanically-proven"):
     return {"task_class": task_class, "lane": lane, "source": {"snapshot_digest": "a" * 64}}
 def policy():
@@ -36,3 +36,18 @@ class ModelRoutingTests(unittest.TestCase):
     def test_lane_ceiling_rejects_misclassification(self):
         registry=copy.deepcopy(REGISTRY); registry["models"]["codex-terra"]["status"]="pilot"
         with self.assertRaises(RoutingError): resolve_v2(contract("mechanical", "scoped-behavior"), registry, overlay(), policy())
+
+    def test_claude_alias_requires_matching_observed_model_identity(self):
+        registry=copy.deepcopy(REGISTRY)
+        for key in ("claude-opus", "codex-terra"):
+            registry["models"][key]["status"]="pilot"
+        route={"model":"claude-opus","config":"claude","effort":"high","service_tier":"standard"}
+        routing_policy=policy(); routing_policy["incumbent"]=route
+        observed=overlay(); observed["models"]["claude-opus"].pop("resolved_model")
+        with self.assertRaisesRegex(RoutingError, "alias resolution"):
+            resolve_v2(contract(), registry, observed, routing_policy)
+        observed["models"]["claude-opus"]["resolved_model"]="different-model"
+        with self.assertRaisesRegex(RoutingError, "alias resolution"):
+            resolve_v2(contract(), registry, observed, routing_policy)
+        observed["models"]["claude-opus"]["resolved_model"]=registry["models"]["claude-opus"]["vendor_model"]
+        self.assertEqual(resolve_v2(contract(), registry, observed, routing_policy)["vendor_model"], "claude-opus-5-5")

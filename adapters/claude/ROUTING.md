@@ -25,9 +25,13 @@ is chosen per task, not inherited from the file.
 
 Registry key to alias: `claude-fable` → `fable`, `claude-opus` → `opus`, `claude-sonnet` → `sonnet`,
 `claude-haiku` → `haiku`. Alias resolution to a concrete model ID differs by provider (first-party
-API, Bedrock, Vertex, Foundry). The private capability overlay for a host records which concrete ID
-each alias resolved to on that host and when it was probed; a registry `vendor_model` that differs
-from the observed resolution makes the route `unsupported` on that host.
+API, Bedrock, Vertex, Foundry). Before marking a Claude route available for dispatch, observe the
+concrete model ID from an authenticated invocation using that alias, then pass that observation to
+`tools/stack_probe_models.py` with `--resolved-model claude-opus=<observed-id>` (once per Claude
+registry key). The private overlay records the supplied observation alongside its probe timestamp.
+The probe does not itself send a model request or infer an ID from the alias. A missing observation,
+or one that differs from the registry `vendor_model`, makes that Claude route unsupported on the
+host; refresh it after changing the client or provider configuration.
 
 ## Effort is the definition
 
