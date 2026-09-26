@@ -5,6 +5,10 @@ description: Safely resolve and dispatch bounded remote-model work using the CaP
 
 # Orchestrate
 
+This skill governs registry-based remote dispatch. Native harness workers follow the task-level model
+and effort selection in Strict Mode; they do not need a remote pilot or benchmark promotion merely to
+avoid inheriting the coordinator's model. Explicit owner route constraints still apply in either path.
+
 Use only a validated v2 route, a private capability overlay from a fresh probe, and an owner policy.
 Do not route `candidate`, deprecated, retired, unprobed, or isolation-unverified models. Classify first,
 enforce the task class lane ceiling, and give each worker a fresh bounded contract. At most 64 workers or the active agent environment limit, whichever is lower;

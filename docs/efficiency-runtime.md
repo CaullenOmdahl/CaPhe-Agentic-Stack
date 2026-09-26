@@ -13,7 +13,7 @@ work per total cost, including parent inspection and repairs. A lower token pric
 | Wait for work | `tools/stack_watch.py` | Read-only JSON query, total deadline, status changes and actionable failures |
 | Continue a task | `tools/stack_state.py` | Owner-only, repository-scoped state outside Git; original authorization preserved |
 | Prepare generated files | `tools/stack_prepare.py` | Recipe, input, toolchain, environment and output freshness; failures never count as fresh |
-| Choose model and effort | `tools/stack_route.py` | Closed delegation contract, live capabilities, explicit owner policy, incumbent fallback |
+| Resolve evaluated owner routes | `tools/stack_route.py` | Closed delegation contract, live capabilities, explicit owner policy, incumbent fallback within that policy |
 | Compare workflow cost | `tools/benchmark_workflow.py` | Final request identities, retries/children, paired task acceptance, explicit rate cards |
 | Record acceptance | `strict-mode/bin/strict_evidence.py` | Immutable source-bound v2 snapshots; six separate acceptance phases |
 | Run verification | `strict-mode/bin/strict_gate.py` | Actual working-state coverage, ordered preparation, failure propagation, uncached completion |
@@ -151,23 +151,55 @@ plan/configuration failures are not relaxed. Existing explicit user disable rema
 
 ## Model, effort, and delegation
 
-Keep Astra as coordinator for ambiguous contracts, architecture, integration, and escalation. Evaluate
-cheaper models for narrow extraction and independently testable scoped changes. Test effort separately:
-Terra low, medium, and high are different configurations. Do not assume lower effort preserves quality,
-or that greater effort always improves it. Probe the exact model, effort, client, and service tier on
-each machine, then record observed availability privately.
+Choose a native worker's model and effort from its own bounded task before spawning. The coordinator's
+route is not a default for every child, and missing benchmark evidence does not require all workers to
+use a frontier model. Ordinary task-level selection is authorized without a separate approval unless
+the user or owner has explicitly pinned a route. Keep the coordinator's current route and ownership of
+ambiguous acceptance, architecture, integration, and escalation.
 
-Pass `stack_route.py` a JSON object containing `contract`, `capabilities`, and `policy` on stdin. The
+| Worker task | Starting model tier | Starting effort |
+| --- | --- | --- |
+| Routine copy, extraction, formatting, narrow source lookup | Lightweight | Low |
+| Settled implementation, routine error mapping, focused regression tests | Workhorse | Medium |
+| Ambiguous requirements, difficult debugging, architecture, high-risk reasoning | Frontier | High |
+| Canonical independent PR review | Separately approved reviewer | Its approved effort |
+
+These are task-selection defaults, not claims of benchmark superiority. Use the active harness's
+supported model identifiers and efforts, not a stale model catalog. If the starting effort is unsupported,
+choose the lowest supported adequate effort. Record model, effort, and a brief task-based reason in the
+worker contract. Escalate when scope or risk warrants it; a task label such as "copy" cannot downgrade
+security-sensitive or domain-critical behavior. Keep explicit user and owner route constraints binding.
+Do not restart completed workers simply to change their model.
+
+Inspect the active spawn tool's schema before dispatch. In harnesses that expose `spawn_agent.model`
+and `spawn_agent.reasoning_effort`, pass both explicitly with `fork_turns="none"` or a bounded fork;
+put the contract and relevant source pointers in the message. A model named only in the message does
+not select it. Some harnesses expose no model/effort overrides: use an already authorized supported
+selection mechanism, or retain the task with the coordinator and report that routing is unavailable.
+Do not spawn an inherited frontier worker and describe it as a lightweight/workhorse selection. Do not
+activate an external provider or bypass a remote-dispatch gate to work around a missing native control.
+
+A full-history fork inherits the parent route and therefore cannot implement a cheaper worker choice.
+When the preferred route is
+unavailable, choose the next suitable supported route and state why; do not silently make that fallback
+the default for unrelated tasks. A successful native invocation verifies availability for that invocation,
+not general quality or savings. External clients still require a successful authenticated probe of the
+exact model, effort, client, and service tier, with availability recorded privately.
+
+Evaluated routing policies are a separate path. When a task is governed by such an owner policy, pass
+`stack_route.py` a JSON object containing `contract`, `capabilities`, and `policy` on stdin. The
 [delegation schema](../schemas/delegation-contract-v1.json) declares subject source, acceptance, allowed
 writes/exclusions, required checks, output limits, repair budget, parent identity, and children. The
 policy contains an explicit incumbent and task-class candidate routes. Missing promotion retains a
 capability-validated incumbent; unsupported incumbents fail instead of silently selecting another model.
 Owner approval metadata binds the exact route digest and evaluation references; the caller must supply
-trusted policy. The JSON is a declaration, not cryptographic proof of approval.
+trusted policy. The JSON is a declaration, not cryptographic proof of approval. This resolver's promotion
+gate does not govern unconstrained native task-level selection. Registry-based remote dispatch remains
+subject to its separate owner-approved pilot, capability overlay, and source-isolation requirements.
 
 Use at most 64 ordinary workers or the active agent environment limit, whichever is lower, with no
 recursive delegation and disjoint write scopes. Account for the coordinator and occupied slots when the
-host limit includes them. Pass observed remaining capacity as `capabilities.available_worker_slots`,
+host limit includes them. When using the resolver, pass observed remaining capacity as `capabilities.available_worker_slots`,
 set `max_workers` within that capacity, and refresh capacity before each spawn. The validator does not
 reserve slots globally; omission of the optional capacity field does not override known host limits. A fresh context
 contains the contract and relevant evidence, not full conversation history. Dispatch the resolved model
@@ -253,6 +285,19 @@ hook target, including forwarded hooks, without executing that chain. These loca
 they are not signed attestation. Older records without forwarded-target identities require reconciliation
 through the original hook directory before doctor can verify them.
 Global installation and project activation are distinct results.
+
+Existing projects can retain an older `.agent/OWNERS.md` even after a runtime update. The doctor
+reports `legacy_owner_model_gate` when it recognizes the old blanket model-choice gate. On explicit
+project refresh, `strict-init` updates only byte-identical known stock templates, replacing that gate
+and adding the native-worker exception while preserving existing review wording and file permissions.
+Customized files are never rewritten: a recognized conflicting gate stops refresh before any writes
+and asks for reconciliation with the approved delegation rules. Use existing task authorization to
+correct inherited generic wording where it applies; retain named approvers, custom gates, and pinned
+owner/reviewer routes. If authorization to change a deliberate owner policy is absent, obtain it.
+An explicit native-worker exception leaves the customized file intact. A clean diagnostic identifies
+known stale text only; agents must still read and obey the actual project owner policy.
+The doctor's `project.managed` field describes hook and instruction activation. Overall health is
+determined by its exit status and `unresolved` list; missing, blank, or unreadable owner policies fail it.
 
 Git resolves [relative hook paths](https://git-scm.com/docs/git-config#Documentation/git-config.txt-corehooksPath)
 from the hook's execution directory; [receive hooks run from the Git directory](https://git-scm.com/docs/githooks#_description).

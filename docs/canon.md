@@ -78,9 +78,19 @@ CI, or an uncached full local run when CI is absent or incomplete.
 Collect bounded, source-linked context once per decision; refresh on source changes. Keep private task
 continuation and existing scoped authorization outside Git. Delegate independent bounded work with an
 explicit model, effort, acceptance contract, and one repair attempt; preserve coordinator ownership and
-the approved independent review route. Use deterministic preparation and status queries for routine work.
-Promote cheaper routes only from paired accepted-task evidence that includes parent, retry, and child
-cost. Follow the installed Strict Mode methodology for runtime commands and evidence formats.
+the approved independent review route. Choose each native worker's model and effort for its bounded task;
+do not inherit the coordinator's frontier route merely because it is the incumbent. Routine copy and
+extraction start lightweight, settled implementation starts on a workhorse, and ambiguous or high-risk
+reasoning can use a frontier model. Follow explicit user or owner route constraints and live availability.
+Inspect the active spawn schema for model/effort controls; naming a model in a prompt does not select it.
+If controls are absent, use an already authorized supported mechanism or keep the task with the
+coordinator and report the limitation. Do not claim inherited workers used a different route or bypass
+remote-dispatch gates.
+Routine task-level selection is authorized without a separate benchmark or approval; changing a pinned
+owner policy or canonical reviewer route is not. Use deterministic preparation and status queries for
+routine work. Promoting an evaluated routing policy or claiming measured savings still requires paired
+accepted-task evidence that includes parent, retry, and child cost. Follow the installed Strict Mode
+methodology for runtime commands and evidence formats.
 
 ## Review Rule
 

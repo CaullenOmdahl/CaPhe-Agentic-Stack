@@ -8,7 +8,9 @@ Mandatory explicit approval (record approver + date in the ADR):
 - Auth / security / secrets / key custody
 - Releases, update/rollback, deploy order
 - Data/schema migrations; event-schema or wire-format changes
-- The "model"/architecture or language choice (ADR phase 2)
+- Architecture, language, or model-policy choices (ADR phase 2), including changes to pinned owner or
+  reviewer routes. Routine native worker model/effort selection under the approved delegation rules is
+  already authorized and does not require a new per-worker approval.
 - Any claim of production / hardware / external readiness
 
 **Approver(s):** Caullen Omdahl

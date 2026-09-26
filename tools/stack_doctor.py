@@ -82,15 +82,35 @@ def _instructions(repo, runtime):
     return {"verified": all(item["matches"] for item in comparisons.values()), "files": comparisons}
 
 
+def _initializer():
+    # Load our bundled validator, never code from a target repository.
+    path = Path(__file__).parents[1] / "strict-mode/bin/strict_init.py"
+    spec = importlib.util.spec_from_file_location("caphe_activation_doctor", path)
+    validator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(validator)
+    return validator
+
+
+def _owners(repo):
+    path = repo / ".agent/OWNERS.md"
+    try:
+        if not path.exists() and not path.is_symlink():
+            return {"status": "missing", "sha256": None}
+        validator = _initializer()
+        validator.safe(path)
+        content = path.read_bytes()
+        if not content.strip():
+            return {"status": "empty", "sha256": hashlib.sha256(content).hexdigest()}
+        return {"status": validator.owner_route_state(content), "sha256": hashlib.sha256(content).hexdigest()}
+    except (OSError, ValueError, RuntimeError):
+        return {"status": "unreadable", "sha256": None}
+
+
 def _chain_status(repo, hookdir, runtime):
     if hookdir is None:
         return {"verified": False, "reason": "effective hook directory is missing"}
     try:
-        # Use the doctor's bundled validator, never execute a target chain or metadata.
-        path = Path(__file__).parents[1] / "strict-mode/bin/strict_init.py"
-        spec = importlib.util.spec_from_file_location("caphe_activation_doctor", path)
-        validator = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(validator)
+        validator = _initializer()
         record = validator.read_activation(repo, hookdir, canon=runtime / "strict-mode")
         return {"verified": True, "chain_sha256": record["chain_sha256"], "original_hook_present": record["previous_hook"] is not None,
                 "forwarded_hook_count": len(record.get("forwarded_hooks", {}))}
@@ -143,14 +163,25 @@ def inspect(repo, *, runtime, git_config=None):
     instructions = _instructions(repo, runtime)
     if not instructions["verified"]:
         unresolved.append("managed_instructions_mismatch")
+    owners = _owners(repo)
+    if owners["status"] in {"legacy_generated", "legacy_conflict"}:
+        unresolved.append("legacy_owner_model_gate")
+    elif owners["status"] == "missing":
+        unresolved.append("owner_policy_missing")
+    elif owners["status"] == "empty":
+        unresolved.append("owner_policy_empty")
+    elif owners["status"] == "unreadable":
+        unresolved.append("owner_policy_unreadable")
     digest = tree_digest(runtime) if runtime.is_dir() else None
     if runtime.is_dir() and digest is None:
         unresolved.append("runtime_inventory_invalid")
     result = {
         "runtime": {"path": str(runtime), "version": version, "source_digest": digest},
         "hooks": {"effective_path": str(hookdir) if hookdir else None, "configured": hook_path is not None, "verified": verified, "chain": chain, "files": comparisons, "hook_digest": comparisons["pre-commit"]["actual"], "gate_digest": comparisons["strict-green-gate.sh"]["actual"]},
+        # Managed describes hook/instruction activation; unresolved determines overall health.
         "project": {"path": str(repo), "managed": bool(top and marked and marker_version == "3" and verified and instructions["verified"]), "marker_present": marked, "managed_version": marker_version},
         "instructions": instructions,
+        "owners": owners,
         "duplicate_skills": find_duplicate_skills([runtime / "skills", repo / ".codex/skills", repo / ".claude/skills"]),
         "unresolved": unresolved,
     }
