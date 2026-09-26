@@ -6,7 +6,8 @@ Record project-specific approvers. Explicit human acceptance is required for:
 - auth, security, secrets, or key custody;
 - releases, update/rollback, or deploy order;
 - data/schema migrations and wire formats;
-- architecture, model, language, or platform decisions;
+- architecture, model-policy, language, or platform decisions, including changes to pinned owner or
+  reviewer routes;
 - production, hardware, financial, legal, payroll, or external-readiness claims;
 - irreversible or outward-facing actions.
 
@@ -16,3 +17,6 @@ Do not require both routes; preserve actual repository branch protection require
 Nothing self-merges past a named gate.
 
 **Approver(s):** <name>
+
+Routine native worker model/effort selection under the approved delegation rules is already authorized
+and does not require a new per-worker approval. Explicit owner route constraints still apply.
