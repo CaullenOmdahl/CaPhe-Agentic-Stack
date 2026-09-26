@@ -6,7 +6,19 @@ from pathlib import Path
 import unittest
 
 ROOT=Path(__file__).parents[1]
+sys.path.insert(0,str(ROOT))
+from tools.stack_dispatch import argv_for
+
 class DispatchTests(unittest.TestCase):
+    def test_claude_cli_route_passes_declared_effort(self):
+        route={"client":"claude","vendor_model":"claude-opus-5-5","effort":"high"}
+        args=argv_for(route,"prompt")
+        self.assertEqual(args[args.index("--effort")+1],"high")
+
+    def test_claude_cli_route_omits_effort_flag_for_none(self):
+        route={"client":"claude","vendor_model":"claude-haiku-4-5-20251001","effort":"none"}
+        self.assertNotIn("--effort",argv_for(route,"prompt"))
+
     def test_dry_run_emits_valid_event_without_contacting_client(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory); digest="a"*64
