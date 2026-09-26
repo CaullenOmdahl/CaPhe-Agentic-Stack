@@ -1,0 +1,98 @@
+{
+  "artifact": {
+    "reference": ".caphe-runtime.json",
+    "sha256": "fd59bf4cc01eb9a3f7e21f2ab8264e7a55ff4df7367e7abb6d6b8071448d5e61"
+  },
+  "change_id": "native-worker-routing",
+  "decision": "ADR-0006",
+  "evidence": [
+    {
+      "kind": "file",
+      "reference": "docs/adr/ADR-0006-native-worker-model-selection.md"
+    },
+    {
+      "kind": "url",
+      "reference": "https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/pull/15"
+    },
+    {
+      "kind": "url",
+      "reference": "https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/actions/runs/36256328214"
+    },
+    {
+      "kind": "check",
+      "reference": "Integrated clean-checkout complete uncached matrix passed with stable source"
+    },
+    {
+      "kind": "check",
+      "reference": "Integrated branch Linux and macOS CI passed"
+    },
+    {
+      "kind": "check",
+      "reference": "Task-level selection and absent-controls fallback inspected in final instructions"
+    },
+    {
+      "kind": "check",
+      "reference": "Explicit Sol medium and Luna low native requests completed with bounded results"
+    },
+    {
+      "kind": "check",
+      "reference": "Global canon and four skill copies verified against the local instruction plan"
+    },
+    {
+      "kind": "check",
+      "reference": "Actual installed four-file overlay manifest hash verified directly"
+    },
+    {
+      "kind": "check",
+      "reference": "PR r4112009018 computed a different full-runtime artifact than the installed overlay"
+    },
+    {
+      "kind": "check",
+      "reference": "PR r4112029106 addressed by binding this snapshot to the integrated real branch commit"
+    }
+  ],
+  "id": "native-worker-routing-v4",
+  "lane": "full-risk",
+  "schema_version": 2,
+  "source": {
+    "repository": "CaullenOmdahl/CaPhe-Agentic-Stack",
+    "revision": "fea830b5ff55f97317bf9f1d8258b194a6d202f9",
+    "snapshot_digest": "b185f58753b71e1203626ca389cae6ece7982a3fe9e0fc65860a0b24fbba5393"
+  },
+  "states": {
+    "external_acceptance": {
+      "reason": "No product or hardware behavior is changed.",
+      "scope": "source",
+      "status": "not_applicable"
+    },
+    "implementation": {
+      "reason": "Task-level selection and missing-controls fallback are present in binding canon and runtime guidance.",
+      "scope": "source",
+      "status": "passed"
+    },
+    "merge": {
+      "reason": "No merge authorization. Pull request remains open.",
+      "scope": "source",
+      "status": "pending"
+    },
+    "release": {
+      "reason": "Four native-routing instruction updates are installed over the existing runtime. The actual installed manifest and global canon plus four skill copies were verified. Other accepted main changes were integrated into the PR only. No full-runtime or remote deployment.",
+      "scope": "artifact",
+      "status": "passed"
+    },
+    "review": {
+      "reason": "Remote PR review covered the integrated instructions. The remaining request for integrated source binding is addressed by this generated snapshot. Earlier artifact feedback computed a different full-install manifest; the recorded installed-overlay hash was re-read and verified.",
+      "scope": "source",
+      "status": "passed"
+    },
+    "validation": {
+      "reason": "Full uncached completion passed in a clean detached checkout of the integrated branch commit with stable before-and-after identity. Linux and macOS CI passed. Final instructions retain task selection and the accepted single-review workflow.",
+      "scope": "source",
+      "status": "passed"
+    }
+  },
+  "summary": "Verified integrated instruction source after incorporating the accepted review-workflow update from main. The named real branch commit was checked out cleanly and passed the full uncached matrix. Later changes are generated evidence only. Activation remains the four-file instruction overlay on the existing 43-file runtime; artifact.sha256 identifies its actual installed manifest, not a full installation derived from this repository tree. No executable runtime upgrade or remote rollout is claimed.",
+  "supersedes": [
+    "native-worker-routing-v3"
+  ]
+}
