@@ -14,7 +14,7 @@ follows.
 | Route field    | Lever                                                    | Set per dispatch? |
 | -------------- | -------------------------------------------------------- | ----------------- |
 | `model`        | Agent tool `model` parameter: `fable`, `opus`, `sonnet`, `haiku`, or a full model ID | yes |
-| `effort`       | `effort:` in the dispatched definition's frontmatter: `low`, `medium`, `high`, `xhigh`, `max` | **no** — bound to the definition |
+| `effort`       | Native Agent tool: `effort:` in the definition frontmatter. Remote CLI: `--effort` flag. | Native: **no**, bound to definition. CLI: yes. |
 | `service_tier` | none; fast mode is a session-level toggle, not a dispatch parameter | no — always `standard` |
 | domain         | Agent tool `subagent_type`: which definition runs        | yes |
 | isolation      | Agent tool `isolation: worktree`                         | yes |
@@ -35,8 +35,8 @@ host; refresh it after changing the client or provider configuration.
 
 ## Effort is the definition
 
-Because effort cannot be set per dispatch, the definition is the effort knob. The consequences are
-mechanical:
+For native Agent tool dispatch, effort cannot be set per call, so the definition is the effort knob.
+The consequences are mechanical:
 
 - Every definition the dispatcher may route to declares `effort:`. A definition without it runs at an
   inherited default, which the evidence must record as `inherited-default`, never as the route's
@@ -56,9 +56,12 @@ mechanical:
 ## Service tier is always standard
 
 Fast mode exists in Claude Code but is toggled for the whole session and inherited by every subagent
-it spawns. It is not a per-route lever and a route must not depend on it. Every Claude Code route
-declares `service_tier: standard`, and the capability overlay lists `service_tiers: ["standard"]`
-for every Claude model. Priority tier is not exposed to Claude Code dispatch at all.
+it spawns. It is not a per-route lever and a route must not depend on it. Before native Agent tool
+dispatch, verify that fast mode is off in the coordinating session. If it is on or its state cannot
+be verified, Claude routes declaring `service_tier: standard` are unavailable for that session.
+Every Claude Code route declares `service_tier: standard`, and the capability overlay lists
+`service_tiers: ["standard"]` for every Claude model. Priority tier is not exposed to Claude Code
+dispatch at all.
 
 ## What a valid dispatch looks like
 
@@ -66,7 +69,8 @@ For a route `{model: claude-opus, effort: high, service_tier: standard}` serving
 `difficult-implementation`:
 
 1. Select a definition whose frontmatter declares `effort: high` and whose role fits the task.
-2. Call the Agent tool with `subagent_type` = that definition and `model: opus`.
+2. Verify fast mode is off, then call the Agent tool with `subagent_type` = that definition and
+   `model: opus`.
 3. Record in the task evidence: the registry key, the alias passed, the definition name, the effort
    the definition declares, `service_tier: standard`, and the concrete model ID the overlay says the
    alias resolved to on this host.
@@ -74,6 +78,8 @@ For a route `{model: claude-opus, effort: high, service_tier: standard}` serving
 If no definition at the required effort exists for the domain, the route is unrealisable on this
 host until one is added. The dispatcher does not substitute a nearby effort silently; an
 over-provisioned effort may be used only when recorded as such, and an under-provisioned one never.
+The remote `claude` CLI dispatcher sets both `--model` and `--effort`; if the installed client does
+not support those values, execution fails and the route is unavailable.
 
 ## What this file does not do
 

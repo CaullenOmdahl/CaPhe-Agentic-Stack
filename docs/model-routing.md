@@ -23,6 +23,12 @@ authenticated and its required isolation is verified. Do not call a route undisp
 because the coordinating session uses another client. If neither supported path is available, that
 is an availability problem, not a licence to pick substitute models.
 
+For Claude, the remote CLI path must pass the resolved model and declared effort to `claude`. The
+native Agent tool path binds effort to the selected definition and inherits session-level fast mode;
+because Claude routes here declare `service_tier: standard`, verify fast mode is off before native
+dispatch. If the client cannot realize either field, the route is unavailable rather than dispatched
+with a different value recorded as the requested one.
+
 Substitution is never silent. If a named route cannot be dispatched through either supported path,
 the session must hold, state which named routes are undispatchable and why, and obtain an owner
 decision before substituting. The owner may instead move execution to a host running the required
