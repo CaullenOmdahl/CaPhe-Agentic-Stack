@@ -12,6 +12,7 @@
 | native-worker-routing-v1 | ADR-0006 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: pending; review: pending; validation: passed | fb4bd6ecd481/f9f713265194 superseded by native-worker-routing-v2 |
 | native-worker-routing-v2 | ADR-0006 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: passed; review: passed; validation: passed | 10679e381faa/113260333a56 superseded by native-worker-routing-v3 |
 | native-worker-routing-v3 | ADR-0006 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: passed; review: passed; validation: passed | 10679e381faa/9ef7e26667a2 superseded by native-worker-routing-v4 |
-| native-worker-routing-v4 | ADR-0006 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: passed; review: passed; validation: passed | fea830b5ff55/b185f58753b7 |
+| native-worker-routing-v4 | ADR-0006 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: passed; review: passed; validation: passed | fea830b5ff55/b185f58753b7 superseded by native-worker-routing-v5 |
+| native-worker-routing-v5 | ADR-0006 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: passed; review: passed; validation: passed | db4607f0e45f/82ec7f1016b0 |
 | review-tool-capability-parity | ADR-0003 | unbound | unknown acceptance | legacy; provenance not promoted |
 | strict-memory-efficiency-v2 | legacy | unbound | unknown acceptance | legacy; provenance not promoted |
