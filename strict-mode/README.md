@@ -13,13 +13,13 @@ strict-mode/bin/strict_evidence.py evidence.json --root .
 strict-mode/bin/strict-confer.sh codex --adversarial --save design-v1 "Review the ADR"
 ```
 
-The affected gate optimizes feedback. The completion gate and independent PR review remain authoritative.
+The affected gate optimizes feedback. The completion gate and independent implementation review remain authoritative.
 Default manifests assign Python tests to their nearest declared project, run declared nested projects
 independently without ancestor pytest duplication, select pytest from common project/dependency formats,
 and also discover Dart, Node, Cargo, and Go roots.
 
 `strict-confer` is for design/ADR review or an explicitly recorded fallback when PR review is genuinely
-unavailable; it is not normal implementation-review evidence. Its local peer set is Claude Code, agy
+unavailable; a successful independent review of the actual implementation diff satisfies the fallback gate. Its local peer set is Claude Code, agy
 (Gemini-family), and Codex. A direct Gemini CLI install is not automatically equivalent to agy. The
 wrapper resolves and records review-grade models from the owner-only per-machine
 `~/.config/caphe/review-models.conf`. Optional environment overrides are valid only after that exact client
