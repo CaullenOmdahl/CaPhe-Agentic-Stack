@@ -26,6 +26,19 @@ LEGACY_WRAPPER_HASHES = frozenset({
     # v2 strict-init.sh copied this exact canonical bin/pre-commit at 4e9c057.
     "13590f12c84d51af7d3b461e1c3dc5cb441ed8aab3d600786fbc62d681cc38bd",
 })
+# Only pristine historical templates may be migrated without interpreting owner policy.
+LEGACY_OWNERS_HASHES = frozenset({
+    "02e4cd348ca81693fe05d0406ffd59751bd445f8fd4eb0536e337470697fdf66",
+    "0f21d1ab2f3c3a7256cc7c4b2508f04e3060f21ab56c0086d5ab7004f5339260",
+})
+LEGACY_MODEL_GATES = (
+    b"- architecture, model, language, or platform decisions;",
+    b'- The "model"/architecture or language choice (ADR phase 2)',
+)
+NATIVE_WORKER_EXCEPTION = (
+    b"Routine native worker model/effort selection under the approved delegation rules is already authorized\n"
+    b"and does not require a new per-worker approval. Explicit owner route constraints still apply.\n"
+)
 
 
 class InitError(RuntimeError):
@@ -74,6 +87,29 @@ def safe(path):
 
 def _sha(content):
     return hashlib.sha256(content).hexdigest()
+
+
+def owner_route_state(content):
+    if _sha(content) in LEGACY_OWNERS_HASHES:
+        return "legacy_generated"
+    lines = {b" ".join(line.split()) for line in content.splitlines()}
+    exception = b" ".join(NATIVE_WORKER_EXCEPTION.split()) in b" ".join(content.split())
+    if any(line in lines for line in LEGACY_MODEL_GATES) and not exception:
+        return "legacy_conflict"
+    # This identifies known stale text; it does not certify arbitrary owner policy.
+    return "preserved"
+
+
+def refresh_owner_gate(content):
+    state = owner_route_state(content)
+    if state == "legacy_conflict":
+        raise InitError(".agent/OWNERS.md has a customized legacy model gate; reconcile it with the "
+                        "approved native-worker rules while preserving explicit owner/reviewer constraints")
+    if state == "legacy_generated":
+        return content.replace(LEGACY_MODEL_GATES[0],
+                               b"- architecture, model-policy, language, or platform decisions, including changes to pinned owner or\n"
+                               b"  reviewer routes;") + b"\n" + NATIVE_WORKER_EXCEPTION
+    return None
 
 
 def _original_hook(root, hookdir, invocation, name="pre-commit"):
@@ -304,6 +340,10 @@ def initialize(canon, root, *, fail_probe=False):
         safe(path)
         if not path.exists():
             writes[path] = text
+        elif name == ".agent/OWNERS.md":
+            refreshed = refresh_owner_gate(path.read_bytes())
+            if refreshed is not None:
+                writes[path] = refreshed
     manifest = root / ".agent/strict-gate.json"
     safe(manifest)
     if is_git and not manifest.exists():

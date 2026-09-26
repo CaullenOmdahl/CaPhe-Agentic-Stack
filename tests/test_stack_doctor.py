@@ -27,6 +27,30 @@ def install_empty_chain(repo, hooks, runtime):
 
 
 class DoctorContracts(unittest.TestCase):
+    def test_existing_legacy_owner_gate_is_reported_read_only_without_policy_content(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); repo = root / "repo"
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            doctor._installer().initialize_project(PATH.parents[1], repo, apply=True)
+            owners = repo / ".agent/OWNERS.md"
+            old = (PATH.parents[1] / "tests/fixtures/owners-legacy.md").read_bytes()
+            for content, expected in ((old, "legacy_generated"),
+                                      (old.replace(b"<name>", b"SECRET_OWNER_CANARY"), "legacy_conflict")):
+                owners.write_bytes(content)
+                result = doctor.inspect(repo, runtime=PATH.parents[1])
+                self.assertEqual(result["owners"]["status"], expected)
+                self.assertIn("legacy_owner_model_gate", result["unresolved"])
+                self.assertEqual(owners.read_bytes(), content)
+                self.assertNotIn("SECRET_OWNER_CANARY", str(result))
+            custom = b"Explicit owner constraint: keep the approved reviewer model.\n"
+            owners.write_bytes(custom)
+            self.assertEqual(doctor.inspect(repo, runtime=PATH.parents[1])["owners"]["status"], "preserved")
+            outside = root / "private"; outside.write_bytes(b"SECRET_OWNER_CANARY")
+            owners.unlink(); owners.symlink_to(outside)
+            result = doctor.inspect(repo, runtime=PATH.parents[1])
+            self.assertIn("owner_policy_unreadable", result["unresolved"])
+            self.assertNotIn("SECRET_OWNER_CANARY", str(result))
+
     def test_inspect_is_read_only_and_reports_missing_runtime(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()

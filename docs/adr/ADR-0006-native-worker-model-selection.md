@@ -52,6 +52,14 @@ their explicit constraints. Run the complete unchanged verification matrix, incl
 approval, fallback, and reviewer tests. Obtain PR review before installing the changed instruction
 payload, preserve local custom instructions, and verify installed bytes with a private rollback journal.
 
+Existing initialized consumers also need the corrected gate. Refresh only known pristine historical
+OWNERS templates with the minimal routing edit; retain unrelated review wording and permissions.
+Diagnose customized legacy conflicts before any writes instead of inferring permission to rewrite an
+owner policy. The doctor surfaces the same known conflicts read-only. Verify migration, idempotence,
+rollback, customized-file preservation, and the explicit native-worker exception on real temporary
+projects. These two helper changes are part of the local activation alongside the routing instructions;
+they do not authorize an unrelated runtime upgrade.
+
 ## Native invocation evidence
 
 The implementation session's collaboration tool exposed `model`, `reasoning_effort`, and `fork_turns`.

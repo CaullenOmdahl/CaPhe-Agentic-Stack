@@ -286,6 +286,17 @@ they are not signed attestation. Older records without forwarded-target identiti
 through the original hook directory before doctor can verify them.
 Global installation and project activation are distinct results.
 
+Existing projects can retain an older `.agent/OWNERS.md` even after a runtime update. The doctor
+reports `legacy_owner_model_gate` when it recognizes the old blanket model-choice gate. On explicit
+project refresh, `strict-init` updates only byte-identical known stock templates, replacing that gate
+and adding the native-worker exception while preserving existing review wording and file permissions.
+Customized files are never rewritten: a recognized conflicting gate stops refresh before any writes
+and asks for reconciliation with the approved delegation rules. Use existing task authorization to
+correct inherited generic wording where it applies; retain named approvers, custom gates, and pinned
+owner/reviewer routes. If authorization to change a deliberate owner policy is absent, obtain it.
+An explicit native-worker exception leaves the customized file intact. A clean diagnostic identifies
+known stale text only; agents must still read and obey the actual project owner policy.
+
 Git resolves [relative hook paths](https://git-scm.com/docs/git-config#Documentation/git-config.txt-corehooksPath)
 from the hook's execution directory; [receive hooks run from the Git directory](https://git-scm.com/docs/githooks#_description).
 The initializer rejects receive-sensitive hooks with relative invocations before changing files or

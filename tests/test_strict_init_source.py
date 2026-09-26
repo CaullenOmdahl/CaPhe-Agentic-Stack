@@ -20,6 +20,56 @@ def git(root, *args):
 
 
 class StrictInitSourceTests(unittest.TestCase):
+    def test_stock_owners_upgrade_preserves_review_rules_and_is_idempotent(self):
+        for fixture in ("owners-legacy.md", "owners-legacy-review.md"):
+            with self.subTest(fixture=fixture), tempfile.TemporaryDirectory() as tmp:
+                repo = self.repo(Path(tmp).resolve())
+                initializer.initialize(ROOT / "strict-mode", repo)
+                owners = repo / ".agent/OWNERS.md"
+                old = (ROOT / "tests/fixtures" / fixture).read_bytes()
+                owners.write_bytes(old); owners.chmod(0o640)
+                initializer.initialize(ROOT / "strict-mode", repo)
+                upgraded = owners.read_bytes()
+                self.assertNotIn(b"- architecture, model, language", upgraded)
+                self.assertIn(b"does not require a new per-worker approval", upgraded)
+                self.assertIn(b"pinned owner or\n  reviewer routes", upgraded)
+                self.assertIn(old[old.index(b"Lower-risk"):], upgraded)
+                self.assertEqual(owners.stat().st_mode & 0o777, 0o640)
+                initializer.initialize(ROOT / "strict-mode", repo)
+                self.assertEqual(owners.read_bytes(), upgraded)
+
+    def test_custom_legacy_owner_conflict_fails_before_any_writes(self):
+        legacy = (ROOT / "tests/fixtures/owners-legacy.md").read_bytes()
+        variants = (legacy.replace(b"<name>", b"Named owner"), legacy.replace(b"\n", b"\r\n"),
+                    legacy.replace(b"architecture, model,", b"architecture,  model,"),
+                    b'- The "model"/architecture or language choice (ADR phase 2)\n')
+        for old in variants:
+            with self.subTest(old=old), tempfile.TemporaryDirectory() as tmp:
+                repo = self.repo(Path(tmp).resolve())
+                (repo / ".agent").mkdir()
+                (repo / ".agent/OWNERS.md").write_bytes(old)
+                before = {str(p.relative_to(repo)): p.read_bytes() for p in repo.rglob("*") if p.is_file()}
+                with self.assertRaisesRegex(initializer.InitError, "OWNERS.*reconcil"):
+                    initializer.initialize(ROOT / "strict-mode", repo)
+                self.assertEqual({str(p.relative_to(repo)): p.read_bytes() for p in repo.rglob("*") if p.is_file()}, before)
+
+    def test_owner_migration_rolls_back_and_preserves_explicit_custom_routes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.repo(Path(tmp).resolve())
+            (repo / ".agent").mkdir(); owners = repo / ".agent/OWNERS.md"
+            old = (ROOT / "tests/fixtures/owners-legacy.md").read_bytes()
+            owners.write_bytes(old); owners.chmod(0o640)
+            with self.assertRaises(initializer.InitError):
+                initializer.initialize(ROOT / "strict-mode", repo, fail_probe=True)
+            self.assertEqual(owners.read_bytes(), old)
+            self.assertEqual(owners.stat().st_mode & 0o777, 0o640)
+            custom = old + (b"\nRoutine native worker model/effort selection under the approved delegation rules is already authorized\n"
+                            b"and does not require a new per-worker approval. Explicit owner route constraints still apply.\n"
+                            b"This project pins the canonical reviewer route.\n")
+            owners.write_bytes(custom)
+            initializer.initialize(ROOT / "strict-mode", repo)
+            self.assertEqual(owners.read_bytes(), custom)
+
     def test_initializer_regression_suite(self):
         script = ROOT / "strict-mode/test/strict-init-refresh-test.sh"
         result = subprocess.run(["bash", str(script)], cwd=ROOT, text=True, capture_output=True)
