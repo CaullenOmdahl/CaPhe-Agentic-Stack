@@ -112,6 +112,17 @@ def _lane_allowed(actual, ceiling):
     return LANES.index(actual) <= LANES.index(ceiling)
 
 
+def _route_usable(model, observed):
+    return (
+        model is not None
+        and observed is not None
+        and model["status"] in ("pilot", "active")
+        and observed["available"]
+        and observed["isolation"]
+        and (model["client"] != "claude" or observed.get("resolved_model") == model["vendor_model"])
+    )
+
+
 def resolve_v2(contract, registry, overlay, policy):
     validate_registry(registry); validate_overlay(overlay); validate_policy(policy)
     task_class, lane = contract.get("task_class"), contract.get("lane")
@@ -121,14 +132,12 @@ def resolve_v2(contract, registry, overlay, policy):
     candidate = policy["routes"].get(task_class)
     route = candidate["route"] if candidate and candidate["pilot_approved"] else policy["incumbent"]
     model = registry["models"].get(route["model"]); observed = overlay["models"].get(route["model"])
-    if model is None or observed is None or model["status"] not in ("pilot", "active") or not observed["available"] or not observed["isolation"]:
+    if not _route_usable(model, observed):
         if route == policy["incumbent"]: raise RoutingError("incumbent route unavailable or unsafe")
         route = policy["incumbent"]; model = registry["models"].get(route["model"]); observed = overlay["models"].get(route["model"])
-        if model is None or observed is None or model["status"] not in ("pilot", "active") or not observed["available"] or not observed["isolation"]: raise RoutingError("incumbent route unavailable or unsafe")
+        if not _route_usable(model, observed): raise RoutingError("incumbent route unavailable or unsafe")
     if route["effort"] not in observed["efforts"] or route["service_tier"] not in observed["service_tiers"]:
         raise RoutingError("route capability unavailable")
-    if model["client"] == "claude" and observed.get("resolved_model") != model["vendor_model"]:
-        raise RoutingError("Claude alias resolution is missing or differs from the registry model")
     return {**route, "schema_version": 2, "client": model["client"], "vendor_model": model["vendor_model"], "isolation_verified": True, "policy_basis": "pilot" if candidate and route == candidate["route"] else "incumbent"}
 
 

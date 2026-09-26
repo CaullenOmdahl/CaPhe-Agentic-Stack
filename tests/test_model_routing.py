@@ -42,12 +42,13 @@ class ModelRoutingTests(unittest.TestCase):
         for key in ("claude-opus", "codex-terra"):
             registry["models"][key]["status"]="pilot"
         route={"model":"claude-opus","config":"claude","effort":"high","service_tier":"standard"}
-        routing_policy=policy(); routing_policy["incumbent"]=route
+        routing_policy=policy(); routing_policy["routes"]["mechanical"]={"route":route,"pilot_approved":True}
         observed=overlay(); observed["models"]["claude-opus"].pop("resolved_model")
-        with self.assertRaisesRegex(RoutingError, "alias resolution"):
-            resolve_v2(contract(), registry, observed, routing_policy)
+        self.assertEqual(resolve_v2(contract(), registry, observed, routing_policy)["model"], "codex-terra")
         observed["models"]["claude-opus"]["resolved_model"]="different-model"
-        with self.assertRaisesRegex(RoutingError, "alias resolution"):
+        self.assertEqual(resolve_v2(contract(), registry, observed, routing_policy)["model"], "codex-terra")
+        routing_policy["incumbent"]=route
+        with self.assertRaisesRegex(RoutingError, "incumbent route unavailable"):
             resolve_v2(contract(), registry, observed, routing_policy)
         observed["models"]["claude-opus"]["resolved_model"]=registry["models"]["claude-opus"]["vendor_model"]
         self.assertEqual(resolve_v2(contract(), registry, observed, routing_policy)["vendor_model"], "claude-opus-5-5")
