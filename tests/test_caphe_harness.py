@@ -26,6 +26,15 @@ def sample_config(output_root):
     }
 
 
+def init_repo(path):
+    path = Path(path)
+    path.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "-C", str(path), "init", "-q"], check=True)
+    subprocess.run(["git", "-C", str(path), "-c", "user.name=test", "-c",
+                    "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "init"], check=True)
+    return path
+
+
 class HarnessConfigTests(unittest.TestCase):
     def test_allowed_write_paths_cannot_include_git_metadata(self):
         with self.assertRaisesRegex(harness.HarnessError, "not normalized"):
@@ -195,6 +204,15 @@ class HarnessConfigTests(unittest.TestCase):
                             "user.email=test@example.invalid", "commit", "-qm", "worker commit"], check=True)
             self.assertEqual(harness._worktree_changes(root, baseline), ["output.txt"])
 
+    def test_snapshot_manifest_allows_only_required_new_parent_directories(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            baseline = {}
+            (root / "reports").mkdir()
+            (root / "reports/output.md").write_text("declared")
+            self.assertEqual(harness._worktree_changes(root, baseline, ["reports/output.md"]),
+                             ["reports/output.md"])
+
     def test_tree_manifest_rejects_oversized_sparse_outputs_before_reading(self):
         with tempfile.TemporaryDirectory() as tmp:
             sparse = Path(tmp) / "sparse.out"
@@ -281,11 +299,12 @@ class HarnessConfigTests(unittest.TestCase):
     def test_batch_launches_only_enabled_routes_and_returns_categories(self):
         with tempfile.TemporaryDirectory() as tmp:
             config = sample_config(Path(tmp) / "runs")
+            repo = init_repo(Path(tmp) / "repo")
             tasks = []
             for index in range(3):
                 brief = Path(tmp) / f"brief-{index}.txt"
                 brief.write_text(f"brief {index}")
-                tasks.append({"category": "lookup-extraction", "repo": "/repo", "brief_file": str(brief)})
+                tasks.append({"category": "lookup-extraction", "repo": str(repo), "brief_file": str(brief)})
             with patch.object(harness, "run_worker", side_effect=lambda *a, **k: {"status": "planned"}) as launch:
                 result = harness.run_batch(config, tasks)
             self.assertEqual(launch.call_count, 3)
@@ -300,12 +319,13 @@ class HarnessConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             config = sample_config(Path(tmp) / "runs")
             config["routes"][0]["permissions"] = "worktree-write"
+            repo = init_repo(Path(tmp) / "repo")
             brief = Path(tmp) / "brief.md"
             brief.write_text("brief")
             tasks = [
-                {"category": "lookup-extraction", "repo": "/repo", "brief_file": str(brief),
+                {"category": "lookup-extraction", "repo": str(repo), "brief_file": str(brief),
                  "allow_write": ["result.md"]},
-                {"category": "lookup-extraction", "repo": "/repo", "brief_file": str(brief)},
+                {"category": "lookup-extraction", "repo": str(repo), "brief_file": str(brief)},
             ]
             with patch.object(harness, "run_worker") as launch:
                 with self.assertRaisesRegex(harness.HarnessError, "explicit allow_write"):
@@ -315,17 +335,36 @@ class HarnessConfigTests(unittest.TestCase):
     def test_batch_rejects_malformed_retry_id_before_dispatch(self):
         with tempfile.TemporaryDirectory() as tmp:
             config = sample_config(Path(tmp) / "runs")
+            repo = init_repo(Path(tmp) / "repo")
             brief = Path(tmp) / "brief.md"
             brief.write_text("brief")
             tasks = [
-                {"category": "lookup-extraction", "repo": "/repo", "brief_file": str(brief)},
-                {"category": "lookup-extraction", "repo": "/repo", "brief_file": str(brief),
+                {"category": "lookup-extraction", "repo": str(repo), "brief_file": str(brief)},
+                {"category": "lookup-extraction", "repo": str(repo), "brief_file": str(brief),
                  "retry_of": "bad id"},
             ]
             with patch.object(harness, "run_worker") as launch:
                 with self.assertRaisesRegex(harness.HarnessError, "retry_of"):
                     harness.run_batch(config, tasks, execute=True)
             launch.assert_not_called()
+
+    def test_batch_rejects_invalid_repository_before_dispatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = sample_config(Path(tmp) / "runs")
+            repo = init_repo(Path(tmp) / "repo")
+            non_git = Path(tmp) / "not-git"
+            non_git.mkdir()
+            brief = Path(tmp) / "brief.md"
+            brief.write_text("brief")
+            for invalid in (str(Path(tmp) / "missing"), str(non_git)):
+                tasks = [
+                    {"category": "lookup-extraction", "repo": str(repo), "brief_file": str(brief)},
+                    {"category": "lookup-extraction", "repo": invalid, "brief_file": str(brief)},
+                ]
+                with self.subTest(repo=invalid), patch.object(harness, "run_worker") as launch:
+                    with self.assertRaises(harness.HarnessError):
+                        harness.run_batch(config, tasks, execute=True)
+                    launch.assert_not_called()
 
 
 class HarnessEvidenceTests(unittest.TestCase):

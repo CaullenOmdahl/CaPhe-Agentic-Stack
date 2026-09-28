@@ -343,13 +343,22 @@ def _tree_manifest(root, *, max_bytes=512 * 1024 * 1024, max_entries=250_000, ti
     return manifest
 
 
-def _worktree_changes(root, baseline=None):
+def _worktree_changes(root, baseline=None, allowed_writes=()):
     root = Path(root).resolve()
     if baseline is not None:
         current = _tree_manifest(root)
         if current is None:
             return None
-        return sorted(path for path in set(baseline) | set(current) if baseline.get(path) != current.get(path))
+        changed = []
+        for path in set(baseline) | set(current):
+            if baseline.get(path) == current.get(path):
+                continue
+            entry = current.get(path)
+            required_parent = (baseline.get(path) is None and entry is not None and entry[0] == "directory"
+                               and any(target.startswith(path + "/") for target in allowed_writes))
+            if not required_parent:
+                changed.append(path)
+        return sorted(changed)
     try:
         proc = subprocess.run(["git", "-C", str(root), "diff", "--name-only", "--no-renames", "-z", "HEAD"],
                               capture_output=True, timeout=20, env=_child_env("codex"))
@@ -445,6 +454,24 @@ def _git_clean(repo):
         raise HarnessError("source repository state could not be verified")
     if result.stdout.strip():
         raise HarnessError("CLI workers require a clean source checkout")
+
+
+def _preflight_batch_repo(repo, *, require_clean):
+    path = Path(repo).expanduser()
+    if not path.is_dir():
+        raise HarnessError("batch repository path does not exist")
+    try:
+        top = subprocess.run(["git", "-C", str(path), "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, timeout=20, env=_child_env("codex"))
+        head = subprocess.run(["git", "-C", str(path), "rev-parse", "--verify", "HEAD"],
+                              capture_output=True, text=True, timeout=20, env=_child_env("codex"))
+    except (OSError, subprocess.SubprocessError) as error:
+        raise HarnessError("batch repository could not be preflighted") from error
+    if top.returncode or not top.stdout.strip() or head.returncode or not head.stdout.strip():
+        raise HarnessError("batch repository must be a Git checkout with a committed HEAD")
+    if require_clean:
+        _git_clean(path)
+    return str(path.resolve())
 
 
 def _json_records(text):
@@ -755,7 +782,7 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
             if work_root is None or work_root.returncode or Path(work_root.stdout.strip()).resolve() != workspace:
                 record["write_scope_verified"] = False
             else:
-                changed = _worktree_changes(work_root.stdout.strip(), baseline)
+                changed = _worktree_changes(work_root.stdout.strip(), baseline, allowed_writes)
                 record["worktree"] = work_root.stdout.strip()
                 record["changed_paths"] = changed
                 record["write_scope_verified"] = bool(changed is not None and _changes_allowed(changed, allowed_writes))
@@ -795,6 +822,7 @@ def run_batch(config, tasks, *, execute=False, parent_run_id=None):
             raise HarnessError("batch references a missing or disabled route")
         if not isinstance(task["repo"], str) or not isinstance(task["brief_file"], str):
             raise HarnessError("batch repo and brief_file must be paths")
+        repo = _preflight_batch_repo(task["repo"], require_clean=execute)
         writes = task.get("allow_write", [])
         if not isinstance(writes, list):
             raise HarnessError("batch allow_write must be a list")
@@ -810,7 +838,7 @@ def run_batch(config, tasks, *, execute=False, parent_run_id=None):
             raise HarnessError("batch brief exceeds the route context budget")
         brief = brief_path.read_text(encoding="utf-8")
         retry_of = _validate_run_reference(task.get("retry_of"), "retry_of")
-        prepared.append((route, task["repo"], brief, writes, retry_of))
+        prepared.append((route, repo, brief, writes, retry_of))
 
     outcomes = [None] * len(prepared)
     with ThreadPoolExecutor(max_workers=config["max_workers"], thread_name_prefix="caphe-worker") as pool:
