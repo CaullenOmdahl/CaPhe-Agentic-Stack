@@ -20,6 +20,20 @@ def git(root, *args):
 
 
 class StrictInitSourceTests(unittest.TestCase):
+    def test_generated_owner_upgrade_replaces_the_matching_legacy_gate(self):
+        prefix = b"# OWNERS\n\nGate:\n"
+        suffix = b"\n\n**Approver(s):** Owner\n"
+        replacement = (b"- architecture, model-policy, language, or platform decisions, including changes to pinned owner or\n"
+                      b"  reviewer routes;")
+        for gate in initializer.LEGACY_MODEL_GATES:
+            with self.subTest(gate=gate):
+                with mock.patch.object(initializer, "owner_route_state", return_value="legacy_generated"):
+                    upgraded = initializer.refresh_owner_gate(prefix + gate + suffix)
+                self.assertNotIn(gate, upgraded)
+                self.assertIn(replacement, upgraded)
+                self.assertIn(initializer.NATIVE_WORKER_EXCEPTION, upgraded)
+                self.assertIn(suffix, upgraded)
+
     def test_stock_owners_upgrade_preserves_review_rules_and_is_idempotent(self):
         for fixture in ("owners-legacy.md", "owners-legacy-review.md"):
             with self.subTest(fixture=fixture), tempfile.TemporaryDirectory() as tmp:

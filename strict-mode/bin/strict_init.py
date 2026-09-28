@@ -108,9 +108,12 @@ def refresh_owner_gate(content):
         raise InitError(".agent/OWNERS.md has a customized legacy model gate; reconcile it with the "
                         "approved native-worker rules while preserving explicit owner/reviewer constraints")
     if state == "legacy_generated":
-        return content.replace(LEGACY_MODEL_GATES[0],
-                               b"- architecture, model-policy, language, or platform decisions, including changes to pinned owner or\n"
-                               b"  reviewer routes;") + b"\n" + NATIVE_WORKER_EXCEPTION
+        for gate in LEGACY_MODEL_GATES:
+            if gate in content:
+                return content.replace(gate,
+                                       b"- architecture, model-policy, language, or platform decisions, including changes to pinned owner or\n"
+                                       b"  reviewer routes;") + b"\n" + NATIVE_WORKER_EXCEPTION
+        raise InitError("known legacy owner policy has no recognized migration gate")
     return None
 
 
