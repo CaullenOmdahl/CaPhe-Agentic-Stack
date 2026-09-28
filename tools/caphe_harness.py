@@ -125,6 +125,20 @@ def estimate_tokens(text):
     return max(1, (len(text.encode("utf-8")) + 2) // 3)
 
 
+def _extract_validated_tar(bundle, target, label):
+    members = bundle.getmembers()
+    for member in members:
+        name = PurePosixPath(member.name)
+        if (member.issym() or member.islnk() or member.isdev() or name.is_absolute()
+                or ".." in name.parts or member.mode & 0o7000
+                or not (member.isfile() or member.isdir())):
+            raise HarnessError(label + " archive contains unsafe entries")
+    kwargs = {"members": members}
+    if callable(getattr(tarfile.TarFile, "data_filter", None)):
+        kwargs["filter"] = "data"
+    bundle.extractall(target, **kwargs)
+
+
 def build_command(route, prompt_path, output_path, repo, config_profile="caphe-worker"):
     """Build explicit argv using a per-run permission profile, never a broad sandbox mode."""
     if route["client"] != "codex":
@@ -151,11 +165,7 @@ def _snapshot_repo(repo, target):
     target.mkdir(mode=0o700)
     try:
         with tarfile.open(fileobj=io.BytesIO(archive.stdout), mode="r:") as bundle:
-            members = bundle.getmembers()
-            if any(member.issym() or member.islnk() or member.isdev() or member.name.startswith("/")
-                   or ".." in Path(member.name).parts for member in members):
-                raise HarnessError("source snapshot contains unsafe archive entries")
-            bundle.extractall(target, members=members, filter="data")
+            _extract_validated_tar(bundle, target, "source snapshot")
     except (tarfile.TarError, OSError) as error:
         raise HarnessError("tracked source snapshot could not be safely unpacked") from error
     git_env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(Path.home()),
@@ -170,14 +180,18 @@ def _snapshot_repo(repo, target):
     return target
 
 
-def _write_codex_profile(home, route, allowed_writes=(), config_profile="caphe-worker"):
+def _write_codex_profile(home, route, allowed_writes=(), config_profile="caphe-worker", output_path=None):
     scoped = ['"." = "read"']
     if route["permissions"] == "worktree-write":
         scoped.extend(json.dumps(path) + ' = "write"' for path in allowed_writes)
     codex_home = Path(home).resolve()
     filesystem = ('{ ":minimal" = "read", ":workspace_roots" = { ' + ", ".join(scoped) + " }, "
                   + json.dumps(str(codex_home / "auth.json")) + ' = "deny", '
-                  + json.dumps(str(codex_home / "sessions" / "**")) + ' = "deny" }')
+                  + json.dumps(str(codex_home / "sessions" / "**")) + ' = "deny"')
+    if output_path is not None:
+        output_path = Path(output_path).expanduser().resolve(strict=False)
+        filesystem += ", " + json.dumps(str(output_path)) + ' = "write"'
+    filesystem += " }"
     profile = codex_home / (config_profile + ".config.toml")
     profile.write_text(
         'model_reasoning_effort = "' + route["effort"] + '"\n'
@@ -189,14 +203,14 @@ def _write_codex_profile(home, route, allowed_writes=(), config_profile="caphe-w
     return profile
 
 
-def _prepare_codex_profile(route, allowed_writes=(), config_profile="caphe-worker"):
+def _prepare_codex_profile(route, allowed_writes=(), config_profile="caphe-worker", output_path=None):
     home = Path(_child_env("codex")["CODEX_HOME"]).expanduser()
     if home.is_symlink() or not home.is_dir() or home.stat().st_uid != os.getuid():
         raise HarnessError("Codex home must be an existing directory owned by the current user")
     profile = home / (config_profile + ".config.toml")
     if profile.exists() or profile.is_symlink():
         raise HarnessError("temporary Codex profile name is already in use")
-    _write_codex_profile(home, route, allowed_writes, config_profile)
+    _write_codex_profile(home, route, allowed_writes, config_profile, output_path)
     return home, profile
 
 
@@ -216,6 +230,7 @@ def _codex_profile_parse_check(route):
             workspace.mkdir(mode=0o700)
             sandbox_tmp = home_root / "codex-tmp"
             sandbox_tmp.mkdir(mode=0o700)
+            output_path = home_root / "worker-result.txt"
             (workspace / "allowed.txt").write_text("before", encoding="utf-8")
             (workspace / "blocked.txt").write_text("before", encoding="utf-8")
             (Path(home) / "auth.json").write_text("CAPHE_SECRET_SENTINEL", encoding="utf-8")
@@ -224,7 +239,7 @@ def _codex_profile_parse_check(route):
             (sessions / "parent.jsonl").write_text("CAPHE_PARENT_SENTINEL", encoding="utf-8")
             profile_name = "caphe-doctor-check"
             allowed = ("allowed.txt",) if route["permissions"] == "worktree-write" else ()
-            _write_codex_profile(home, route, allowed, profile_name)
+            _write_codex_profile(home, route, allowed, profile_name, output_path)
             env = {**_child_env("codex"), "CODEX_HOME": home, "TMPDIR": str(sandbox_tmp)}
             parse = subprocess.run([executable, "--profile", profile_name, "debug", "prompt-input", "profile check"],
                                    env=env, capture_output=True, timeout=15)
@@ -245,6 +260,9 @@ def _codex_profile_parse_check(route):
                 allowed_write = sandbox("sh", "-c", "printf after > allowed.txt")
                 if allowed_write.returncode or (workspace / "allowed.txt").read_text() != "after":
                     return {"supported": False, "reason": "filesystem profile blocks a declared write"}
+            result_write = sandbox("sh", "-c", "printf after > " + shlex.quote(str(output_path)))
+            if result_write.returncode or output_path.read_text() != "after":
+                return {"supported": False, "reason": "filesystem profile blocks its designated result file"}
             return {"supported": True, "reason": None, "filesystem_enforced": True}
         except (OSError, subprocess.SubprocessError):
             return {"supported": False, "reason": "restricted filesystem profile could not be enforced"}
@@ -577,7 +595,7 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
         workspace = _snapshot_repo(repo, run_dir / "workspace")
         sandbox_tmp = run_dir / "codex-tmp"
         sandbox_tmp.mkdir(mode=0o700)
-        home, profile_path = _prepare_codex_profile(route, allowed_writes, config_profile)
+        home, profile_path = _prepare_codex_profile(route, allowed_writes, config_profile, output_path)
         argv = build_command(route, prompt_path, output_path, workspace, config_profile)
     except (HarnessError, OSError, subprocess.SubprocessError, ValueError) as error:
         if profile_path and profile_path.is_file() and not profile_path.is_symlink():
@@ -923,16 +941,27 @@ def _stage_release(tag, fingerprint, keyring, base):
     source.mkdir(mode=0o700)
     try:
         with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as bundle:
-            members = bundle.getmembers()
-            if any(member.issym() or member.islnk() or member.isdev() or member.name.startswith("/")
-                   or ".." in Path(member.name).parts for member in members):
-                raise HarnessError("release archive contains unsafe entries")
-            bundle.extractall(source, members=members, filter="data")
+            _extract_validated_tar(bundle, source, "release")
     except (tarfile.TarError, OSError) as error:
         raise HarnessError("release archive could not be safely unpacked") from error
     _git(["init", "--quiet", str(source)], cwd=base, env=env)
     _git(["-C", str(source), "-c", "core.hooksPath=/dev/null", "add", "--all"], cwd=base, env=env)
     return source, hashlib.sha256(archive).hexdigest(), env
+
+
+def _load_staged_installer(stage):
+    path = Path(stage) / "tools" / "stack_install.py"
+    if path.is_symlink() or not path.is_file():
+        raise HarnessError("signed release does not contain a regular stack installer")
+    spec = importlib.util.spec_from_file_location("caphe_staged_stack_install", path)
+    if spec is None or spec.loader is None:
+        raise HarnessError("signed release stack installer could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    required = ("plan_runtime_install", "_entries_digest", "apply_runtime_plan")
+    if any(not callable(getattr(module, name, None)) for name in required):
+        raise HarnessError("signed release stack installer has an unsupported interface")
+    return module
 
 
 def _canonical_json(value):
@@ -1006,6 +1035,7 @@ def update_runtime(*, apply=False, tag=None, preview_digest=None):
     state.chmod(0o700)
     with tempfile.TemporaryDirectory(prefix="release-", dir=state) as temporary:
         stage, archive_digest, git_env = _stage_release(release["tag"], fingerprint, keyring, Path(temporary))
+        stack_install = _load_staged_installer(stage)
         plan = stack_install.plan_runtime_install(stage, target)
         current_digest = stack_install._entries_digest(plan["previous_payload"])
         changes = {"added": [], "changed": [], "unchanged": [], "retired": []}

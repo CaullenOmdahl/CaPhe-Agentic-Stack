@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -26,6 +27,28 @@ def sample_config(output_root):
 
 
 class HarnessConfigTests(unittest.TestCase):
+    def test_tar_validation_works_without_python_data_filter(self):
+        payload = b"verified"
+        archive = io.BytesIO()
+        with tarfile.open(fileobj=archive, mode="w:") as bundle:
+            member = tarfile.TarInfo("nested/file.txt")
+            member.size = len(payload)
+            bundle.addfile(member, io.BytesIO(payload))
+        archive.seek(0)
+        with tempfile.TemporaryDirectory() as tmp, patch.object(harness.tarfile.TarFile, "data_filter", None, create=True):
+            with tarfile.open(fileobj=archive, mode="r:") as bundle:
+                harness._extract_validated_tar(bundle, Path(tmp), "test")
+            self.assertEqual((Path(tmp) / "nested/file.txt").read_bytes(), payload)
+
+    def test_staged_installer_loader_uses_release_payload(self):
+        source = Path(harness.__file__).resolve().parents[1] / "tools" / "stack_install.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            staged = Path(tmp) / "tools" / "stack_install.py"
+            staged.parent.mkdir()
+            staged.write_bytes(source.read_bytes())
+            module = harness._load_staged_installer(Path(tmp))
+            self.assertEqual(Path(module.__file__), staged)
+
     def test_rejects_duplicate_or_ambiguous_route_fields(self):
         config = sample_config("/tmp/runs")
         config["routes"].append(dict(config["routes"][0]))
@@ -278,7 +301,8 @@ class HarnessEvidenceTests(unittest.TestCase):
             (workspace / "blocked.txt").write_text("before", encoding="utf-8")
             route = sample_config(workspace)["routes"][0]
             route["permissions"] = "worktree-write"
-            harness._write_codex_profile(home, route, ("allowed.txt",))
+            output_path = base / "worker-result.txt"
+            harness._write_codex_profile(home, route, ("allowed.txt",), output_path=output_path)
             def sandbox(*command):
                 return subprocess.run(["codex", "sandbox", "--profile", "caphe-worker",
                                        "--permission-profile", "caphe-worker", "--cd", str(workspace),
@@ -292,6 +316,9 @@ class HarnessEvidenceTests(unittest.TestCase):
             self.assertNotEqual(write.returncode, 0)
             self.assertEqual((workspace / "allowed.txt").read_text(), "after")
             self.assertEqual((workspace / "blocked.txt").read_text(), "before")
+            result_write = sandbox("sh", "-c", "printf 'result' > " + str(output_path))
+            self.assertEqual(result_write.returncode, 0, result_write.stderr)
+            self.assertEqual(output_path.read_text(), "result")
 
 
 if __name__ == "__main__":
