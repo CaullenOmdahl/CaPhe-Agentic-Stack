@@ -195,6 +195,13 @@ class HarnessConfigTests(unittest.TestCase):
                             "user.email=test@example.invalid", "commit", "-qm", "worker commit"], check=True)
             self.assertEqual(harness._worktree_changes(root, baseline), ["output.txt"])
 
+    def test_tree_manifest_rejects_oversized_sparse_outputs_before_reading(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sparse = Path(tmp) / "sparse.out"
+            with sparse.open("wb") as stream:
+                stream.truncate(64 * 1024 * 1024)
+            self.assertIsNone(harness._tree_manifest(tmp, max_bytes=1024))
+
     def test_snapshot_indexes_force_added_ignored_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp) / "repo"

@@ -290,17 +290,23 @@ def _validate_run_reference(value, field):
     return value
 
 
-def _tree_manifest(root):
+def _tree_manifest(root, *, max_bytes=512 * 1024 * 1024, max_entries=250_000, timeout_seconds=30):
     root = Path(root).resolve(strict=True)
     manifest = {}
     pending = [root]
+    total_bytes = 0
+    deadline = time.monotonic() + timeout_seconds
     while pending:
+        if time.monotonic() > deadline:
+            return None
         directory = pending.pop()
         try:
             entries = sorted(os.scandir(directory), key=lambda item: item.name)
         except OSError:
             return None
         for entry in entries:
+            if time.monotonic() > deadline:
+                return None
             if directory == root and entry.name == ".git":
                 continue
             path = Path(entry.path)
@@ -312,10 +318,15 @@ def _tree_manifest(root):
                     manifest[relative] = ("directory", mode, None)
                     pending.append(path)
                 elif stat.S_ISREG(info.st_mode):
+                    total_bytes += info.st_size
+                    if total_bytes > max_bytes:
+                        return None
                     digest = hashlib.sha256()
                     with path.open("rb") as stream:
                         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                             digest.update(chunk)
+                            if time.monotonic() > deadline:
+                                return None
                     manifest[relative] = ("file", mode, digest.hexdigest())
                 elif stat.S_ISLNK(info.st_mode):
                     target = os.readlink(path).encode("utf-8", "surrogateescape")
@@ -324,7 +335,7 @@ def _tree_manifest(root):
                     return None
             except OSError:
                 return None
-            if len(manifest) > 1_000_000:
+            if len(manifest) > max_entries:
                 return None
     return manifest
 
