@@ -58,8 +58,8 @@ independently provisioned signing-key fingerprint, persists an owner-only previe
 its digest with release identity and planned changes. Apply requires the exact tag and reviewed preview
 digest; it recomputes the plan and refuses if the tag, signature, target inventory, or file changes differ.
 It reuses the inventory-bound transactional installer, returns its selected verification receipt path,
-and verifies the installed artifact. The trust root is
-not updated by the payload it authorizes. It never tracks `main` implicitly. No release currently exists,
+requires the signed payload to retain an executable `bin/harness` entrypoint, and verifies the installed
+artifact. The trust root is not updated by the payload it authorizes. It never tracks `main` implicitly. No release currently exists,
 so update operations must report that state rather than silently using a branch or untagged source.
 
 ## Alternatives considered

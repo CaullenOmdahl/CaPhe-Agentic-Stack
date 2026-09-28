@@ -37,6 +37,20 @@ def init_repo(path):
 
 
 class HarnessConfigTests(unittest.TestCase):
+    def test_signed_update_requires_executable_harness_entrypoint(self):
+        with tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
+            stage = Path(tmp)
+            command = stage / "bin" / "harness"
+            command.parent.mkdir()
+            command.write_text("#!/bin/sh\nexit 0\n")
+            command.chmod(0o755)
+            harness._require_harness_release_entrypoint(stage, {"payload": [["bin/harness", "0" * 64, 0o755]]})
+            with self.assertRaisesRegex(harness.HarnessError, "executable bin/harness"):
+                harness._require_harness_release_entrypoint(stage, {"payload": []})
+            command.chmod(0o644)
+            with self.assertRaisesRegex(harness.HarnessError, "executable bin/harness"):
+                harness._require_harness_release_entrypoint(stage, {"payload": [["bin/harness", "0" * 64, 0o644]]})
+
     def test_systemd_scope_command_uses_control_group_cleanup(self):
         self.assertEqual(harness._systemd_scope_command(["codex", "exec"], "caphe-worker-test.scope"),
                          ["systemd-run", "--user", "--scope", "--wait", "--collect", "--quiet",

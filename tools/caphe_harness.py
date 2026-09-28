@@ -1225,6 +1225,17 @@ def _load_staged_installer(stage):
     return module
 
 
+def _require_harness_release_entrypoint(stage, plan):
+    """A self-update must not retire the command that performs future updates."""
+    entry = next((item for item in plan.get("payload", [])
+                  if isinstance(item, list) and len(item) == 3 and item[0] == "bin/harness"), None)
+    command = Path(stage) / "bin" / "harness"
+    if entry is None or not isinstance(entry[2], int) or not entry[2] & 0o111:
+        raise HarnessError("signed release must include executable bin/harness")
+    if command.is_symlink() or not command.is_file():
+        raise HarnessError("signed release must include executable bin/harness")
+
+
 def _canonical_json(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
 
@@ -1298,6 +1309,7 @@ def update_runtime(*, apply=False, tag=None, preview_digest=None):
         stage, archive_digest, git_env = _stage_release(release["tag"], fingerprint, keyring, Path(temporary))
         stack_install = _load_staged_installer(stage)
         plan = stack_install.plan_runtime_install(stage, target)
+        _require_harness_release_entrypoint(stage, plan)
         current_digest = stack_install._entries_digest(plan["previous_payload"])
         changes = {"added": [], "changed": [], "unchanged": [], "retired": []}
         previous = {item[0]: item[1] for item in plan["previous_payload"]}
