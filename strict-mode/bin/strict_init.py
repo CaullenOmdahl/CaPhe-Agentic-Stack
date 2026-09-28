@@ -92,9 +92,9 @@ def _sha(content):
 def owner_route_state(content):
     if _sha(content) in LEGACY_OWNERS_HASHES:
         return "legacy_generated"
-    lines = {b" ".join(line.split()) for line in content.splitlines()}
-    exception = b" ".join(NATIVE_WORKER_EXCEPTION.split()) in b" ".join(content.split())
-    if any(line in lines for line in LEGACY_MODEL_GATES) and not exception:
+    normalized_content = b" ".join(content.split())
+    exception = b" ".join(NATIVE_WORKER_EXCEPTION.split()) in normalized_content
+    if any(b" ".join(gate.split()) in normalized_content for gate in LEGACY_MODEL_GATES) and not exception:
         return "legacy_conflict"
     # This identifies known stale text; it does not certify arbitrary owner policy.
     return "preserved"

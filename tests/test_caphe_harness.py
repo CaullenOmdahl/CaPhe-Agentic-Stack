@@ -213,6 +213,13 @@ class HarnessConfigTests(unittest.TestCase):
             self.assertEqual(harness._worktree_changes(root, baseline, ["reports/output.md"]),
                              ["reports/output.md"])
 
+    def test_file_allowlist_does_not_authorize_descendants(self):
+        baseline = {"src/config.py": ("file", 0o644, "baseline-hash")}
+        self.assertFalse(harness._changes_allowed(
+            ["src/config.py", "src/config.py/undeclared"], ["src/config.py"], baseline))
+        directory_baseline = {"docs": ("directory", 0o755, None)}
+        self.assertTrue(harness._changes_allowed(["docs/new.md"], ["docs"], directory_baseline))
+
     def test_tree_manifest_rejects_oversized_sparse_outputs_before_reading(self):
         with tempfile.TemporaryDirectory() as tmp:
             sparse = Path(tmp) / "sparse.out"
@@ -365,6 +372,14 @@ class HarnessConfigTests(unittest.TestCase):
                     with self.assertRaises(harness.HarnessError):
                         harness.run_batch(config, tasks, execute=True)
                     launch.assert_not_called()
+
+    def test_batch_rejects_unhashable_category_before_route_lookup(self):
+        with patch.object(harness, "run_worker") as launch:
+            with self.assertRaisesRegex(harness.HarnessError, "category must be a string"):
+                harness.run_batch(sample_config("/tmp/runs"), [
+                    {"category": ["lookup-extraction"], "repo": "/repo", "brief_file": "/brief"}
+                ], execute=True)
+        launch.assert_not_called()
 
 
 class HarnessEvidenceTests(unittest.TestCase):

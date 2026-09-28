@@ -374,8 +374,15 @@ def _worktree_changes(root, baseline=None, allowed_writes=()):
                   | set(part.decode("utf-8", "surrogateescape") for part in untracked.stdout.split(b"\0") if part))
 
 
-def _changes_allowed(paths, allowed):
-    return all(any(path == prefix or path.startswith(prefix + "/") for prefix in allowed) for path in paths)
+def _changes_allowed(paths, allowed, baseline=None):
+    baseline = baseline or {}
+    for path in paths:
+        if path in allowed:
+            continue
+        if not any(baseline.get(prefix, (None,))[0] == "directory"
+                   and path.startswith(prefix + "/") for prefix in allowed):
+            return False
+    return True
 
 
 def _effective_route_verified(route, effective, workspace):
@@ -785,7 +792,8 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
                 changed = _worktree_changes(work_root.stdout.strip(), baseline, allowed_writes)
                 record["worktree"] = work_root.stdout.strip()
                 record["changed_paths"] = changed
-                record["write_scope_verified"] = bool(changed is not None and _changes_allowed(changed, allowed_writes))
+                record["write_scope_verified"] = bool(changed is not None
+                                                       and _changes_allowed(changed, allowed_writes, baseline))
         if record["write_scope_verified"] is False and record.get("status") == "completed":
             record["status"] = "rejected_write_scope"
     try:
@@ -817,7 +825,10 @@ def run_batch(config, tasks, *, execute=False, parent_run_id=None):
     prepared = []
     for task in tasks:
         _closed(task, {"category", "repo", "brief_file"}, {"allow_write", "retry_of"})
-        route = routes.get(task["category"])
+        category = task["category"]
+        if not isinstance(category, str):
+            raise HarnessError("batch category must be a string")
+        route = routes.get(category)
         if not route or not route["enabled"]:
             raise HarnessError("batch references a missing or disabled route")
         if not isinstance(task["repo"], str) or not isinstance(task["brief_file"], str):

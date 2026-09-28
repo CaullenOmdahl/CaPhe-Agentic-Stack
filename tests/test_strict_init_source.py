@@ -20,6 +20,13 @@ def git(root, *args):
 
 
 class StrictInitSourceTests(unittest.TestCase):
+    def test_owner_route_state_detects_line_wrapped_legacy_gate(self):
+        content = (b"# Customized owner policy\n\n- architecture, model, language,\n"
+                   b"  or platform decisions;\n\nPreserve reviewer routes.\n")
+        self.assertEqual(initializer.owner_route_state(content), "legacy_conflict")
+        with self.assertRaisesRegex(initializer.InitError, "customized legacy model gate"):
+            initializer.refresh_owner_gate(content)
+
     def test_generated_owner_upgrade_replaces_the_matching_legacy_gate(self):
         prefix = b"# OWNERS\n\nGate:\n"
         suffix = b"\n\n**Approver(s):** Owner\n"
