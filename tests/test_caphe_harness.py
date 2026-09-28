@@ -168,6 +168,41 @@ class HarnessConfigTests(unittest.TestCase):
             self.assertEqual(changed, {"ignored.out", "ordinary.out", nested_file})
             self.assertTrue(harness._changes_allowed([nested_file], [nested_file]))
 
+    def test_worktree_timeout_is_recorded_as_unverifiable(self):
+        with patch.object(harness.subprocess, "run", side_effect=subprocess.TimeoutExpired("git", 20)):
+            self.assertIsNone(harness._worktree_changes("/repo"))
+
+    def test_snapshot_indexes_force_added_ignored_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            repo.mkdir()
+            subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+            (repo / ".gitignore").write_text("ignored.txt\n")
+            (repo / "ignored.txt").write_text("tracked by force")
+            subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+            subprocess.run(["git", "-C", str(repo), "add", "-f", "ignored.txt"], check=True)
+            subprocess.run(["git", "-C", str(repo), "-c", "user.name=test", "-c",
+                            "user.email=test@example.invalid", "commit", "-qm", "init"], check=True)
+            snapshot = harness._snapshot_repo(repo, Path(tmp) / "snapshot")
+            tracked = subprocess.run(["git", "-C", str(snapshot), "ls-files", "-z"],
+                                     capture_output=True, check=True).stdout.split(b"\0")
+            self.assertIn(b"ignored.txt", tracked)
+            self.assertEqual(harness._worktree_changes(snapshot), [])
+
+    def test_route_verification_requires_expected_cwd_for_every_permission(self):
+        route = sample_config("/tmp/runs")["routes"][0]
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            elsewhere = Path(tmp) / "elsewhere"
+            workspace.mkdir()
+            elsewhere.mkdir()
+            effective = {"model": route["model"], "effort": route["effort"], "cwd": str(elsewhere),
+                         "permission_profile": {"name": "caphe-worker"},
+                         "sandbox_policy": {"type": "restricted"}}
+            self.assertFalse(harness._effective_route_verified(route, effective, workspace))
+            effective["cwd"] = str(workspace)
+            self.assertTrue(harness._effective_route_verified(route, effective, workspace))
+
     def test_batch_launches_only_enabled_routes_and_returns_categories(self):
         with tempfile.TemporaryDirectory() as tmp:
             config = sample_config(Path(tmp) / "runs")
@@ -185,6 +220,22 @@ class HarnessConfigTests(unittest.TestCase):
             config["routes"][0]["enabled"] = False
             with self.assertRaisesRegex(harness.HarnessError, "disabled"):
                 harness.run_batch(config, tasks)
+
+    def test_batch_rejects_missing_write_allowlist_before_dispatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = sample_config(Path(tmp) / "runs")
+            config["routes"][0]["permissions"] = "worktree-write"
+            brief = Path(tmp) / "brief.md"
+            brief.write_text("brief")
+            tasks = [
+                {"category": "lookup-extraction", "repo": "/repo", "brief_file": str(brief),
+                 "allow_write": ["result.md"]},
+                {"category": "lookup-extraction", "repo": "/repo", "brief_file": str(brief)},
+            ]
+            with patch.object(harness, "run_worker") as launch:
+                with self.assertRaisesRegex(harness.HarnessError, "explicit allow_write"):
+                    harness.run_batch(config, tasks, execute=True)
+            launch.assert_not_called()
 
 
 class HarnessEvidenceTests(unittest.TestCase):

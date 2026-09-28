@@ -172,7 +172,7 @@ def _snapshot_repo(repo, target):
                "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
                "GIT_AUTHOR_NAME": "CaPhe Harness", "GIT_AUTHOR_EMAIL": "harness@localhost",
                "GIT_COMMITTER_NAME": "CaPhe Harness", "GIT_COMMITTER_EMAIL": "harness@localhost"}
-    for args in (["init", "--quiet", str(target)], ["-C", str(target), "add", "--all"],
+    for args in (["init", "--quiet", str(target)], ["-C", str(target), "add", "--force", "--all"],
                  ["-C", str(target), "-c", "core.hooksPath=/dev/null", "commit", "--quiet", "-m", "harness source snapshot"]):
         result = subprocess.run(["git", *args], capture_output=True, env=git_env, timeout=30)
         if result.returncode:
@@ -290,12 +290,15 @@ def _validate_run_reference(value, field):
 
 def _worktree_changes(root):
     root = Path(root).resolve()
-    proc = subprocess.run(["git", "-C", str(root), "diff", "--name-only", "--no-renames", "-z", "HEAD"],
-                          capture_output=True, timeout=20, env=_child_env("codex"))
-    # Include both ignored and ordinary untracked files at file granularity;
-    # directory roll-ups cannot be compared to a declared individual output.
-    untracked = subprocess.run(["git", "-C", str(root), "ls-files", "--others", "-z"],
-                               capture_output=True, timeout=20, env=_child_env("codex"))
+    try:
+        proc = subprocess.run(["git", "-C", str(root), "diff", "--name-only", "--no-renames", "-z", "HEAD"],
+                              capture_output=True, timeout=20, env=_child_env("codex"))
+        # Include both ignored and ordinary untracked files at file granularity;
+        # directory roll-ups cannot be compared to a declared individual output.
+        untracked = subprocess.run(["git", "-C", str(root), "ls-files", "--others", "-z"],
+                                   capture_output=True, timeout=20, env=_child_env("codex"))
+    except (OSError, subprocess.SubprocessError):
+        return None
     if proc.returncode or untracked.returncode:
         return None
     return sorted(set(part.decode("utf-8", "surrogateescape") for part in proc.stdout.split(b"\0") if part)
@@ -304,6 +307,24 @@ def _worktree_changes(root):
 
 def _changes_allowed(paths, allowed):
     return all(any(path == prefix or path.startswith(prefix + "/") for prefix in allowed) for path in paths)
+
+
+def _effective_route_verified(route, effective, workspace):
+    if not isinstance(effective, dict) or effective.get("model") != route["model"] or effective.get("effort") != route["effort"]:
+        return False
+    profile = effective.get("permission_profile")
+    sandbox = effective.get("sandbox_policy")
+    cwd = effective.get("cwd")
+    if not isinstance(profile, dict) or (profile.get("name") or profile.get("profile")) != "caphe-worker":
+        return False
+    if not isinstance(sandbox, dict) or sandbox.get("type") == "danger-full-access":
+        return False
+    if not isinstance(cwd, str):
+        return False
+    try:
+        return Path(cwd).resolve(strict=True) == Path(workspace).resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
 
 
 def _child_env(client):
@@ -631,30 +652,27 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
             break
     evidence = codex_session_evidence(thread_id, home / "sessions") if thread_id else None
     effective = evidence.get("route") if evidence else None
+    effective_cwd = effective.get("cwd") if effective else None
     record.update(status="timed_out" if timed_out else "completed" if status == 0 else "failed",
               exit_code=status, elapsed_seconds=round(elapsed, 3), thread_id=thread_id,
                   events_path=str(out_path), effective_model=effective.get("model") if effective else None,
               effective_effort=effective.get("effort") if effective else None,
               effective_permission_profile=effective.get("permission_profile") if effective else None,
               effective_sandbox_policy=effective.get("sandbox_policy") if effective else None,
-              route_verified=bool(effective and effective.get("model") == route["model"]
-                                      and effective.get("effort") == route["effort"]
-                                      and isinstance(effective.get("permission_profile"), dict)
-                                      and (effective["permission_profile"].get("name")
-                                           or effective["permission_profile"].get("profile")) == "caphe-worker"
-                                      and isinstance(effective.get("sandbox_policy"), dict)
-                                      and effective["sandbox_policy"].get("type") != "danger-full-access"),
+              route_verified=_effective_route_verified(route, effective, workspace),
                   usage=evidence.get("usage") if evidence else None, stderr_path=str(error_path))
     record["events_truncated"] = events_truncated
     record["stderr_truncated"] = stderr_truncated
-    effective_cwd = effective.get("cwd") if effective else None
     if route["permissions"] == "worktree-write":
         if not isinstance(effective_cwd, str):
             record["write_scope_verified"] = False
         else:
-            work_root = subprocess.run(["git", "-C", effective_cwd, "rev-parse", "--show-toplevel"],
-                                       capture_output=True, text=True, timeout=20, env=_child_env("codex"))
-            if work_root.returncode or Path(work_root.stdout.strip()).resolve() != workspace:
+            try:
+                work_root = subprocess.run(["git", "-C", effective_cwd, "rev-parse", "--show-toplevel"],
+                                           capture_output=True, text=True, timeout=20, env=_child_env("codex"))
+            except (OSError, subprocess.SubprocessError):
+                work_root = None
+            if work_root is None or work_root.returncode or Path(work_root.stdout.strip()).resolve() != workspace:
                 record["write_scope_verified"] = False
             else:
                 changed = _worktree_changes(work_root.stdout.strip())
@@ -698,6 +716,8 @@ def run_batch(config, tasks, *, execute=False, parent_run_id=None):
         writes = _allowed_write_paths(writes)
         if route["permissions"] == "read-only" and writes:
             raise HarnessError("read-only routes cannot declare writable paths")
+        if route["permissions"] == "worktree-write" and not writes:
+            raise HarnessError("worktree-write routes require explicit allow_write paths")
         brief_path = Path(task["brief_file"]).expanduser()
         if brief_path.is_symlink() or not brief_path.is_file():
             raise HarnessError("batch briefs must be regular files")
