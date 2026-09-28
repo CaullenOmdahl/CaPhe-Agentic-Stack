@@ -274,8 +274,10 @@ def _allowed_write_paths(paths):
         if not isinstance(value, str) or not value or "\\" in value or ":" in value:
             raise HarnessError("allowed write paths must be repository-relative paths")
         path = PurePosixPath(value)
-        if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts) or path.as_posix() != value:
+        if path.is_absolute() or not path.parts or any(part in {"", ".", ".."} for part in path.parts) or path.as_posix() != value:
             raise HarnessError("allowed write path is not normalized")
+        if ".git" in path.parts:
+            raise HarnessError("Git metadata cannot be declared writable")
         normalized.append(value.rstrip("/"))
     if len(normalized) != len(set(normalized)):
         raise HarnessError("allowed write paths must be unique")
@@ -288,8 +290,52 @@ def _validate_run_reference(value, field):
     return value
 
 
-def _worktree_changes(root):
+def _tree_manifest(root):
+    root = Path(root).resolve(strict=True)
+    manifest = {}
+    pending = [root]
+    while pending:
+        directory = pending.pop()
+        try:
+            entries = sorted(os.scandir(directory), key=lambda item: item.name)
+        except OSError:
+            return None
+        for entry in entries:
+            if directory == root and entry.name == ".git":
+                continue
+            path = Path(entry.path)
+            relative = path.relative_to(root).as_posix()
+            try:
+                info = entry.stat(follow_symlinks=False)
+                mode = stat.S_IMODE(info.st_mode)
+                if stat.S_ISDIR(info.st_mode):
+                    manifest[relative] = ("directory", mode, None)
+                    pending.append(path)
+                elif stat.S_ISREG(info.st_mode):
+                    digest = hashlib.sha256()
+                    with path.open("rb") as stream:
+                        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                            digest.update(chunk)
+                    manifest[relative] = ("file", mode, digest.hexdigest())
+                elif stat.S_ISLNK(info.st_mode):
+                    target = os.readlink(path).encode("utf-8", "surrogateescape")
+                    manifest[relative] = ("symlink", mode, hashlib.sha256(target).hexdigest())
+                else:
+                    return None
+            except OSError:
+                return None
+            if len(manifest) > 1_000_000:
+                return None
+    return manifest
+
+
+def _worktree_changes(root, baseline=None):
     root = Path(root).resolve()
+    if baseline is not None:
+        current = _tree_manifest(root)
+        if current is None:
+            return None
+        return sorted(path for path in set(baseline) | set(current) if baseline.get(path) != current.get(path))
     try:
         proc = subprocess.run(["git", "-C", str(root), "diff", "--name-only", "--no-renames", "-z", "HEAD"],
                               capture_output=True, timeout=20, env=_child_env("codex"))
@@ -614,6 +660,9 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
         if not auth["installed"] or not auth["authenticated"] or auth.get("auth_mode") != "chatgpt":
             raise HarnessError("Codex ChatGPT login is not verified; refusing this billing route")
         workspace = _snapshot_repo(repo, run_dir / "workspace")
+        baseline = _tree_manifest(workspace)
+        if baseline is None:
+            raise HarnessError("immutable source snapshot could not be inventoried")
         sandbox_tmp = run_dir / "codex-tmp"
         sandbox_tmp.mkdir(mode=0o700)
         home, profile_path = _prepare_codex_profile(route, allowed_writes, config_profile, output_path)
@@ -675,7 +724,7 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
             if work_root is None or work_root.returncode or Path(work_root.stdout.strip()).resolve() != workspace:
                 record["write_scope_verified"] = False
             else:
-                changed = _worktree_changes(work_root.stdout.strip())
+                changed = _worktree_changes(work_root.stdout.strip(), baseline)
                 record["worktree"] = work_root.stdout.strip()
                 record["changed_paths"] = changed
                 record["write_scope_verified"] = bool(changed is not None and _changes_allowed(changed, allowed_writes))

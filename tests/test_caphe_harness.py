@@ -27,6 +27,13 @@ def sample_config(output_root):
 
 
 class HarnessConfigTests(unittest.TestCase):
+    def test_allowed_write_paths_cannot_include_git_metadata(self):
+        with self.assertRaisesRegex(harness.HarnessError, "not normalized"):
+            harness._allowed_write_paths(["."])
+        for path in (".git", ".git/config", "src/.git/config"):
+            with self.subTest(path=path), self.assertRaisesRegex(harness.HarnessError, "Git metadata"):
+                harness._allowed_write_paths([path])
+
     def test_tar_validation_works_without_python_data_filter(self):
         payload = b"verified"
         archive = io.BytesIO()
@@ -171,6 +178,22 @@ class HarnessConfigTests(unittest.TestCase):
     def test_worktree_timeout_is_recorded_as_unverifiable(self):
         with patch.object(harness.subprocess, "run", side_effect=subprocess.TimeoutExpired("git", 20)):
             self.assertIsNone(harness._worktree_changes("/repo"))
+
+    def test_snapshot_baseline_detects_changes_even_after_worker_commit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            subprocess.run(["git", "-C", str(root), "init", "-q"], check=True)
+            output = root / "output.txt"
+            output.write_text("initial")
+            subprocess.run(["git", "-C", str(root), "add", "--all"], check=True)
+            subprocess.run(["git", "-C", str(root), "-c", "user.name=test", "-c",
+                            "user.email=test@example.invalid", "commit", "-qm", "baseline"], check=True)
+            baseline = harness._tree_manifest(root)
+            output.write_text("unauthorized but committed")
+            subprocess.run(["git", "-C", str(root), "add", "output.txt"], check=True)
+            subprocess.run(["git", "-C", str(root), "-c", "user.name=test", "-c",
+                            "user.email=test@example.invalid", "commit", "-qm", "worker commit"], check=True)
+            self.assertEqual(harness._worktree_changes(root, baseline), ["output.txt"])
 
     def test_snapshot_indexes_force_added_ignored_files(self):
         with tempfile.TemporaryDirectory() as tmp:
