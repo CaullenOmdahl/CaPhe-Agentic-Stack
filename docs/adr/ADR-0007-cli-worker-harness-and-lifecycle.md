@@ -30,6 +30,12 @@ before integration. The runner passes a minimal environment and a short-lived na
 Codex home; it does not copy auth files, and the profile denies access to auth and session paths. If the
 effective boundary cannot be confirmed, the run is not accepted.
 
+Worker processes also run inside a Linux user systemd scope with `KillMode=control-group`. This contains
+descendants that detach or create a new session and lets the harness stop the entire scope before checking
+the snapshot. The harness fails closed when a user systemd manager is unavailable. macOS can run planning
+and doctor checks, but worker execution remains disabled until an equivalent OS-managed descendant
+containment boundary is implemented and verified there.
+
 Workers write their final result to a per-run file. The harness records requested and effective route metadata
 and accepts the run as verified only when it correlates the process with trusted client-authored records
 outside the worker workspace (Codex thread ID plus persisted rollout `turn_context`, or a documented

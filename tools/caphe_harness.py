@@ -153,6 +153,81 @@ def build_command(route, prompt_path, output_path, repo, config_profile="caphe-w
     return args
 
 
+def _systemd_scope_command(argv, unit):
+    return ["systemd-run", "--user", "--scope", "--wait", "--collect", "--quiet",
+            "--unit", unit, "--property=KillMode=control-group", "--", *argv]
+
+
+def _systemd_scope_status(env):
+    if sys.platform != "linux":
+        return {"supported": False, "reason": "worker execution requires Linux systemd process scopes"}
+    if not shutil.which("systemd-run") or not shutil.which("systemctl"):
+        return {"supported": False, "reason": "systemd-run and systemctl are required for descendant containment"}
+    if not env.get("XDG_RUNTIME_DIR"):
+        return {"supported": False, "reason": "XDG_RUNTIME_DIR is missing; no user systemd manager can be addressed"}
+    try:
+        result = subprocess.run(["systemctl", "--user", "show-environment"], env=env,
+                                capture_output=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return {"supported": False, "reason": "user systemd manager could not be queried"}
+    if result.returncode:
+        return {"supported": False, "reason": "user systemd manager is not available"}
+    return {"supported": True, "kind": "systemd-user-scope"}
+
+
+def _systemd_scope_available(env):
+    return _systemd_scope_status(env)["supported"]
+
+
+def _systemd_scope_state(unit, env):
+    try:
+        result = subprocess.run(["systemctl", "--user", "show", unit, "--property=ActiveState", "--value"],
+                                env=env, capture_output=True, text=True, timeout=3)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode:
+        return False
+    state = result.stdout.strip()
+    return state not in {"", "inactive", "failed"}
+
+
+def _stop_systemd_scope(unit, env, grace_seconds=1):
+    active = _systemd_scope_state(unit, env)
+    if active is None or not active:
+        return active is False
+    try:
+        stopped = subprocess.run(["systemctl", "--user", "kill", "--kill-whom=all", "--signal=TERM", unit],
+                                 env=env, capture_output=True, timeout=3)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if stopped.returncode and _systemd_scope_state(unit, env) is not False:
+        return False
+    deadline = time.monotonic() + grace_seconds
+    while time.monotonic() < deadline:
+        active = _systemd_scope_state(unit, env)
+        if active is False:
+            return True
+        if active is None:
+            return False
+        time.sleep(0.05)
+    try:
+        killed = subprocess.run(["systemctl", "--user", "kill", "--kill-whom=all", "--signal=KILL", unit],
+                                env=env, capture_output=True, timeout=3)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if killed.returncode and _systemd_scope_state(unit, env) is not False:
+        return False
+    deadline = time.monotonic() + grace_seconds
+    while time.monotonic() < deadline:
+        active = _systemd_scope_state(unit, env)
+        if active is False:
+            return True
+        if active is None:
+            return False
+        time.sleep(0.05)
+    return _systemd_scope_state(unit, env) is False
+
+
 def _snapshot_repo(repo, target, revision=None):
     """Build a standalone tracked-only Git snapshot; no parent conversation or dirty files."""
     repo, target = Path(repo).resolve(), Path(target)
@@ -423,7 +498,8 @@ def _bounded_result(path, max_bytes):
 
 
 def _child_env(client):
-    keep = {"PATH", "HOME", "CODEX_HOME", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE", "TERM",
+    keep = {"PATH", "HOME", "CODEX_HOME", "TMPDIR", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS",
+            "LANG", "LC_ALL", "LC_CTYPE", "TERM",
             "COLORTERM", "NO_COLOR", "SSL_CERT_FILE", "SSL_CERT_DIR", "SYSTEMROOT", "WINDIR"}
     result = {key: value for key, value in os.environ.items() if key in keep}
     # Route authentication comes from the selected CLI's account store, never API-key
@@ -621,11 +697,15 @@ def _terminate_process_group(pgid, grace_seconds=1):
         time.sleep(0.025)
     try:
         os.killpg(pgid, signal.SIGKILL)
-    except ProcessLookupError:
+    except (ProcessLookupError, PermissionError):
         pass
 
 
-def _run_process(argv, *, cwd, env, prompt, timeout):
+def _run_process(argv, *, cwd, env, prompt, timeout, containment_unit=None):
+    if containment_unit is not None:
+        if not _systemd_scope_available(env):
+            raise HarnessError("Linux systemd process containment is unavailable")
+        argv = _systemd_scope_command(argv, containment_unit)
     proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, start_new_session=(os.name == "posix"))
     limits = {"stdout": 8 * 1024 * 1024, "stderr": 1024 * 1024}
@@ -666,6 +746,7 @@ def _run_process(argv, *, cwd, env, prompt, timeout):
         timed_out = False
     except subprocess.TimeoutExpired:
         timed_out = True
+        scope_stopped = (_stop_systemd_scope(containment_unit, env) if containment_unit is not None else True)
         if os.name == "posix":
             _terminate_process_group(proc.pid)
         else:
@@ -678,7 +759,14 @@ def _run_process(argv, *, cwd, env, prompt, timeout):
     else:
         # A client may exit successfully after daemonizing a child. Stop the
         # isolated group before inspecting the snapshot and recording evidence.
+        scope_stopped = (_stop_systemd_scope(containment_unit, env) if containment_unit is not None else True)
         _terminate_process_group(proc.pid)
+    if not scope_stopped:
+        timed_out = True
+        message = b"\nworker process containment could not be verified; result rejected\n"
+        available = limits["stderr"] - len(captured["stderr"])
+        if available > 0:
+            captured["stderr"].extend(message[:available])
     writer.join(timeout=2)
     for reader in readers:
         reader.join(timeout=5)
@@ -734,6 +822,8 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
         record["execution_blocker"] = "execution requires explicit --execute and a supported isolated Codex profile"
         return record
     profile_path = None
+    child_env = _child_env(route["client"])
+    containment_unit = "caphe-worker-" + run_id.lower().replace("z-", "-") + ".scope"
     config_profile = "caphe-worker-" + run_id.lower().replace("z-", "-")
     try:
         _git_clean(repo)
@@ -742,6 +832,9 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
         auth = _command_status("codex")
         if not auth["installed"] or not auth["authenticated"] or auth.get("auth_mode") != "chatgpt":
             raise HarnessError("Codex ChatGPT login is not verified; refusing this billing route")
+        containment = _systemd_scope_status(child_env)
+        if not containment["supported"]:
+            raise HarnessError(containment["reason"])
         workspace = _snapshot_repo(repo, run_dir / "workspace", source.stdout.strip())
         baseline = _tree_manifest(workspace)
         if baseline is None:
@@ -758,13 +851,13 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
         record_path.write_text(json.dumps(record, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         record_path.chmod(0o600)
         return record
-    child_env = _child_env(route["client"])
     child_env["TMPDIR"] = str(sandbox_tmp)
     started = time.monotonic()
     try:
         status, stdout, stderr, timed_out, events_truncated, stderr_truncated = _run_process(
-            argv, cwd=workspace, env=child_env, prompt=prompt, timeout=route["timeout_seconds"])
-    except OSError as error:
+            argv, cwd=workspace, env=child_env, prompt=prompt, timeout=route["timeout_seconds"],
+            containment_unit=containment_unit)
+    except (HarnessError, OSError) as error:
         status, stdout, stderr, timed_out, events_truncated, stderr_truncated = (
             127, b"", str(error).encode("utf-8", "replace"), False, False, False)
     finally:
@@ -943,6 +1036,7 @@ def doctor(config_path, *, apply=False, probe=False):
     profiles = {route["category"]: (_codex_profile_parse_check(route) if route["client"] == "codex"
                                     else {"supported": False, "reason": "client adapter is not enabled"})
                 for route in config["routes"]}
+    containment = _systemd_scope_status(_child_env("codex"))
     env_keys = sorted(name for name in KEY_NAMES if name in os.environ)
     enabled = []
     for route in config["routes"]:
@@ -953,13 +1047,16 @@ def doctor(config_path, *, apply=False, probe=False):
                       and clients[route["client"]].get("auth_mode") == "chatgpt")
         enabled.append({"category": route["category"], "enabled": route["enabled"],
                         "ready": bool(route["enabled"] and installed and authenticated
+                                      and containment["supported"]
                                       and effective_evidence_supported and billing_ok),
                         "reason": None if route["enabled"] and installed and authenticated
+                        and containment["supported"]
                         and effective_evidence_supported and billing_ok else
                         "disabled or needs an explicit live probe of effective route, account, and permissions"})
     output = Path(config["output_root"]).expanduser()
     report = {"config_path": str(path), "config_created": created,
               "clients": clients, "environment_key_names_present": env_keys,
+              "process_containment": containment,
               "routes": enabled, "codex_profiles": profiles,
               "ccusage": {"installed": ccusage["installed"], "version": ccusage["version"]},
               "native_spawn": "unused; workers are separate CLI processes",

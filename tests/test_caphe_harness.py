@@ -37,6 +37,18 @@ def init_repo(path):
 
 
 class HarnessConfigTests(unittest.TestCase):
+    def test_systemd_scope_command_uses_control_group_cleanup(self):
+        self.assertEqual(harness._systemd_scope_command(["codex", "exec"], "caphe-worker-test.scope"),
+                         ["systemd-run", "--user", "--scope", "--wait", "--collect", "--quiet",
+                          "--unit", "caphe-worker-test.scope", "--property=KillMode=control-group",
+                          "--", "codex", "exec"])
+
+    def test_systemd_containment_fails_closed_off_linux(self):
+        with patch.object(harness.sys, "platform", "darwin"):
+            status = harness._systemd_scope_status({})
+        self.assertFalse(status["supported"])
+        self.assertIn("Linux systemd", status["reason"])
+
     def test_route_membership_fields_must_be_strings(self):
         for field in ("client", "effort", "permissions", "billing"):
             config = sample_config("/tmp/runs")
@@ -391,6 +403,19 @@ class HarnessConfigTests(unittest.TestCase):
 
 
 class HarnessEvidenceTests(unittest.TestCase):
+    def test_worker_preflight_rejects_missing_os_containment_before_dispatch(self):
+        with tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
+            repo = init_repo(Path(tmp) / "repo")
+            config = sample_config(Path(tmp) / "runs")
+            with patch.object(harness, "_command_status", return_value={"installed": True,
+                           "authenticated": True, "auth_mode": "chatgpt"}), \
+                 patch.object(harness, "_systemd_scope_status", return_value={"supported": False,
+                       "reason": "test containment unavailable"}), \
+                 patch.object(harness, "_run_process", side_effect=AssertionError("worker must not start")):
+                record = harness.run_worker(config, config["routes"][0], repo, "small brief", execute=True)
+            self.assertEqual(record["status"], "preflight_failed")
+            self.assertIn("test containment unavailable", record["execution_error"])
+
     @unittest.skipUnless(os.name == "posix", "isolated process groups require POSIX")
     def test_process_group_descendants_are_stopped_before_return(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -473,6 +498,7 @@ class HarnessEvidenceTests(unittest.TestCase):
             self.assertIn("ANTHROPIC_API_KEY", encoded)
             self.assertNotIn("do-not-print-this", encoded)
             self.assertEqual(report["native_spawn"], "unused; workers are separate CLI processes")
+            self.assertIn("process_containment", report)
             self.assertFalse(any(route["ready"] for route in report["routes"]))
 
     def test_dry_run_does_not_start_worker(self):

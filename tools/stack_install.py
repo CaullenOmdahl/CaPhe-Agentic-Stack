@@ -99,6 +99,9 @@ def _payload(root):
             raise InstallError("invalid runtime inventory") from error
     else:
         raise InstallError("source must be a Git distribution root or an inventoried runtime")
+    command_path = root / "bin" / "harness"
+    if "bin/harness" not in names or not command_path.is_file() or command_path.is_symlink():
+        raise InstallError("missing required runtime command: bin/harness")
     entries = [_file_entry(root, rel) for rel in sorted(names)]
     if expected is not None and (entries != expected or _entries_digest(entries) != data.get("source_digest")):
         raise InstallError("runtime differs from its public inventory")

@@ -30,9 +30,20 @@ class InstallContracts(unittest.TestCase):
         (source / "strict-mode" / "methodology.md").write_text("canon\n")
         (source / "schemas").mkdir()
         (source / "schemas" / "runtime.json").write_text("{}\n")
+        (source / "bin").mkdir()
+        harness_entry = source / "bin" / "harness"
+        harness_entry.write_text("#!/bin/sh\nexit 0\n")
+        harness_entry.chmod(0o755)
         subprocess.run(["git", "init", "-q", str(source)], check=True)
         subprocess.run(["git", "-C", str(source), "add", "."], check=True)
         return source
+
+    def test_runtime_payload_requires_harness_entrypoint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = self.fixture_source(Path(tmp).resolve())
+            (source / "bin" / "harness").unlink()
+            with self.assertRaisesRegex(installer.InstallError, "required runtime command: bin/harness"):
+                installer._payload(source)
 
     def test_plan_is_non_mutating_and_source_bound(self):
         with tempfile.TemporaryDirectory() as tmp:
