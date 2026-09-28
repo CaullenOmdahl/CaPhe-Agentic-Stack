@@ -71,7 +71,6 @@ class HarnessConfigTests(unittest.TestCase):
             self.assertIn('"src/one.py" = "write"', text)
             self.assertIn('"docs" = "write"', text)
             self.assertIn('network = { enabled = false }', text)
-            self.assertTrue(harness._codex_profile_parse_check(route)["supported"])
 
     def test_brief_token_bound_is_conservative_and_deterministic(self):
         self.assertEqual(harness.estimate_tokens(""), 1)
@@ -171,6 +170,7 @@ class HarnessEvidenceTests(unittest.TestCase):
             self.assertEqual(record["status"], "planned")
             self.assertIn("explicit --execute", record["execution_blocker"])
 
+    @unittest.skipUnless(shutil.which("codex"), "Codex CLI is not installed")
     def test_restricted_codex_profile_is_parsed_without_model_dispatch(self):
         with tempfile.TemporaryDirectory(dir=Path.home()) as home_tmp, tempfile.TemporaryDirectory() as workspace_tmp:
             home = Path(home_tmp).resolve()
