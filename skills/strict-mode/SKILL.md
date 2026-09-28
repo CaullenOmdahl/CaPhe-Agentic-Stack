@@ -27,14 +27,8 @@ Pre-commit `FAST GREEN` is focused feedback only. Before completion, run
 and write immutable v2 `.agent/evidence/` snapshots with the PR evidence. Keep continuation and scoped
 authorization private outside Git. Use the installed runtime tools for bounded context, declared
 preparation, status polling, and explicit model/effort routing; read `~/.local/share/caphe/runtime/docs/efficiency-runtime.md` in that
-runtime only when those operations are needed. For native workers, select model and effort per bounded
-task before spawning: lightweight for routine copy/extraction, workhorse for settled implementation,
-frontier for ambiguous or high-risk reasoning. Use live supported choices, explicit arguments, and fresh
-context; do not uniformly inherit the coordinator's model. Inspect the spawn tool's schema: prompt text
-does not select a model. If native overrides are absent, use an already authorized supported mechanism
-or keep the task with the coordinator and report the limitation; preserve remote-dispatch gates.
-This task-level selection needs no separate
-benchmark or approval unless an explicit user or owner route constraint applies. Retaining the incumbent
-until paired evidence qualifies a cheaper route applies to evaluated routing-policy promotion, not all
-native delegation. Preserve pinned owner policies and the independent reviewer route; include parent,
-retry, and child cost in any measured comparison.
+runtime only when those operations are needed. Harness-managed workers use the versioned `harness`
+route table and subprocess adapter, never native `spawn_agent`. If `harness doctor` reports a route is
+not ready, keep work with the coordinator; do not bypass the route guard. Workers get fresh bounded
+briefs and isolated source scopes. Preserve pinned owner policies and the independent reviewer route;
+include parent, retry, and child usage in any measured comparison.

@@ -1,4 +1,7 @@
-# ADR 0006 — task-level native worker selection
+# ADR 0006 — task-level native worker selection (superseded)
+
+> Superseded by [ADR 0007](ADR-0007-cli-worker-harness-and-lifecycle.md): harness-managed delegation now
+> uses explicit CLI subprocesses and a versioned route table. This record is retained as historical context.
 
 - **Status:** accepted for implementation; verification and independent PR review required before installation
 - **Date:** 2026-09-26

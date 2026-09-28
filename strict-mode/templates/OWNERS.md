@@ -18,5 +18,6 @@ Nothing self-merges past a named gate.
 
 **Approver(s):** <name>
 
-Routine native worker model/effort selection under the approved delegation rules is already authorized
-and does not require a new per-worker approval. Explicit owner route constraints still apply.
+Harness-managed worker routes come from the reviewed versioned route table. Keep a route disabled until
+its provider account, effective model/effort evidence, and filesystem boundary are verified. Explicit
+owner route constraints always apply.

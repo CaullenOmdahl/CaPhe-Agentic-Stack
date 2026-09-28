@@ -36,8 +36,9 @@ complete matrix.
 Stop for explicit approval on security/auth/secrets, domain invariants, schemas and migrations, release
 or deploy order, architecture/language/model-policy choices, money/legal/payroll, production-readiness claims,
 irreversible actions, or a real unresolved fork. Nothing self-merges past a gate.
-Routine native worker model/effort selection under the delegation rules below is already authorized;
-changing a pinned owner policy or canonical reviewer route still requires its named approval.
+Harness-managed worker routes come from the reviewed, versioned route table. Keep routes disabled until
+the provider account, effective route, and filesystem boundary are verified. Changing a pinned owner
+policy or canonical reviewer route still requires its named approval.
 
 ## Verification
 
@@ -121,28 +122,20 @@ Consult existing authorization before asking again. Deployment approval does not
 
 ## Delegation and preparation
 
-Treat model, effort, service tier, and context size as one route. For native harness workers, select model
-and effort per task before spawning. Start routine copy/extraction on a lightweight model, settled
-implementation on a workhorse, and ambiguous or high-risk reasoning on a frontier model. Choose the
-lowest supported effort adequate for the acceptance contract; the parent's model and effort are not a
-worker default. This routine selection needs no separate benchmark or human approval unless an explicit
-user or owner route constraint applies. It does not change the coordinator, pinned policy, or reviewer.
+Treat model, effort, service tier, and context size as one route. Harness-managed workers are separate
+CLI processes launched with `harness worker` and a task route from the versioned TOML file. Never use
+Codex `spawn_agent` for this delegation path or select the model in prompt prose. The harness pins model,
+effort, context budget, billing, permission profile, timeout, and output limits. Workers get a fresh bounded
+brief and tracked-only source snapshot, not the coordinator's conversation. Writes are restricted to
+explicitly listed paths and validated before integration. If doctor or runtime route evidence is incomplete,
+keep the work with the coordinator. Non-Codex providers remain disabled until their account, billing,
+effective-route evidence, and isolation adapter are implemented and reviewed.
 
-Check both available routes and the active spawn tool's model/effort arguments. Naming a model in a
-prompt does not select it. If those controls are absent, use an already authorized supported selection
-mechanism or keep the task with the coordinator and report the limitation; do not claim an inherited
-worker used a different route or bypass remote-dispatch gates. A successful native invocation establishes only
-that invocation's availability; external clients require an authenticated compatibility probe. If a
-preferred route is unavailable, use the next suitable supported route and state the fallback reason.
-Use `tools/stack_route.py` when resolving a trusted evaluated owner policy: its incumbent fallback and
-promotion requirements apply within that policy, not to unconstrained native task-level selection.
-Remote registry dispatch retains its separate pilot, capability, and isolation requirements.
-The coordinator retains architecture, ambiguous acceptance, integration, and escalation. Use a fresh
-bounded child context for independent extraction or scoped work, with explicit model/effort, allowed
-writes, checks, acceptance, output limits, and one repair attempt. Cap ordinary execution at 64 workers or the active agent environment limit, whichever is lower;
-do not recursively delegate. Full-history forks inherit their model and effort; use a fresh or bounded
-context when selecting a different route. Record the selected model, effort, and brief task-based reason
-in each worker contract. Do not restart completed work merely to change models.
+Use `tools/stack_route.py` only for a trusted evaluated owner policy; its incumbent and promotion rules
+remain separate from the local CLI route table. Remote registry dispatch retains its separate pilot,
+capability, and isolation requirements. The coordinator retains architecture, ambiguous acceptance,
+integration, and escalation. Do not recursively delegate. Record parent, retries, and every worker's
+categorized usage when evaluating savings; do not restart completed workers just to change models.
 
 After a failed bounded repair, escalate the task or tighten its acceptance contract. Count that repair,
 parent inspection, and all children when evaluating savings. Independent canonical PR review stays on its
