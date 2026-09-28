@@ -4,7 +4,8 @@
 
 | Record | Decision | Lane | Acceptance states | Binding |
 |---|---|---|---|---|
-| cli-worker-harness-v1 | ADR-0007 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: pending; review: pending; validation: passed | 3e8812892212/aaa0803ffc2b |
+| cli-worker-harness-v1 | ADR-0007 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: pending; review: pending; validation: passed | 3e8812892212/aaa0803ffc2b superseded by cli-worker-harness-v2 |
+| cli-worker-harness-v2 | ADR-0007 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: pending; review: pending; validation: passed | f32a8c8a99bc/494d0a15357c |
 | efficiency-improvement-plan | legacy | unbound | unknown acceptance | legacy; provenance not promoted |
 | efficiency-runtime-implementation-v1 | ADR-0004 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: not_applicable; review: pending; validation: pending | 900ec066ea0c/30fefcf960c7 |
 | environment-worker-cap-v1 | ADR-0004 | scoped-behavior | external_acceptance: not_applicable; implementation: passed; merge: pending; release: pending; review: pending; validation: pending | 54c9f759ce48/52729237428e superseded by environment-worker-cap-v2 |

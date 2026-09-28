@@ -1,0 +1,82 @@
+{
+  "change_id": "cli-worker-harness",
+  "decision": "ADR-0007",
+  "evidence": [
+    {
+      "kind": "file",
+      "reference": "docs/adr/ADR-0007-cli-worker-harness-and-lifecycle.md"
+    },
+    {
+      "kind": "file",
+      "reference": "tools/caphe_harness.py"
+    },
+    {
+      "kind": "file",
+      "reference": "tests/test_caphe_harness.py"
+    },
+    {
+      "kind": "file",
+      "reference": "tests/test_stack_install.py"
+    },
+    {
+      "kind": "url",
+      "reference": "https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/pull/15"
+    },
+    {
+      "kind": "check",
+      "reference": "Full uncached completion gate passed on this source snapshot."
+    },
+    {
+      "kind": "check",
+      "reference": "Write scope tests cover ignored and ordinary files plus a declared new output under a new directory."
+    },
+    {
+      "kind": "check",
+      "reference": "Output path test rejects a symlinked parent component."
+    },
+    {
+      "kind": "check",
+      "reference": "Installer reports the exact selected immutable receipt path."
+    }
+  ],
+  "id": "cli-worker-harness-v2",
+  "lane": "full-risk",
+  "schema_version": 2,
+  "source": {
+    "repository": "CaullenOmdahl/CaPhe-Agentic-Stack",
+    "revision": "f32a8c8a99bcb8436bcbacf2053ba460d293e9de",
+    "snapshot_digest": "494d0a15357c90caf1e3bf558a6774101761d312664704344f5f4ca5ef464114"
+  },
+  "states": {
+    "external_acceptance": {
+      "reason": "No external product or production artifact is part of this change.",
+      "scope": "source",
+      "status": "not_applicable"
+    },
+    "implementation": {
+      "scope": "source",
+      "status": "passed"
+    },
+    "merge": {
+      "scope": "source",
+      "status": "pending"
+    },
+    "release": {
+      "scope": "source",
+      "status": "pending"
+    },
+    "review": {
+      "scope": "source",
+      "status": "pending"
+    },
+    "validation": {
+      "reason": "Full uncached strict-mode completion gate and harness plus installer regression suites passed on the bound implementation snapshot.",
+      "scope": "source",
+      "status": "passed"
+    }
+  },
+  "summary": "Corrected CLI worker harness rewrite with explicit route policy, bounded briefs, isolated source snapshots, effective-route evidence, per-run/category usage records, environment doctor, preview-bound signed updates, output isolation, reliable write-scope checks, and failure exit codes. Non-Codex routes and live paid probes remain disabled pending verification.",
+  "supersedes": [
+    "cli-worker-harness-v1"
+  ]
+}
