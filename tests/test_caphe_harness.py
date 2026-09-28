@@ -202,6 +202,51 @@ class HarnessConfigTests(unittest.TestCase):
                 stream.truncate(64 * 1024 * 1024)
             self.assertIsNone(harness._tree_manifest(tmp, max_bytes=1024))
 
+    def test_bounded_result_truncates_sparse_file_without_full_read(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = Path(tmp) / "result.txt"
+            with result.open("wb") as stream:
+                stream.write(b"head")
+                stream.truncate(64 * 1024 * 1024)
+            data, truncated = harness._bounded_result(result, 1024)
+            self.assertTrue(truncated)
+            self.assertEqual(len(data), 1024)
+            self.assertEqual(result.stat().st_size, 1024)
+
+    def test_release_staging_force_adds_ignored_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source"
+            source.mkdir()
+            subprocess.run(["git", "-C", str(source), "init", "-q"], check=True)
+            (source / ".gitignore").write_text("ignored.txt\n")
+            (source / "ignored.txt").write_text("signed tracked payload")
+            env = {**os.environ, "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
+                   "GIT_AUTHOR_NAME": "test", "GIT_AUTHOR_EMAIL": "test@example.invalid",
+                   "GIT_COMMITTER_NAME": "test", "GIT_COMMITTER_EMAIL": "test@example.invalid"}
+            harness._stage_release_files(source, Path(tmp), env)
+            tracked = subprocess.run(["git", "-C", str(source), "ls-files", "-z"],
+                                     capture_output=True, check=True).stdout.split(b"\0")
+            self.assertIn(b"ignored.txt", tracked)
+
+    def test_snapshot_uses_captured_revision_after_head_moves(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            repo.mkdir()
+            subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+            source = repo / "value.txt"
+            source.write_text("captured")
+            subprocess.run(["git", "-C", str(repo), "add", "--all"], check=True)
+            commit_args = ["git", "-C", str(repo), "-c", "user.name=test", "-c",
+                           "user.email=test@example.invalid", "commit", "-qm"]
+            subprocess.run([*commit_args, "first"], check=True)
+            captured = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
+                                      capture_output=True, text=True, check=True).stdout.strip()
+            source.write_text("later")
+            subprocess.run(["git", "-C", str(repo), "add", "--all"], check=True)
+            subprocess.run([*commit_args, "second"], check=True)
+            snapshot = harness._snapshot_repo(repo, Path(tmp) / "snapshot", captured)
+            self.assertEqual((snapshot / "value.txt").read_text(), "captured")
+
     def test_snapshot_indexes_force_added_ignored_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp) / "repo"
@@ -264,6 +309,21 @@ class HarnessConfigTests(unittest.TestCase):
             ]
             with patch.object(harness, "run_worker") as launch:
                 with self.assertRaisesRegex(harness.HarnessError, "explicit allow_write"):
+                    harness.run_batch(config, tasks, execute=True)
+            launch.assert_not_called()
+
+    def test_batch_rejects_malformed_retry_id_before_dispatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = sample_config(Path(tmp) / "runs")
+            brief = Path(tmp) / "brief.md"
+            brief.write_text("brief")
+            tasks = [
+                {"category": "lookup-extraction", "repo": "/repo", "brief_file": str(brief)},
+                {"category": "lookup-extraction", "repo": "/repo", "brief_file": str(brief),
+                 "retry_of": "bad id"},
+            ]
+            with patch.object(harness, "run_worker") as launch:
+                with self.assertRaisesRegex(harness.HarnessError, "retry_of"):
                     harness.run_batch(config, tasks, execute=True)
             launch.assert_not_called()
 

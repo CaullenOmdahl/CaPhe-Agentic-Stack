@@ -151,14 +151,17 @@ def build_command(route, prompt_path, output_path, repo, config_profile="caphe-w
     return args
 
 
-def _snapshot_repo(repo, target):
+def _snapshot_repo(repo, target, revision=None):
     """Build a standalone tracked-only Git snapshot; no parent conversation or dirty files."""
     repo, target = Path(repo).resolve(), Path(target)
-    tree = subprocess.run(["git", "-C", str(repo), "ls-tree", "-r", "HEAD"], capture_output=True,
+    if revision is not None and (not isinstance(revision, str) or not re.fullmatch(r"[a-fA-F0-9]{40,64}", revision)):
+        raise HarnessError("source snapshot revision must be a verified Git object ID")
+    revision = revision or "HEAD"
+    tree = subprocess.run(["git", "-C", str(repo), "ls-tree", "-r", revision], capture_output=True,
                          timeout=20, env=_child_env("codex"))
     if tree.returncode or any(line.startswith(b"160000 commit ") for line in tree.stdout.splitlines()):
         raise HarnessError("source snapshot failed or contains submodules that need explicit handling")
-    archive = subprocess.run(["git", "-C", str(repo), "archive", "--format=tar", "HEAD"],
+    archive = subprocess.run(["git", "-C", str(repo), "archive", "--format=tar", revision],
                              capture_output=True, timeout=60, env=_child_env("codex"))
     if archive.returncode or len(archive.stdout) > 512 * 1024 * 1024:
         raise HarnessError("tracked source snapshot failed or exceeds the 512 MiB limit")
@@ -382,6 +385,23 @@ def _effective_route_verified(route, effective, workspace):
         return Path(cwd).resolve(strict=True) == Path(workspace).resolve(strict=True)
     except (OSError, RuntimeError):
         return False
+
+
+def _bounded_result(path, max_bytes):
+    descriptor = os.open(path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+    with os.fdopen(descriptor, "r+b") as result_stream:
+        info = os.fstat(result_stream.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise OSError("result is not a regular file")
+        data = result_stream.read(max_bytes)
+        truncated = info.st_size > max_bytes
+        if truncated:
+            result_stream.seek(0)
+            result_stream.write(data)
+            result_stream.truncate(max_bytes)
+        if hasattr(os, "fchmod"):
+            os.fchmod(result_stream.fileno(), 0o600)
+    return data, truncated
 
 
 def _child_env(client):
@@ -670,7 +690,7 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
         auth = _command_status("codex")
         if not auth["installed"] or not auth["authenticated"] or auth.get("auth_mode") != "chatgpt":
             raise HarnessError("Codex ChatGPT login is not verified; refusing this billing route")
-        workspace = _snapshot_repo(repo, run_dir / "workspace")
+        workspace = _snapshot_repo(repo, run_dir / "workspace", source.stdout.strip())
         baseline = _tree_manifest(workspace)
         if baseline is None:
             raise HarnessError("immutable source snapshot could not be inventoried")
@@ -741,12 +761,17 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
                 record["write_scope_verified"] = bool(changed is not None and _changes_allowed(changed, allowed_writes))
         if record["write_scope_verified"] is False and record.get("status") == "completed":
             record["status"] = "rejected_write_scope"
-    if output_path.exists() and output_path.is_file() and not output_path.is_symlink():
-        data = output_path.read_bytes()
-        if len(data) > route["max_output_bytes"]:
-            output_path.write_bytes(data[:route["max_output_bytes"]])
-            record["result_truncated"] = True
-    else:
+    try:
+        if output_path.is_file() and not output_path.is_symlink():
+            _, truncated = _bounded_result(output_path, route["max_output_bytes"])
+            if truncated:
+                record["result_truncated"] = True
+        else:
+            record["result_path"] = None
+    except OSError as error:
+        record["result_path"] = None
+        record["result_read_error"] = str(error)
+    if record.get("result_path") and not output_path.exists():
         record["result_path"] = None
     if record.get("route_verified") is not True and record.get("status") == "completed":
         record["status"] = "unverified"
@@ -784,9 +809,7 @@ def run_batch(config, tasks, *, execute=False, parent_run_id=None):
         if brief_path.stat().st_size > route["context_budget_tokens"] * 3:
             raise HarnessError("batch brief exceeds the route context budget")
         brief = brief_path.read_text(encoding="utf-8")
-        retry_of = task.get("retry_of")
-        if retry_of is not None and (not isinstance(retry_of, str) or len(retry_of) > 128):
-            raise HarnessError("retry_of must be a bounded run id")
+        retry_of = _validate_run_reference(task.get("retry_of"), "retry_of")
         prepared.append((route, task["repo"], brief, writes, retry_of))
 
     outcomes = [None] * len(prepared)
@@ -1025,8 +1048,12 @@ def _stage_release(tag, fingerprint, keyring, base):
     except (tarfile.TarError, OSError) as error:
         raise HarnessError("release archive could not be safely unpacked") from error
     _git(["init", "--quiet", str(source)], cwd=base, env=env)
-    _git(["-C", str(source), "-c", "core.hooksPath=/dev/null", "add", "--all"], cwd=base, env=env)
+    _stage_release_files(source, base, env)
     return source, hashlib.sha256(archive).hexdigest(), env
+
+
+def _stage_release_files(source, base, env):
+    _git(["-C", str(source), "-c", "core.hooksPath=/dev/null", "add", "--force", "--all"], cwd=base, env=env)
 
 
 def _load_staged_installer(stage):
