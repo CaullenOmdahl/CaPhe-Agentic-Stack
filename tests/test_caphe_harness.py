@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -36,6 +37,13 @@ def init_repo(path):
 
 
 class HarnessConfigTests(unittest.TestCase):
+    def test_route_membership_fields_must_be_strings(self):
+        for field in ("client", "effort", "permissions", "billing"):
+            config = sample_config("/tmp/runs")
+            config["routes"][0][field] = ["malformed"]
+            with self.subTest(field=field), self.assertRaisesRegex(harness.HarnessError, "fields must be strings"):
+                harness.validate_config(config)
+
     def test_allowed_write_paths_cannot_include_git_metadata(self):
         with self.assertRaisesRegex(harness.HarnessError, "not normalized"):
             harness._allowed_write_paths(["."])
@@ -383,6 +391,21 @@ class HarnessConfigTests(unittest.TestCase):
 
 
 class HarnessEvidenceTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "posix", "isolated process groups require POSIX")
+    def test_process_group_descendants_are_stopped_before_return(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / "late-write"
+            child = ("import pathlib,time; time.sleep(0.5); pathlib.Path(" + repr(str(marker))
+                     + ").write_text('escaped')")
+            parent = "import subprocess,sys; subprocess.Popen([sys.executable,'-c'," + repr(child) + "])"
+            started = harness.time.monotonic()
+            result = harness._run_process([sys.executable, "-c", parent], cwd=tmp, env=os.environ,
+                                          prompt="", timeout=3)
+            self.assertEqual(result[0], 0)
+            self.assertLess(harness.time.monotonic() - started, 3)
+            harness.time.sleep(0.7)
+            self.assertFalse(marker.exists())
+
     def test_failed_worker_status_returns_nonzero(self):
         with tempfile.TemporaryDirectory() as tmp:
             config_path = Path(tmp) / "harness.toml"

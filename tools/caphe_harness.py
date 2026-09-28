@@ -78,6 +78,8 @@ def validate_config(config):
         if not isinstance(category, str) or not re.fullmatch(r"[a-z][a-z0-9-]{0,63}", category) or category in seen:
             raise HarnessError("route categories must be unique lowercase identifiers")
         seen.add(category)
+        if any(not isinstance(route[field], str) for field in ("client", "effort", "permissions", "billing")):
+            raise HarnessError("route client/effort/permissions/billing fields must be strings")
         if route["client"] not in CLIENTS or not isinstance(route["model"], str) or not route["model"].strip():
             raise HarnessError("route client/model is invalid")
         if route["effort"] not in EFFORTS:
@@ -601,6 +603,28 @@ def codex_session_evidence(thread_id, sessions_root):
     return {"route": route, "usage": usage} if route or usage else None
 
 
+def _terminate_process_group(pgid, grace_seconds=1):
+    if os.name != "posix":
+        return
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    deadline = time.monotonic() + grace_seconds
+    while time.monotonic() < deadline:
+        try:
+            os.killpg(pgid, 0)
+        except ProcessLookupError:
+            return
+        except PermissionError:
+            break
+        time.sleep(0.025)
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
 def _run_process(argv, *, cwd, env, prompt, timeout):
     proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, start_new_session=(os.name == "posix"))
@@ -643,29 +667,23 @@ def _run_process(argv, *, cwd, env, prompt, timeout):
     except subprocess.TimeoutExpired:
         timed_out = True
         if os.name == "posix":
-            try:
-                os.killpg(proc.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
+            _terminate_process_group(proc.pid)
         else:
             proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            if os.name == "posix":
-                try:
-                    os.killpg(proc.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-            else:
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
                 proc.kill()
-            proc.wait()
+        proc.wait()
+    else:
+        # A client may exit successfully after daemonizing a child. Stop the
+        # isolated group before inspecting the snapshot and recording evidence.
+        _terminate_process_group(proc.pid)
     writer.join(timeout=2)
     for reader in readers:
         reader.join(timeout=5)
-    if any(reader.is_alive() for reader in readers):
-        for stream in (proc.stdout, proc.stderr):
-            stream.close()
+    for stream in (proc.stdout, proc.stderr):
+        stream.close()
     return (124 if timed_out else proc.returncode, bytes(captured["stdout"]), bytes(captured["stderr"]),
             timed_out, truncated["stdout"], truncated["stderr"])
 

@@ -92,7 +92,8 @@ def _sha(content):
 def owner_route_state(content):
     if _sha(content) in LEGACY_OWNERS_HASHES:
         return "legacy_generated"
-    normalized_content = b" ".join(content.split())
+    visible_content = re.sub(rb"<!--.*?-->", b" ", content, flags=re.DOTALL)
+    normalized_content = b" ".join(visible_content.split())
     exception = b" ".join(NATIVE_WORKER_EXCEPTION.split()) in normalized_content
     if any(b" ".join(gate.split()) in normalized_content for gate in LEGACY_MODEL_GATES) and not exception:
         return "legacy_conflict"

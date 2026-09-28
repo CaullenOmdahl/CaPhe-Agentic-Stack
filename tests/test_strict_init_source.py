@@ -27,6 +27,13 @@ class StrictInitSourceTests(unittest.TestCase):
         with self.assertRaisesRegex(initializer.InitError, "customized legacy model gate"):
             initializer.refresh_owner_gate(content)
 
+    def test_owner_exception_inside_html_comment_does_not_reconcile_gate(self):
+        content = (b"# Customized owner policy\n\n- architecture, model, language, or platform decisions;\n\n"
+                   b"<!--\n" + initializer.NATIVE_WORKER_EXCEPTION + b"-->\n")
+        self.assertEqual(initializer.owner_route_state(content), "legacy_conflict")
+        with self.assertRaisesRegex(initializer.InitError, "customized legacy model gate"):
+            initializer.refresh_owner_gate(content)
+
     def test_generated_owner_upgrade_replaces_the_matching_legacy_gate(self):
         prefix = b"# OWNERS\n\nGate:\n"
         suffix = b"\n\n**Approver(s):** Owner\n"
