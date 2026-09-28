@@ -182,8 +182,10 @@ Run `harness doctor` for read-only environment and profile-parser checks. `harne
 the starter route file only if it is missing. `harness doctor --probe` makes a live, small request for each
 enabled supported route and consumes that route's allowance; it is separate from the default checks. A
 route is not ready until the rollout confirms model, effort, and the restricted permission profile. Run
-`harness update` to preview the latest stable signed tag, then apply only that exact reviewed tag with
-`harness update --apply --tag vX.Y.Z`. Do not use an implicit branch update. Do not restart completed
+`harness update` to preview a stable signed tag. Review the identity and changes, then apply only that
+preview using its printed digest: `harness update --apply --tag vX.Y.Z --preview-digest <sha256>`.
+The apply step recomputes the plan and rejects any change from the saved preview. Do not use an implicit
+branch update. Do not restart completed
 workers just to change a route. `harness batch --tasks-file tasks.json` caps simultaneous worker
 processes at `max_workers`; add `--execute` only when you intend to consume provider usage.
 

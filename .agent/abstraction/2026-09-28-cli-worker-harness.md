@@ -38,8 +38,9 @@ than relying on Codex's built-in `spawn_agent` routing behavior.
   `--probe` runs a live request only for enabled routes and consumes that route's allowance. Doctor never
   logs in or installs a provider CLI.
 - Update checks only published, versioned releases whose annotated tag verifies against an independently
-  provisioned signing-key fingerprint. It displays release identity and an inventory change plan before
-  apply; apply requires the exact previewed tag and uses the existing inventory, rollback, and verification.
+  provisioned signing-key fingerprint. It persists an owner-only preview receipt and displays release identity,
+  plan digest, and inventory changes. Apply requires the exact tag and reviewed preview digest, recomputes
+  the plan, and uses the existing inventory, rollback, and verification.
   Missing releases, unverified tags, dirty source, or failed verification prevent activation.
 - Provider/model routes remain disabled until their client, authentication mode, invocation flags,
   effective-route evidence, and cost source are verified on that machine. OpenAI/ChatGPT subscription

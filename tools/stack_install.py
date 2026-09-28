@@ -404,7 +404,7 @@ def apply_runtime_plan(plan, *, inventory_root, fail_after=None):
             write(receipt_path, receipt_data, 0o600)
         if fail_after == len(destinations) + 1:
             raise InstallError("injected receipt failure")
-        return receipt
+        return {**receipt, "receipt_path": str(receipt_path)}
     except BaseException:
         for kind, destination, previous in reversed(journal):
             if kind == "created-directory":

@@ -300,6 +300,11 @@ def _child_env(client):
 
 
 def _safe_output_dir(path, repo):
+    root_probe = subprocess.run(["git", "-C", str(repo), "rev-parse", "--show-toplevel"],
+                                capture_output=True, text=True, timeout=20, env=_child_env("codex"))
+    if root_probe.returncode or not root_probe.stdout.strip():
+        raise HarnessError("source repository root could not be verified")
+    repo = Path(root_probe.stdout.strip()).resolve()
     candidate = Path(path).expanduser().absolute()
     if candidate.is_symlink():
         raise HarnessError("run output directory cannot be a symlink")
@@ -844,7 +849,7 @@ def _release_from_url(url):
     except urllib.error.HTTPError as error:
         if error.code == 404:
             raise HarnessError("no published GitHub release exists") from error
-            raise HarnessError("GitHub release lookup failed") from error
+        raise HarnessError("GitHub release lookup failed") from error
     except (OSError, urllib.error.URLError) as error:
         raise HarnessError("GitHub release lookup failed") from error
     return _parse_release(raw)
@@ -932,9 +937,55 @@ def _stage_release(tag, fingerprint, keyring, base):
     return source, hashlib.sha256(archive).hexdigest(), env
 
 
-def update_runtime(*, apply=False, tag=None):
+def _canonical_json(value):
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+
+
+def _write_update_preview(state, report):
+    payload = {"schema_version": 1, "report": report}
+    encoded = _canonical_json(payload)
+    digest = hashlib.sha256(encoded).hexdigest()
+    directory = state / "previews"
+    directory.mkdir(mode=0o700, exist_ok=True)
+    if directory.is_symlink() or directory.stat().st_uid != os.getuid():
+        raise HarnessError("update preview store is not a private owned directory")
+    directory.chmod(0o700)
+    path = directory / (digest + ".json")
+    contents = encoded + b"\n"
+    if path.exists() or path.is_symlink():
+        if path.is_symlink() or path.stat().st_uid != os.getuid() or path.read_bytes() != contents:
+            raise HarnessError("update preview receipt conflicts with its digest")
+    else:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(contents)
+            stream.flush()
+            os.fsync(stream.fileno())
+    return digest
+
+
+def _check_update_preview(state, digest, report):
+    if not isinstance(digest, str) or not re.fullmatch(r"[a-f0-9]{64}", digest):
+        raise HarnessError("apply requires the digest of a reviewed preview: --preview-digest <sha256>")
+    path = state / "previews" / (digest + ".json")
+    if path.is_symlink() or not path.is_file() or path.stat().st_uid != os.getuid():
+        raise HarnessError("reviewed update preview is missing or unsafe")
+    try:
+        raw = path.read_bytes()
+        payload = json.loads(raw)
+    except (OSError, json.JSONDecodeError) as error:
+        raise HarnessError("reviewed update preview could not be read") from error
+    if (hashlib.sha256(_canonical_json(payload)).hexdigest() != digest
+            or raw != _canonical_json(payload) + b"\n"
+            or payload != {"schema_version": 1, "report": report}):
+        raise HarnessError("release plan changed since preview; review a new preview before applying")
+
+
+def update_runtime(*, apply=False, tag=None, preview_digest=None):
     if apply and not tag:
-        raise HarnessError("apply requires the exact tag shown by a previous preview: --apply --tag vX.Y.Z")
+        raise HarnessError("apply requires the exact previewed tag: --apply --tag vX.Y.Z --preview-digest <sha256>")
+    if apply and (not isinstance(preview_digest, str) or not re.fullmatch(r"[a-f0-9]{64}", preview_digest)):
+        raise HarnessError("apply requires the digest of a reviewed preview: --preview-digest <sha256>")
     release = release_by_tag(tag) if tag else latest_release()
     fingerprint, keyring = _release_trust()
     target_text = os.environ.get("CAPHE_RUNTIME")
@@ -967,13 +1018,16 @@ def update_runtime(*, apply=False, tag=None):
         changes["retired"] = sorted(set(previous) - set(incoming))
         report = {"status": "planned", "release": release, "tag_signature_fingerprint": fingerprint,
                   "archive_sha256": archive_digest, "current_inventory_sha256": current_digest,
-                  "new_inventory_sha256": plan["source_digest"], "changes": changes,
-                  "apply_available": bool(apply)}
+                  "new_inventory_sha256": plan["source_digest"], "changes": changes}
+        if apply:
+            _check_update_preview(state, preview_digest, report)
+        else:
+            report["preview_digest"] = _write_update_preview(state, report)
         if apply:
             inventory_root = state / "install-inventory"
             receipt = stack_install.apply_runtime_plan(plan, inventory_root=inventory_root)
-            report.update(status="applied", verified=receipt["verified"], receipt_path=str(
-                stack_install.runtime_receipt_path(inventory_root, plan["source_digest"], target)))
+            report.update(status="applied", verified=receipt["verified"],
+                          receipt_path=receipt["receipt_path"], preview_digest=preview_digest)
         return report
 
 
@@ -987,6 +1041,7 @@ def main(argv=None):
     update_parser = sub.add_parser("update", help="preview a signed tagged runtime release")
     update_parser.add_argument("--apply", action="store_true", help="apply the verified release plan")
     update_parser.add_argument("--tag", help="exact stable release tag to plan or apply")
+    update_parser.add_argument("--preview-digest", help="digest printed by the reviewed update preview")
     worker_parser = sub.add_parser("worker", help="run a bounded worker using an explicit route")
     worker_parser.add_argument("--config", default=str(default_config_path()))
     worker_parser.add_argument("--repo", default=".")
@@ -1006,7 +1061,7 @@ def main(argv=None):
         if args.command == "doctor":
             result = doctor(args.config, apply=args.apply, probe=args.probe)
         elif args.command == "update":
-            result = update_runtime(apply=args.apply, tag=args.tag)
+            result = update_runtime(apply=args.apply, tag=args.tag, preview_digest=args.preview_digest)
         elif args.command == "batch":
             config, _ = load_config(args.config)
             task_path = Path(args.tasks_file).expanduser()
@@ -1031,7 +1086,17 @@ def main(argv=None):
                                 execute=args.execute, allowed_writes=args.allow_write,
                                 parent_run_id=args.parent_run_id, retry_of=args.retry_of)
         print(json.dumps(result, sort_keys=True))
-        return 1 if result.get("status") == "partial_or_failed" else 0
+        if args.command == "doctor":
+            return 0
+        if args.command == "batch":
+            return 0 if result.get("status") == "completed" else 1
+        if args.command == "worker":
+            if result.get("status") == "planned":
+                return 0
+            return 0 if (result.get("status") == "completed" and result.get("route_verified") is True
+                         and result.get("write_scope_verified", True) is True) else 1
+        return 0 if (result.get("status") == "planned" or
+                      result.get("status") == "applied" and result.get("verified") is True) else 1
     except (HarnessError, OSError, subprocess.SubprocessError, ValueError) as error:
         print(json.dumps({"status": "error", "reason": str(error)}), file=sys.stderr)
         return 2

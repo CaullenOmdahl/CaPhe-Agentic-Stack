@@ -1,4 +1,6 @@
 import json
+import contextlib
+import io
 import os
 from pathlib import Path
 import shutil
@@ -81,8 +83,35 @@ class HarnessConfigTests(unittest.TestCase):
                                "/definitely/missing", "x" * 4000)
 
     def test_signed_update_apply_requires_the_previewed_exact_tag(self):
-        with self.assertRaisesRegex(harness.HarnessError, "exact tag"):
+        with self.assertRaisesRegex(harness.HarnessError, "exact previewed tag"):
             harness.update_runtime(apply=True)
+        with self.assertRaisesRegex(harness.HarnessError, "reviewed preview"):
+            harness.update_runtime(apply=True, tag="v1.2.3")
+
+    def test_update_apply_requires_an_unchanged_saved_preview(self):
+        report = {"status": "planned", "tag": "v1.2.3", "changes": {"added": ["bin/harness"]}}
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp)
+            digest = harness._write_update_preview(state, report)
+            harness._check_update_preview(state, digest, report)
+            with self.assertRaisesRegex(harness.HarnessError, "changed since preview"):
+                harness._check_update_preview(state, digest, {**report, "tag": "v1.2.4"})
+
+    def test_release_lookup_reports_non_not_found_http_errors(self):
+        error = harness.urllib.error.HTTPError("https://github.invalid/release", 503, "unavailable", {}, None)
+        with patch.object(harness.urllib.request, "urlopen", side_effect=error):
+            with self.assertRaisesRegex(harness.HarnessError, "release lookup failed"):
+                harness._release_from_url("https://github.invalid/release")
+        error.close()
+
+    def test_subdirectory_worker_cannot_place_output_in_repository_sibling(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            subprocess.run(["git", "-C", str(root), "init", "-q"], check=True)
+            nested = root / "src"
+            nested.mkdir()
+            with self.assertRaisesRegex(harness.HarnessError, "separate from the source repository"):
+                harness._safe_output_dir(root / "runs", nested)
 
     def test_batch_launches_only_enabled_routes_and_returns_categories(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -104,6 +133,23 @@ class HarnessConfigTests(unittest.TestCase):
 
 
 class HarnessEvidenceTests(unittest.TestCase):
+    def test_failed_worker_status_returns_nonzero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "harness.toml"
+            config_path.write_text('schema_version = 1\nmax_workers = 1\noutput_root = ' +
+                                   json.dumps(tmp + '/runs') + '\n'
+                                   '[[routes]]\ncategory = "lookup-extraction"\nclient = "codex"\n'
+                                   'model = "gpt-5.6-luna"\neffort = "low"\ncontext_budget_tokens = 1000\n'
+                                   'permissions = "read-only"\ntimeout_seconds = 30\nmax_output_bytes = 1024\n'
+                                   'billing = "chatgpt"\nenabled = true\n')
+            brief = Path(tmp) / "brief.md"
+            brief.write_text("brief")
+            with patch.object(harness, "run_worker", return_value={"status": "unverified"}), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                result = harness.main(["worker", "--config", str(config_path), "--category",
+                                       "lookup-extraction", "--brief-file", str(brief)])
+            self.assertEqual(result, 1)
+
     def test_codex_route_requires_unique_client_rollout_context(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "sessions" / "2026" / "09" / "28"

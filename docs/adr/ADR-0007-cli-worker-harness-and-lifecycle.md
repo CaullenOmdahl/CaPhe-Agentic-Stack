@@ -48,8 +48,11 @@ starter config only when absent; it never overwrites an existing file. It report
 credential variable names without reading or printing values and never installs tools or logs in.
 
 `harness update` obtains only a published tagged release whose annotated tag verifies against an
-independently provisioned signing-key fingerprint, shows identity and changes before an explicit apply
-of that exact tag, reuses the inventory-bound transactional installer, and verifies the installed artifact. The trust root is
+independently provisioned signing-key fingerprint, persists an owner-only preview receipt, and prints
+its digest with release identity and planned changes. Apply requires the exact tag and reviewed preview
+digest; it recomputes the plan and refuses if the tag, signature, target inventory, or file changes differ.
+It reuses the inventory-bound transactional installer, returns its selected verification receipt path,
+and verifies the installed artifact. The trust root is
 not updated by the payload it authorizes. It never tracks `main` implicitly. No release currently exists,
 so update operations must report that state rather than silently using a branch or untagged source.
 

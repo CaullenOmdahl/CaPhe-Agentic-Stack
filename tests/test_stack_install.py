@@ -52,6 +52,7 @@ class InstallContracts(unittest.TestCase):
             self.assertTrue((target / "user-note").exists())
             self.assertTrue((target / "tools" / "tool.py").exists())
             self.assertTrue(first["verified"] and second["verified"])
+            self.assertTrue(Path(first["receipt_path"]).is_file())
             self.assertEqual((inventory.stat().st_mode & 0o077), 0)
 
     def test_source_mutation_rejects_apply_before_target_write(self):
