@@ -274,8 +274,10 @@ def _worktree_changes(root):
     root = Path(root).resolve()
     proc = subprocess.run(["git", "-C", str(root), "diff", "--name-only", "--no-renames", "-z", "HEAD"],
                           capture_output=True, timeout=20, env=_child_env("codex"))
-    untracked = subprocess.run(["git", "-C", str(root), "ls-files", "--others", "--exclude-standard",
-                                "--ignored", "--directory", "-z"],
+    # Include both ignored and ordinary untracked paths; either can represent an
+    # out-of-scope worker write. `--exclude-standard` and `--ignored` together
+    # select only ignored files and silently omit ordinary untracked writes.
+    untracked = subprocess.run(["git", "-C", str(root), "ls-files", "--others", "--directory", "-z"],
                                capture_output=True, timeout=20, env=_child_env("codex"))
     if proc.returncode or untracked.returncode:
         return None
@@ -662,7 +664,6 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
 
 
 def run_batch(config, tasks, *, execute=False, parent_run_id=None):
-    parent_run_id = _validate_run_reference(parent_run_id, "parent_run_id")
     parent_run_id = _validate_run_reference(parent_run_id, "parent_run_id")
     if not isinstance(tasks, list) or not 1 <= len(tasks) <= 64:
         raise HarnessError("batch must contain between 1 and 64 worker tasks")

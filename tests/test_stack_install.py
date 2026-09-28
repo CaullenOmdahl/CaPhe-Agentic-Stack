@@ -856,6 +856,7 @@ class InstallContracts(unittest.TestCase):
             self.assertEqual(self.snapshot(target), previous_runtime)
             result = installer.apply_runtime_plan(plan, inventory_root=private)
             self.assertEqual(result["retired_files"], ["tools/release-c.py"])
+            self.assertEqual(Path(result["receipt_path"]), supplementary)
             self.assertTrue(installer.verify_runtime_plan(plan))
             returned = receipts(); self.assertEqual(len(returned), 4)
             self.assertEqual({name: returned[name] for name in before}, before)

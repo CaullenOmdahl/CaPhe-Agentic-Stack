@@ -113,6 +113,19 @@ class HarnessConfigTests(unittest.TestCase):
             with self.assertRaisesRegex(harness.HarnessError, "separate from the source repository"):
                 harness._safe_output_dir(root / "runs", nested)
 
+    def test_write_scope_sees_ordinary_and_ignored_untracked_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            subprocess.run(["git", "-C", str(root), "init", "-q"], check=True)
+            (root / ".gitignore").write_text("ignored.out\n")
+            subprocess.run(["git", "-C", str(root), "add", ".gitignore"], check=True)
+            subprocess.run(["git", "-C", str(root), "-c", "user.name=test", "-c",
+                            "user.email=test@example.invalid", "commit", "-qm", "init"], check=True)
+            (root / "ordinary.out").write_text("out of scope")
+            (root / "ignored.out").write_text("out of scope")
+            changed = set(harness._worktree_changes(root))
+            self.assertEqual(changed, {"ignored.out", "ordinary.out"})
+
     def test_batch_launches_only_enabled_routes_and_returns_categories(self):
         with tempfile.TemporaryDirectory() as tmp:
             config = sample_config(Path(tmp) / "runs")
