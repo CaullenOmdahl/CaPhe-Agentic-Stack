@@ -274,10 +274,9 @@ def _worktree_changes(root):
     root = Path(root).resolve()
     proc = subprocess.run(["git", "-C", str(root), "diff", "--name-only", "--no-renames", "-z", "HEAD"],
                           capture_output=True, timeout=20, env=_child_env("codex"))
-    # Include both ignored and ordinary untracked paths; either can represent an
-    # out-of-scope worker write. `--exclude-standard` and `--ignored` together
-    # select only ignored files and silently omit ordinary untracked writes.
-    untracked = subprocess.run(["git", "-C", str(root), "ls-files", "--others", "--directory", "-z"],
+    # Include both ignored and ordinary untracked files at file granularity;
+    # directory roll-ups cannot be compared to a declared individual output.
+    untracked = subprocess.run(["git", "-C", str(root), "ls-files", "--others", "-z"],
                                capture_output=True, timeout=20, env=_child_env("codex"))
     if proc.returncode or untracked.returncode:
         return None
@@ -308,14 +307,12 @@ def _safe_output_dir(path, repo):
         raise HarnessError("source repository root could not be verified")
     repo = Path(root_probe.stdout.strip()).resolve()
     candidate = Path(path).expanduser().absolute()
-    if candidate.is_symlink():
-        raise HarnessError("run output directory cannot be a symlink")
+    for component in (candidate, *candidate.parents):
+        if component.is_symlink():
+            raise HarnessError("run output path cannot contain symlinks")
     root = candidate.resolve(strict=False)
     if root == repo or root.is_relative_to(repo) or repo.is_relative_to(root):
         raise HarnessError("run output must be separate from the source repository")
-    for ancestor in (root, *root.parents):
-        if ancestor.is_symlink():
-            raise HarnessError("run output path contains a symlink")
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     if root.stat().st_uid != os.getuid():
         raise HarnessError("run output directory is not owned by the current user")

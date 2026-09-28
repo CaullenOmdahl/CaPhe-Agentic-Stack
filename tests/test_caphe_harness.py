@@ -113,6 +113,21 @@ class HarnessConfigTests(unittest.TestCase):
             with self.assertRaisesRegex(harness.HarnessError, "separate from the source repository"):
                 harness._safe_output_dir(root / "runs", nested)
 
+    def test_output_root_rejects_symlinked_parent_component(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            subprocess.run(["git", "-C", str(root), "init", "-q"], check=True)
+            external = root.parent / (root.name + "-external")
+            external.mkdir()
+            alias = root / "alias"
+            alias.symlink_to(external, target_is_directory=True)
+            try:
+                with self.assertRaisesRegex(harness.HarnessError, "symlinks"):
+                    harness._safe_output_dir(alias / "runs", root)
+            finally:
+                alias.unlink()
+                external.rmdir()
+
     def test_write_scope_sees_ordinary_and_ignored_untracked_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()
@@ -123,8 +138,12 @@ class HarnessConfigTests(unittest.TestCase):
                             "user.email=test@example.invalid", "commit", "-qm", "init"], check=True)
             (root / "ordinary.out").write_text("out of scope")
             (root / "ignored.out").write_text("out of scope")
+            nested_file = "src/new_dir/output.txt"
+            (root / nested_file).parent.mkdir(parents=True)
+            (root / nested_file).write_text("declared output")
             changed = set(harness._worktree_changes(root))
-            self.assertEqual(changed, {"ignored.out", "ordinary.out"})
+            self.assertEqual(changed, {"ignored.out", "ordinary.out", nested_file})
+            self.assertTrue(harness._changes_allowed([nested_file], [nested_file]))
 
     def test_batch_launches_only_enabled_routes_and_returns_categories(self):
         with tempfile.TemporaryDirectory() as tmp:
