@@ -1,0 +1,41 @@
+schema_version = 1
+max_workers = 2
+output_root = "~/.local/state/caphe/runs"
+
+# These examples are disabled until a machine has verified the client, account mode,
+# model/effort support, and effective-route evidence with `harness doctor --probe`.
+[[routes]]
+category = "lookup-extraction"
+client = "codex"
+model = "gpt-5.6-luna"
+effort = "low"
+context_budget_tokens = 12000
+permissions = "read-only"
+timeout_seconds = 300
+max_output_bytes = 8000
+billing = "chatgpt"
+enabled = false
+
+[[routes]]
+category = "settled-implementation"
+client = "codex"
+model = "gpt-5.6-sol"
+effort = "medium"
+context_budget_tokens = 24000
+permissions = "worktree-write"
+timeout_seconds = 900
+max_output_bytes = 16000
+billing = "chatgpt"
+enabled = false
+
+[[routes]]
+category = "planning-architecture"
+client = "codex"
+model = "gpt-6-astra"
+effort = "high"
+context_budget_tokens = 32000
+permissions = "read-only"
+timeout_seconds = 900
+max_output_bytes = 16000
+billing = "chatgpt"
+enabled = false

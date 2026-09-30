@@ -76,11 +76,13 @@ CI, or an uncached full local run when CI is absent or incomplete.
 ## Efficient Execution
 
 Collect bounded, source-linked context once per decision; refresh on source changes. Keep private task
-continuation and existing scoped authorization outside Git. Delegate independent bounded work with an
-explicit model, effort, acceptance contract, and one repair attempt; preserve coordinator ownership and
-the approved independent review route. Use deterministic preparation and status queries for routine work.
-Promote cheaper routes only from paired accepted-task evidence that includes parent, retry, and child
-cost. Follow the installed Strict Mode methodology for runtime commands and evidence formats.
+continuation and existing scoped authorization outside Git. For harness-managed delegation, use
+`harness worker` with a versioned task-category route that explicitly binds client, model, effort, context,
+permissions, and billing. Do not use Codex `spawn_agent` or select routes in prompt prose. Workers receive
+fresh briefs and return files; never copy parent conversation history. If route evidence or filesystem
+isolation is unverified, keep the work with the coordinator. Preserve coordinator ownership and the
+approved independent review route. Account for parent, retry, and worker usage in any savings claim.
+Follow the installed Strict Mode methodology for runtime commands and evidence formats.
 
 ## Review Rule
 

@@ -34,8 +34,11 @@ complete matrix.
 ## Human gates
 
 Stop for explicit approval on security/auth/secrets, domain invariants, schemas and migrations, release
-or deploy order, architecture/language/model choices, money/legal/payroll, production-readiness claims,
+or deploy order, architecture/language/model-policy choices, money/legal/payroll, production-readiness claims,
 irreversible actions, or a real unresolved fork. Nothing self-merges past a gate.
+Harness-managed worker routes come from the reviewed, versioned route table. Keep routes disabled until
+the provider account, effective route, and filesystem boundary are verified. Changing a pinned owner
+policy or canonical reviewer route still requires its named approval.
 
 ## Verification
 
@@ -119,13 +122,20 @@ Consult existing authorization before asking again. Deployment approval does not
 
 ## Delegation and preparation
 
-Treat model, effort, service tier, and context size as one route. Keep the incumbent for unqualified task
-classes. Probe live capabilities; a catalog label alone does not prove authentication. Use
-`tools/stack_route.py` to validate an explicit contract, observed capabilities, and trusted owner policy.
-The coordinator retains architecture, ambiguous acceptance, integration, and escalation. Use a fresh
-bounded child context for independent extraction or scoped work, with explicit model/effort, allowed
-writes, checks, acceptance, output limits, and one repair attempt. Cap ordinary execution at 64 workers or the active agent environment limit, whichever is lower;
-do not recursively delegate. Full-history forks inherit their model and effort.
+Treat model, effort, service tier, and context size as one route. Harness-managed workers are separate
+CLI processes launched with `harness worker` and a task route from the versioned TOML file. Never use
+Codex `spawn_agent` for this delegation path or select the model in prompt prose. The harness pins model,
+effort, context budget, billing, permission profile, timeout, and output limits. Workers get a fresh bounded
+brief and tracked-only source snapshot, not the coordinator's conversation. Writes are restricted to
+explicitly listed paths and validated before integration. If doctor or runtime route evidence is incomplete,
+keep the work with the coordinator. Non-Codex providers remain disabled until their account, billing,
+effective-route evidence, and isolation adapter are implemented and reviewed.
+
+Use `tools/stack_route.py` only for a trusted evaluated owner policy; its incumbent and promotion rules
+remain separate from the local CLI route table. Remote registry dispatch retains its separate pilot,
+capability, and isolation requirements. The coordinator retains architecture, ambiguous acceptance,
+integration, and escalation. Do not recursively delegate. Record parent, retries, and every worker's
+categorized usage when evaluating savings; do not restart completed workers just to change models.
 
 After a failed bounded repair, escalate the task or tighten its acceptance contract. Count that repair,
 parent inspection, and all children when evaluating savings. Independent canonical PR review stays on its

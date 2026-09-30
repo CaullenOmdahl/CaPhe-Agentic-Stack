@@ -1,0 +1,87 @@
+{
+  "change_id": "cli-worker-harness",
+  "decision": "ADR-0007",
+  "evidence": [
+    {
+      "kind": "file",
+      "reference": "docs/adr/ADR-0007-cli-worker-harness-and-lifecycle.md"
+    },
+    {
+      "kind": "file",
+      "reference": "tools/caphe_harness.py"
+    },
+    {
+      "kind": "file",
+      "reference": "tests/test_caphe_harness.py"
+    },
+    {
+      "kind": "url",
+      "reference": "https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/pull/15"
+    },
+    {
+      "kind": "check",
+      "reference": "Real user systemd scope on Fedora 44 stops a session-detached descendant before return while a control run without the scope lets it write"
+    },
+    {
+      "kind": "check",
+      "reference": "Real Codex Linux sandbox 0.157 and 0.158 enforces the worker profile with only the declared directory writable and Codex credentials unreadable"
+    },
+    {
+      "kind": "check",
+      "reference": "Linux worker launch works after removing the scope wait flag that systemd rejected"
+    },
+    {
+      "kind": "check",
+      "reference": "Full uncached test suite plus shell syntax and strict confer isolation and public safety passed on the bound revision"
+    },
+    {
+      "kind": "check",
+      "reference": "Independent local review by a different model family resolved every finding open on the prior head and found no blocking defects in the fixes"
+    },
+    {
+      "kind": "check",
+      "reference": "Linux sandbox grants widen to the nearest directory only for the sandbox while write verification stays exact"
+    }
+  ],
+  "id": "cli-worker-harness-v8",
+  "lane": "full-risk",
+  "schema_version": 2,
+  "source": {
+    "repository": "CaullenOmdahl/CaPhe-Agentic-Stack",
+    "revision": "d3d8fa7a0f31df30e3b66828f89467622d4fb9a5",
+    "snapshot_digest": "efc97d1d4241b43dfc92b2b8f5d9a2e89638974b6322f1c0a87d8709aed7726b"
+  },
+  "states": {
+    "external_acceptance": {
+      "reason": "No external product or production artifact is part of this change.",
+      "scope": "source",
+      "status": "not_applicable"
+    },
+    "implementation": {
+      "scope": "source",
+      "status": "passed"
+    },
+    "merge": {
+      "scope": "source",
+      "status": "pending"
+    },
+    "release": {
+      "scope": "source",
+      "status": "pending"
+    },
+    "review": {
+      "reason": "Remote Codex review was quota-limited, so one independent local reviewer from another model family reviewed the fixes and found no blocking defects.",
+      "scope": "source",
+      "status": "passed"
+    },
+    "validation": {
+      "reason": "Real-artifact containment and sandbox checks ran on an operational Linux user manager; prior records certified these without running them.",
+      "scope": "source",
+      "status": "passed"
+    }
+  },
+  "summary": "Harness verified on a real Linux host: worker containment, sandbox profile, and all review findings open on the prior head.",
+  "supersedes": [
+    "cli-worker-harness-v7"
+  ]
+}

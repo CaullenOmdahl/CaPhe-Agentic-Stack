@@ -1,0 +1,82 @@
+{
+  "change_id": "cli-worker-harness",
+  "decision": "ADR-0007",
+  "evidence": [
+    {
+      "kind": "file",
+      "reference": "docs/adr/ADR-0007-cli-worker-harness-and-lifecycle.md"
+    },
+    {
+      "kind": "file",
+      "reference": "tools/caphe_harness.py"
+    },
+    {
+      "kind": "file",
+      "reference": "strict-mode/bin/strict_init.py"
+    },
+    {
+      "kind": "file",
+      "reference": "tests/test_caphe_harness.py"
+    },
+    {
+      "kind": "file",
+      "reference": "tests/test_strict_init_source.py"
+    },
+    {
+      "kind": "url",
+      "reference": "https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/pull/15"
+    },
+    {
+      "kind": "check",
+      "reference": "Full uncached completion gate passed on this source snapshot."
+    },
+    {
+      "kind": "check",
+      "reference": "Write scope tests cover ordinary ignored and nested declared outputs."
+    },
+    {
+      "kind": "check",
+      "reference": "Owner gate migration tests cover each supported legacy string."
+    }
+  ],
+  "id": "cli-worker-harness-v3",
+  "lane": "full-risk",
+  "schema_version": 2,
+  "source": {
+    "repository": "CaullenOmdahl/CaPhe-Agentic-Stack",
+    "revision": "a7463d3d5d5d641707c0087466cfacd856c998e6",
+    "snapshot_digest": "9908fa2801a9791c8ab1b15581cda598139ad1d749b9a9a69685d9747c1e26f5"
+  },
+  "states": {
+    "external_acceptance": {
+      "reason": "No external product or production artifact is part of this change.",
+      "scope": "source",
+      "status": "not_applicable"
+    },
+    "implementation": {
+      "scope": "source",
+      "status": "passed"
+    },
+    "merge": {
+      "scope": "source",
+      "status": "pending"
+    },
+    "release": {
+      "scope": "source",
+      "status": "pending"
+    },
+    "review": {
+      "scope": "source",
+      "status": "pending"
+    },
+    "validation": {
+      "reason": "Full uncached strict-mode completion gate plus harness installer and initializer regressions passed on the bound source snapshot.",
+      "scope": "source",
+      "status": "passed"
+    }
+  },
+  "summary": "CLI worker harness rewrite with deterministic routing configuration brief-only inputs sandboxed tracked snapshots runtime route checks per-run usage attribution safe doctor preview-bound signed updater accurate write-scope checks and portable legacy owner migration. Non-Codex routes and live paid probes remain disabled pending verification.",
+  "supersedes": [
+    "cli-worker-harness-v2"
+  ]
+}

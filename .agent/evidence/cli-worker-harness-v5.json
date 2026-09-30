@@ -1,0 +1,94 @@
+{
+  "change_id": "cli-worker-harness",
+  "decision": "ADR-0007",
+  "evidence": [
+    {
+      "kind": "file",
+      "reference": "docs/adr/ADR-0007-cli-worker-harness-and-lifecycle.md"
+    },
+    {
+      "kind": "file",
+      "reference": "tools/caphe_harness.py"
+    },
+    {
+      "kind": "file",
+      "reference": "strict-mode/bin/strict_init.py"
+    },
+    {
+      "kind": "file",
+      "reference": "tests/test_caphe_harness.py"
+    },
+    {
+      "kind": "file",
+      "reference": "tests/test_strict_init_source.py"
+    },
+    {
+      "kind": "url",
+      "reference": "https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/pull/15"
+    },
+    {
+      "kind": "check",
+      "reference": "Full uncached completion gate passed on this source snapshot."
+    },
+    {
+      "kind": "check",
+      "reference": "Write scope tests cover ordinary ignored and nested declared outputs."
+    },
+    {
+      "kind": "check",
+      "reference": "Owner gate migration tests cover each supported legacy string."
+    },
+    {
+      "kind": "check",
+      "reference": "Linux systemd scopes provide descendant cleanup and unsupported hosts fail closed"
+    },
+    {
+      "kind": "check",
+      "reference": "Signed updater requires executable bin harness while generic runtime installer accepts legacy payloads"
+    },
+    {
+      "kind": "check",
+      "reference": "Strict completion gate passed on source revision 9c680b1c92bbce724432436aa4429178d24d2f79"
+    }
+  ],
+  "id": "cli-worker-harness-v5",
+  "lane": "full-risk",
+  "schema_version": 2,
+  "source": {
+    "repository": "CaullenOmdahl/CaPhe-Agentic-Stack",
+    "revision": "9c680b1c92bbce724432436aa4429178d24d2f79",
+    "snapshot_digest": "cb6b384ca02e200c277b5be31acf946114a5a5ec1c2d23d03f8de0fe084ede88"
+  },
+  "states": {
+    "external_acceptance": {
+      "reason": "No external product or production artifact is part of this change.",
+      "scope": "source",
+      "status": "not_applicable"
+    },
+    "implementation": {
+      "scope": "source",
+      "status": "passed"
+    },
+    "merge": {
+      "scope": "source",
+      "status": "pending"
+    },
+    "release": {
+      "scope": "source",
+      "status": "pending"
+    },
+    "review": {
+      "scope": "source",
+      "status": "pending"
+    },
+    "validation": {
+      "reason": "Strict completion gate passed on the bound source. Current installer and harness tests plus the exact retained base installer suite passed.",
+      "scope": "source",
+      "status": "passed"
+    }
+  },
+  "summary": "CLI worker harness with deterministic routing, brief-only inputs, restricted snapshots, verified route telemetry, signed self-update, safe doctor, and Linux systemd-scope descendant containment. Signed updates require an executable bin/harness entrypoint; general inventoried runtime installs remain compatible with other payloads. Worker execution fails closed without verified OS-managed containment.",
+  "supersedes": [
+    "cli-worker-harness-v4"
+  ]
+}

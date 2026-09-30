@@ -1,0 +1,94 @@
+{
+  "change_id": "cli-worker-harness",
+  "decision": "ADR-0007",
+  "evidence": [
+    {
+      "kind": "file",
+      "reference": "docs/adr/ADR-0007-cli-worker-harness-and-lifecycle.md"
+    },
+    {
+      "kind": "file",
+      "reference": "tools/caphe_harness.py"
+    },
+    {
+      "kind": "file",
+      "reference": "strict-mode/bin/strict_init.py"
+    },
+    {
+      "kind": "file",
+      "reference": "tests/test_caphe_harness.py"
+    },
+    {
+      "kind": "file",
+      "reference": "tests/test_strict_init_source.py"
+    },
+    {
+      "kind": "url",
+      "reference": "https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/pull/15"
+    },
+    {
+      "kind": "check",
+      "reference": "Full uncached completion gate passed on this source snapshot."
+    },
+    {
+      "kind": "check",
+      "reference": "Write scope tests cover ordinary ignored and nested declared outputs."
+    },
+    {
+      "kind": "check",
+      "reference": "Owner gate migration tests cover each supported legacy string."
+    },
+    {
+      "kind": "check",
+      "reference": "Linux systemd scopes provide descendant cleanup and unsupported hosts fail closed"
+    },
+    {
+      "kind": "check",
+      "reference": "Runtime installer requires the bin harness entrypoint"
+    },
+    {
+      "kind": "check",
+      "reference": "Strict completion gate passed on source revision 3ecc21f2559b65a20d03824d0911ca2b99dbd7e1"
+    }
+  ],
+  "id": "cli-worker-harness-v4",
+  "lane": "full-risk",
+  "schema_version": 2,
+  "source": {
+    "repository": "CaullenOmdahl/CaPhe-Agentic-Stack",
+    "revision": "3ecc21f2559b65a20d03824d0911ca2b99dbd7e1",
+    "snapshot_digest": "f2fa02dbef32ce3da0aaa55c98dc992871e856cd20cb8f1a9ebe6b7577caee13"
+  },
+  "states": {
+    "external_acceptance": {
+      "reason": "No external product or production artifact is part of this change.",
+      "scope": "source",
+      "status": "not_applicable"
+    },
+    "implementation": {
+      "scope": "source",
+      "status": "passed"
+    },
+    "merge": {
+      "scope": "source",
+      "status": "pending"
+    },
+    "release": {
+      "scope": "source",
+      "status": "pending"
+    },
+    "review": {
+      "scope": "source",
+      "status": "pending"
+    },
+    "validation": {
+      "reason": "Strict completion gate and all 508 repository tests passed on the bound source snapshot; Linux scope dispatch remains unavailable on this macOS host and correctly fails closed.",
+      "scope": "source",
+      "status": "passed"
+    }
+  },
+  "summary": "CLI worker harness with deterministic routing, brief-only inputs, restricted snapshots, verified route telemetry, signed self-update, safe doctor, and Linux systemd-scope descendant containment. Worker execution fails closed on hosts without verified OS-managed containment; provider routes and live paid probes remain disabled pending verification.",
+  "supersedes": [
+    "cli-worker-harness-v3"
+  ]
+}

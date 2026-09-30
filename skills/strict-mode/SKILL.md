@@ -27,5 +27,8 @@ Pre-commit `FAST GREEN` is focused feedback only. Before completion, run
 and write immutable v2 `.agent/evidence/` snapshots with the PR evidence. Keep continuation and scoped
 authorization private outside Git. Use the installed runtime tools for bounded context, declared
 preparation, status polling, and explicit model/effort routing; read `~/.local/share/caphe/runtime/docs/efficiency-runtime.md` in that
-runtime only when those operations are needed. Retain the incumbent until paired workflow evidence
-qualifies a cheaper route, and include parent, retry, and child cost in the comparison.
+runtime only when those operations are needed. Harness-managed workers use the versioned `harness`
+route table and subprocess adapter, never native `spawn_agent`. If `harness doctor` reports a route is
+not ready, keep work with the coordinator; do not bypass the route guard. Workers get fresh bounded
+briefs and isolated source scopes. Preserve pinned owner policies and the independent reviewer route;
+include parent, retry, and child usage in any measured comparison.

@@ -13,7 +13,9 @@ work per total cost, including parent inspection and repairs. A lower token pric
 | Wait for work | `tools/stack_watch.py` | Read-only JSON query, total deadline, status changes and actionable failures |
 | Continue a task | `tools/stack_state.py` | Owner-only, repository-scoped state outside Git; original authorization preserved |
 | Prepare generated files | `tools/stack_prepare.py` | Recipe, input, toolchain, environment and output freshness; failures never count as fresh |
-| Choose model and effort | `tools/stack_route.py` | Closed delegation contract, live capabilities, explicit owner policy, incumbent fallback |
+| Resolve evaluated owner routes | `tools/stack_route.py` | Closed delegation contract, live capabilities, explicit owner policy, incumbent fallback within that policy |
+| Launch isolated CLI workers | `bin/harness`, `tools/caphe_harness.py`, `strict-mode/templates/harness.toml` | Explicit per-category route, bounded brief, tracked-only snapshot, client rollout verification; non-Codex adapters remain disabled |
+| Inspect and update harness | `harness doctor`, `harness update` | Read-only checks by default; signed tagged releases only, explicit apply, independent signing trust |
 | Compare workflow cost | `tools/benchmark_workflow.py` | Final request identities, retries/children, paired task acceptance, explicit rate cards |
 | Record acceptance | `strict-mode/bin/strict_evidence.py` | Immutable source-bound v2 snapshots; six separate acceptance phases |
 | Run verification | `strict-mode/bin/strict_gate.py` | Actual working-state coverage, ordered preparation, failure propagation, uncached completion |
@@ -34,6 +36,7 @@ Keep machine paths and raw outputs in private local records.
 ```bash
 python3 "$CAPHE_RUNTIME/tools/stack_doctor.py" --repo . --runtime "$CAPHE_RUNTIME"
 python3 "$CAPHE_RUNTIME/tools/stack_context.py" --repo . --max-bytes 4096
+"$CAPHE_RUNTIME/bin/harness" doctor
 ```
 
 Use a simple `git status --short` when only a clean/dirty answer is needed; a full bound snapshot costs
@@ -151,29 +154,55 @@ plan/configuration failures are not relaxed. Existing explicit user disable rema
 
 ## Model, effort, and delegation
 
-Keep Astra as coordinator for ambiguous contracts, architecture, integration, and escalation. Evaluate
-cheaper models for narrow extraction and independently testable scoped changes. Test effort separately:
-Terra low, medium, and high are different configurations. Do not assume lower effort preserves quality,
-or that greater effort always improves it. Probe the exact model, effort, client, and service tier on
-each machine, then record observed availability privately.
+Harness-managed workers are separate command-line processes. Use `harness worker` and the task's
+enabled route from `strict-mode/templates/harness.toml`; do not use Codex `spawn_agent` or put model
+selection in prompt text. The route binds client, model, effort, context budget, permissions, billing,
+timeout, and output limit. Codex receives `agents.max_depth=0`, a bounded task brief, and a tracked-only
+source snapshot. It does not receive parent conversation history. Unavailable or unsupported clients
+remain disabled; keep the task with the coordinator when doctor or runtime evidence is incomplete.
+The harness does not change the current Codex app session's model; choose the coordinator model in the
+session settings, or pass `-m` and `model_reasoning_effort` explicitly when starting a standalone Codex
+coordinator from the CLI.
 
-Pass `stack_route.py` a JSON object containing `contract`, `capabilities`, and `policy` on stdin. The
+| Worker task | Example route | Starting effort |
+| --- | --- | --- |
+| Routine copy, extraction, narrow lookup | `lookup-extraction` | Low |
+| Settled implementation | `settled-implementation` | Medium |
+| Ambiguous architecture or high-risk reasoning | `planning-architecture` | High |
+| Canonical independent PR review | Separately approved reviewer | Its approved effort |
+
+These examples are starting points, not quality or savings claims. The user reviews route changes as a
+config diff. Every run records its category, requested and effective route, token usage when available,
+source revision, and result pointer. Codex usage comes from its client-authored rollout record; `ccusage`
+is an optional aggregate cross-check, not an invoice or subscription meter. The $200 ChatGPT plan applies
+only to eligible OpenAI/Codex usage under its plan limits; third-party clients require their own account
+and billing route. Do not mark one vendor's work as covered by another vendor's plan.
+
+Run `harness doctor` for read-only environment and profile-parser checks. `harness doctor --apply` creates
+the starter route file only if it is missing. `harness doctor --probe` makes a live, small request for each
+enabled supported route and consumes that route's allowance; it is separate from the default checks. A
+route is not ready until the rollout confirms model, effort, and the restricted permission profile. Run
+`harness update` to preview a stable signed tag. Review the identity and changes, then apply only that
+preview using its printed digest: `harness update --apply --tag vX.Y.Z --preview-digest <sha256>`.
+The apply step recomputes the plan and rejects any change from the saved preview. Do not use an implicit
+branch update. Do not restart completed
+workers just to change a route. `harness batch --tasks-file tasks.json` caps simultaneous worker
+processes at `max_workers`; add `--execute` only when you intend to consume provider usage.
+
+Evaluated routing policies are a separate path. When a task is governed by such an owner policy, pass
+`stack_route.py` a JSON object containing `contract`, `capabilities`, and `policy` on stdin. The
 [delegation schema](../schemas/delegation-contract-v1.json) declares subject source, acceptance, allowed
 writes/exclusions, required checks, output limits, repair budget, parent identity, and children. The
 policy contains an explicit incumbent and task-class candidate routes. Missing promotion retains a
 capability-validated incumbent; unsupported incumbents fail instead of silently selecting another model.
 Owner approval metadata binds the exact route digest and evaluation references; the caller must supply
-trusted policy. The JSON is a declaration, not cryptographic proof of approval.
+trusted policy. The JSON is a declaration, not cryptographic proof of approval. This resolver's promotion
+gate does not govern unconstrained native task-level selection. Registry-based remote dispatch remains
+subject to its separate owner-approved pilot, capability overlay, and source-isolation requirements.
 
-Use at most 64 ordinary workers or the active agent environment limit, whichever is lower, with no
-recursive delegation and disjoint write scopes. Account for the coordinator and occupied slots when the
-host limit includes them. Pass observed remaining capacity as `capabilities.available_worker_slots`,
-set `max_workers` within that capacity, and refresh capacity before each spawn. The validator does not
-reserve slots globally; omission of the optional capacity field does not override known host limits. A fresh context
-contains the contract and relevant evidence, not full conversation history. Dispatch the resolved model
-and effort explicitly through the available agent tool. Full-history forks inherit model/effort and are
-not a cheap-route mechanism. After one failed repair, tighten the contract or escalate. Independent PR
-review retains its separately approved reviewer route and human gates.
+For evaluated registry routes, retain the separate owner-approved policy and capability overlay described
+above. That resolver does not activate a disabled local CLI route or replace the harness's source and
+permission checks. Independent PR review retains its separately approved reviewer route and human gates.
 
 ## Benchmark and promotion
 
@@ -253,6 +282,19 @@ hook target, including forwarded hooks, without executing that chain. These loca
 they are not signed attestation. Older records without forwarded-target identities require reconciliation
 through the original hook directory before doctor can verify them.
 Global installation and project activation are distinct results.
+
+Existing projects can retain an older `.agent/OWNERS.md` even after a runtime update. The doctor
+reports `legacy_owner_model_gate` when it recognizes the old blanket model-choice gate. On explicit
+project refresh, `strict-init` updates only byte-identical known stock templates, replacing that gate
+and adding the native-worker exception while preserving existing review wording and file permissions.
+Customized files are never rewritten: a recognized conflicting gate stops refresh before any writes
+and asks for reconciliation with the approved delegation rules. Use existing task authorization to
+correct inherited generic wording where it applies; retain named approvers, custom gates, and pinned
+owner/reviewer routes. If authorization to change a deliberate owner policy is absent, obtain it.
+An explicit native-worker exception leaves the customized file intact. A clean diagnostic identifies
+known stale text only; agents must still read and obey the actual project owner policy.
+The doctor's `project.managed` field describes hook and instruction activation. Overall health is
+determined by its exit status and `unresolved` list; missing, blank, or unreadable owner policies fail it.
 
 Git resolves [relative hook paths](https://git-scm.com/docs/git-config#Documentation/git-config.txt-corehooksPath)
 from the hook's execution directory; [receive hooks run from the Git directory](https://git-scm.com/docs/githooks#_description).

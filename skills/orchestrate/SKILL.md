@@ -5,6 +5,12 @@ description: Safely resolve and dispatch bounded remote-model work using the CaP
 
 # Orchestrate
 
+This skill governs registry-based remote dispatch. Local delegation uses `harness worker` as specified in
+the versioned route table; do not use the built-in `spawn_agent` for harness-managed delegation. The
+harness binds client, model, effort, context budget, and permissions outside prompt text. If its route is
+disabled or reports an isolation blocker, keep the work with the coordinator. Do not bypass the guard by
+calling a CLI directly.
+
 Use only a validated v2 route, a private capability overlay from a fresh probe, and an owner policy.
 Do not route `candidate`, deprecated, retired, unprobed, or isolation-unverified models. Classify first,
 enforce the task class lane ceiling, and give each worker a fresh bounded contract. At most 64 workers or the active agent environment limit, whichever is lower;

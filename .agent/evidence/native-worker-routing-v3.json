@@ -1,0 +1,138 @@
+{
+  "artifact": {
+    "reference": ".caphe-runtime.json",
+    "sha256": "fd59bf4cc01eb9a3f7e21f2ab8264e7a55ff4df7367e7abb6d6b8071448d5e61"
+  },
+  "change_id": "native-worker-routing",
+  "decision": "ADR-0006",
+  "evidence": [
+    {
+      "kind": "file",
+      "reference": "docs/adr/ADR-0006-native-worker-model-selection.md"
+    },
+    {
+      "kind": "url",
+      "reference": "https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/pull/15"
+    },
+    {
+      "kind": "check",
+      "reference": "Full uncached Python suite and shell syntax and isolation and public-safety matrix passed"
+    },
+    {
+      "kind": "check",
+      "reference": "20 focused routing regressions passed"
+    },
+    {
+      "kind": "check",
+      "reference": "Test harness and runner and manifest unchanged from accepted base d4832a1"
+    },
+    {
+      "kind": "check",
+      "reference": "Native Sol medium audit completed without repair using a fresh context"
+    },
+    {
+      "kind": "check",
+      "reference": "Native Luna low seven-scenario check completed with one citation repair using a fresh context"
+    },
+    {
+      "kind": "check",
+      "reference": "Native spawn accepted explicit model and reasoning_effort arguments"
+    },
+    {
+      "kind": "check",
+      "reference": "PR finding r4111912078 addressed by fb4bd6e schema check and missing-controls fallback"
+    },
+    {
+      "kind": "check",
+      "reference": "PR findings r4111928199 and r4111928203 await canon clarification and immutable evidence review"
+    },
+    {
+      "kind": "check",
+      "reference": "10679e3 full uncached completion matrix passed after final canon clarification"
+    },
+    {
+      "kind": "check",
+      "reference": "Final instructions inspected for seven routing scenarios and missing native controls"
+    },
+    {
+      "kind": "check",
+      "reference": "PR finding r4111950369 resolved by binding this snapshot to clean verified revision 10679e3"
+    },
+    {
+      "kind": "check",
+      "reference": "Exact installed runtime inventory verified with only four instruction files changed"
+    },
+    {
+      "kind": "check",
+      "reference": "Global canon and four skill copies verified with preserved local content and rollback journal"
+    },
+    {
+      "kind": "check",
+      "reference": "Stack doctor verified managed project and effective hooks with no unresolved findings"
+    },
+    {
+      "kind": "digest",
+      "reference": "a300b40acd57b028eb39fbc68d1366b10d490e5015eabd7f958a2e1ad333791a"
+    },
+    {
+      "kind": "check",
+      "reference": "Clean detached 10679e3 snapshot digest matches independent PR reproduction"
+    },
+    {
+      "kind": "check",
+      "reference": "Clean detached 10679e3 complete uncached matrix passed with stable source"
+    },
+    {
+      "kind": "check",
+      "reference": "PR finding r4111977393 resolved by clean-checkout source binding"
+    },
+    {
+      "kind": "check",
+      "reference": "Original binding differed only through owner-only modes on generated evidence and index"
+    }
+  ],
+  "id": "native-worker-routing-v3",
+  "lane": "full-risk",
+  "schema_version": 2,
+  "source": {
+    "repository": "CaullenOmdahl/CaPhe-Agentic-Stack",
+    "revision": "10679e381faa1c69676772021088f9a85882d445",
+    "snapshot_digest": "9ef7e26667a214e6e265eb34cabb22ad2490d3e7c3ff03ce4b0baba81aed9584"
+  },
+  "states": {
+    "external_acceptance": {
+      "reason": "No product or hardware behavior is changed.",
+      "scope": "source",
+      "status": "not_applicable"
+    },
+    "implementation": {
+      "reason": "Task-level selection and missing-controls fallback are present in binding canon and runtime guidance.",
+      "scope": "source",
+      "status": "passed"
+    },
+    "merge": {
+      "reason": "No merge authorization. Pull request remains open.",
+      "scope": "source",
+      "status": "pending"
+    },
+    "release": {
+      "reason": "Instruction-only local runtime overlay verified against its manifest. Global canon and four installed Strict Mode skill copies verified with private before-and-after hashes. Executables unchanged. No remote rollout.",
+      "scope": "artifact",
+      "status": "passed"
+    },
+    "review": {
+      "reason": "PR review covered the final instructions. The source-binding correction requested in discussion r4111977393 is reproduced exactly from the named clean revision and verified by a new completion run. Only generated evidence and index change.",
+      "scope": "source",
+      "status": "passed"
+    },
+    "validation": {
+      "reason": "Full uncached completion passed in the clean detached checkout of the named revision. Its snapshot digest matches independent PR reproduction. Instruction scenarios and installed artifact checks remain applicable because instruction bytes are unchanged.",
+      "scope": "source",
+      "status": "passed"
+    }
+  },
+  "summary": "Reproducible source binding from a clean detached checkout of 10679e3. The full uncached completion matrix passed there with identical before-and-after source identity. Earlier local snapshots included owner-only modes on generated evidence and index files; this snapshot uses fresh-checkout modes and matches independent PR reproduction. The installed instruction payload is unchanged.",
+  "supersedes": [
+    "native-worker-routing-v2"
+  ]
+}

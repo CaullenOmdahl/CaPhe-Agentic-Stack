@@ -30,6 +30,10 @@ class InstallContracts(unittest.TestCase):
         (source / "strict-mode" / "methodology.md").write_text("canon\n")
         (source / "schemas").mkdir()
         (source / "schemas" / "runtime.json").write_text("{}\n")
+        (source / "bin").mkdir()
+        harness_entry = source / "bin" / "harness"
+        harness_entry.write_text("#!/bin/sh\nexit 0\n")
+        harness_entry.chmod(0o755)
         (source / "memory").mkdir()
         (source / "memory" / "project_memory.py").write_text("print('memory')\n")
         subprocess.run(["git", "init", "-q", str(source)], check=True)
@@ -54,6 +58,7 @@ class InstallContracts(unittest.TestCase):
             self.assertTrue((target / "user-note").exists())
             self.assertTrue((target / "tools" / "tool.py").exists())
             self.assertTrue(first["verified"] and second["verified"])
+            self.assertTrue(Path(first["receipt_path"]).is_file())
             self.assertEqual((inventory.stat().st_mode & 0o077), 0)
 
     def test_runtime_ships_memory_tooling(self):
@@ -865,6 +870,7 @@ class InstallContracts(unittest.TestCase):
             self.assertEqual(self.snapshot(target), previous_runtime)
             result = installer.apply_runtime_plan(plan, inventory_root=private)
             self.assertEqual(result["retired_files"], ["tools/release-c.py"])
+            self.assertEqual(Path(result["receipt_path"]), supplementary)
             self.assertTrue(installer.verify_runtime_plan(plan))
             returned = receipts(); self.assertEqual(len(returned), 4)
             self.assertEqual({name: returned[name] for name in before}, before)

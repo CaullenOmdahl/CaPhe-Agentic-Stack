@@ -1,0 +1,107 @@
+{
+  "change_id": "cli-worker-harness",
+  "decision": "ADR-0007",
+  "evidence": [
+    {
+      "kind": "file",
+      "reference": "docs/adr/ADR-0007-cli-worker-harness-and-lifecycle.md"
+    },
+    {
+      "kind": "file",
+      "reference": "tools/caphe_harness.py"
+    },
+    {
+      "kind": "file",
+      "reference": "strict-mode/bin/strict_init.py"
+    },
+    {
+      "kind": "file",
+      "reference": "tests/test_caphe_harness.py"
+    },
+    {
+      "kind": "file",
+      "reference": "tests/test_strict_init_source.py"
+    },
+    {
+      "kind": "url",
+      "reference": "https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/pull/15"
+    },
+    {
+      "kind": "check",
+      "reference": "Full uncached completion gate passed on this source snapshot."
+    },
+    {
+      "kind": "check",
+      "reference": "Write scope tests cover ordinary ignored and nested declared outputs."
+    },
+    {
+      "kind": "check",
+      "reference": "Owner gate migration tests cover each supported legacy string."
+    },
+    {
+      "kind": "check",
+      "reference": "Linux systemd scopes provide descendant cleanup and unsupported hosts fail closed"
+    },
+    {
+      "kind": "check",
+      "reference": "Signed updater requires executable bin harness while generic runtime installer accepts legacy payloads"
+    },
+    {
+      "kind": "check",
+      "reference": "Strict completion gate passed on source revision 9c680b1c92bbce724432436aa4429178d24d2f79"
+    },
+    {
+      "kind": "check",
+      "reference": "Codex PR review on bound revision reported no inline findings"
+    },
+    {
+      "kind": "check",
+      "reference": "Ubuntu and macOS hosted CI passed on bound revision 82ed015962f277f83f02ba917af48932cb82579a"
+    },
+    {
+      "kind": "check",
+      "reference": "Completion gate passed on bound revision 82ed015962f277f83f02ba917af48932cb82579a"
+    }
+  ],
+  "id": "cli-worker-harness-v6",
+  "lane": "full-risk",
+  "schema_version": 2,
+  "source": {
+    "repository": "CaullenOmdahl/CaPhe-Agentic-Stack",
+    "revision": "82ed015962f277f83f02ba917af48932cb82579a",
+    "snapshot_digest": "646f5656f3c788790b7e5d57cb128dfe9d3851e052940146f04f984c9ea71040"
+  },
+  "states": {
+    "external_acceptance": {
+      "reason": "No external product or production artifact is part of this change.",
+      "scope": "source",
+      "status": "not_applicable"
+    },
+    "implementation": {
+      "scope": "source",
+      "status": "passed"
+    },
+    "merge": {
+      "scope": "source",
+      "status": "pending"
+    },
+    "release": {
+      "scope": "source",
+      "status": "pending"
+    },
+    "review": {
+      "reason": "Fresh Codex PR review reported no inline findings on the bound revision.",
+      "scope": "source",
+      "status": "passed"
+    },
+    "validation": {
+      "reason": "Strict completion gate and Ubuntu plus macOS hosted CI passed on the bound revision; retained base installer tests also passed.",
+      "scope": "source",
+      "status": "passed"
+    }
+  },
+  "summary": "CLI worker harness with deterministic routes, brief-only inputs, isolated snapshots, route evidence, signed self-update, safe doctor, and Linux systemd-scope descendant containment. Signed updates require executable bin harness; generic installer payloads remain compatible. Worker execution fails closed without verified OS containment.",
+  "supersedes": [
+    "cli-worker-harness-v5"
+  ]
+}

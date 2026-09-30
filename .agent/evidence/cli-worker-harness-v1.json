@@ -1,0 +1,76 @@
+{
+  "change_id": "cli-worker-harness",
+  "decision": "ADR-0007",
+  "evidence": [
+    {
+      "kind": "file",
+      "reference": "docs/adr/ADR-0007-cli-worker-harness-and-lifecycle.md"
+    },
+    {
+      "kind": "file",
+      "reference": "tools/caphe_harness.py"
+    },
+    {
+      "kind": "file",
+      "reference": "tests/test_caphe_harness.py"
+    },
+    {
+      "kind": "file",
+      "reference": "tests/test_stack_install.py"
+    },
+    {
+      "kind": "url",
+      "reference": "https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/pull/15"
+    },
+    {
+      "kind": "check",
+      "reference": "Full uncached strict-mode completion gate passed on the bound source snapshot."
+    },
+    {
+      "kind": "check",
+      "reference": "Harness and installer regression tests cover preview binding route failures output isolation and selected install receipt identity."
+    },
+    {
+      "kind": "check",
+      "reference": "Current Codex profile probe denies parent auth and session reads and undeclared writes while allowing declared writes."
+    }
+  ],
+  "id": "cli-worker-harness-v1",
+  "lane": "full-risk",
+  "schema_version": 2,
+  "source": {
+    "repository": "CaullenOmdahl/CaPhe-Agentic-Stack",
+    "revision": "3e8812892212bec0807565e793192772dff1cc04",
+    "snapshot_digest": "aaa0803ffc2b5a0c1821ddb04440f19ebf3e9795fce0c64ab00392fb93ac5c79"
+  },
+  "states": {
+    "external_acceptance": {
+      "reason": "No external product or production artifact is part of this change.",
+      "scope": "source",
+      "status": "not_applicable"
+    },
+    "implementation": {
+      "scope": "source",
+      "status": "passed"
+    },
+    "merge": {
+      "scope": "source",
+      "status": "pending"
+    },
+    "release": {
+      "scope": "source",
+      "status": "pending"
+    },
+    "review": {
+      "scope": "source",
+      "status": "pending"
+    },
+    "validation": {
+      "reason": "Local full completion gate, harness and installer regression suites, and Codex filesystem boundary probes passed on the bound source revision.",
+      "scope": "source",
+      "status": "passed"
+    }
+  },
+  "summary": "Explicit CLI worker harness with versioned route policy, brief-only source snapshots, Codex profile isolation, per-run evidence, usage attribution, read-only doctor, preview-bound signed updates, and protected environment configuration. Non-Codex routes and live probes remain disabled pending verification.",
+  "supersedes": []
+}

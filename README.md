@@ -13,6 +13,7 @@ This repository provides:
 - thin agent-specific adapters for Codex, Claude, and Gemini / Antigravity;
 - reusable skills for intended behavior, review, branch orientation, and UX-first planning;
 - a pull-request-centered review workflow;
+- a CLI worker harness with versioned task routes, bounded briefs, isolated source snapshots, and per-run usage records;
 - evidence-preserving Strict Mode v3 with bounded context, explicit model/effort routing, preparation receipts, and full completion gates;
 - a local MemPalace-derived memory adapter that preserves source citations and security-domain isolation;
 - CLI-first tool-selection rules that prefer the developer's existing environment over auth-dependent integrations;
@@ -67,6 +68,10 @@ If a workflow depends on private operational details, document the shape of the 
 │   ├── bin/
 │   ├── templates/
 │   └── test/
+├── bin/
+│   └── harness
+├── tools/
+│   └── caphe_harness.py
 └── skills/
     ├── code-refactor-review/SKILL.md
     ├── gh-review-certify-loop/SKILL.md

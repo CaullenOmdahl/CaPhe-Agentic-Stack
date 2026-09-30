@@ -1,0 +1,170 @@
+{
+  "artifact": {
+    "reference": ".caphe-runtime.json",
+    "sha256": "30d3c78ef800a7e6d97c8330064c8a8300c3465f8210e4e728118ecd8ab3e452"
+  },
+  "change_id": "native-worker-routing",
+  "decision": "ADR-0006",
+  "evidence": [
+    {
+      "kind": "file",
+      "reference": "docs/adr/ADR-0006-native-worker-model-selection.md"
+    },
+    {
+      "kind": "url",
+      "reference": "https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/pull/15"
+    },
+    {
+      "kind": "check",
+      "reference": "Final instruction source passed full uncached matrix in a clean detached checkout"
+    },
+    {
+      "kind": "check",
+      "reference": "Source identity remained stable before and after verification"
+    },
+    {
+      "kind": "check",
+      "reference": "Current project and fresh initialized project permit approved native worker selection"
+    },
+    {
+      "kind": "check",
+      "reference": "Pinned owner policy and canonical reviewer changes remain gated"
+    },
+    {
+      "kind": "check",
+      "reference": "Global canon and four agent skill copies verified against the local instruction plan"
+    },
+    {
+      "kind": "check",
+      "reference": "Explicit Sol medium and Luna low native requests completed with bounded results"
+    },
+    {
+      "kind": "check",
+      "reference": "PR r4112059712 addressed in project and reusable OWNERS template"
+    },
+    {
+      "kind": "check",
+      "reference": "Legacy upgrade regression failed before correction and passed afterward"
+    },
+    {
+      "kind": "check",
+      "reference": "Staged installed-runtime adaptation passed both stock migrations and customized preservation"
+    },
+    {
+      "kind": "check",
+      "reference": "Consumer migration preserves review wording and permissions and rolls back on failure"
+    },
+    {
+      "kind": "check",
+      "reference": "PR r4112096024 addressed with stock migration and read-only conflict diagnosis"
+    },
+    {
+      "kind": "check",
+      "reference": "Remote Codex PR delta review completed without findings"
+    },
+    {
+      "kind": "check",
+      "reference": "Actual installed seven-file overlay manifest and inventory verified directly"
+    },
+    {
+      "kind": "check",
+      "reference": "Installed runtime passed fresh initialization and both existing-consumer migrations"
+    },
+    {
+      "kind": "check",
+      "reference": "Customized installed-consumer conflict diagnosed without rewriting owner policy"
+    },
+    {
+      "kind": "check",
+      "reference": "Other runtime content including capacity and review policy preserved"
+    },
+    {
+      "kind": "check",
+      "reference": "Missing owner-policy regression failed before correction and passed afterward"
+    },
+    {
+      "kind": "check",
+      "reference": "15 doctor tests passed including missing and blank owner policies"
+    },
+    {
+      "kind": "check",
+      "reference": "Source and staged runtime reject blank policies before project mutation"
+    },
+    {
+      "kind": "check",
+      "reference": "PR r4112155948 addressed by explicit owner-policy health failures"
+    },
+    {
+      "kind": "check",
+      "reference": "Current and retained accepted-base doctor suites passed without changing retained tests"
+    },
+    {
+      "kind": "check",
+      "reference": "Project managed field preserves hook and instruction activation semantics"
+    },
+    {
+      "kind": "url",
+      "reference": "https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/actions/runs/36260176354"
+    },
+    {
+      "kind": "check",
+      "reference": "Final behavioral source passed Linux and macOS CI including retained accepted-base harness"
+    },
+    {
+      "kind": "check",
+      "reference": "Actual installed runtime passed both stock upgrades and owner-policy health checks"
+    },
+    {
+      "kind": "check",
+      "reference": "Blank-policy refresh left installed-consumer project state unchanged"
+    },
+    {
+      "kind": "check",
+      "reference": "PR r4112205897 addressed by binding final behavioral source and actual installed artifact"
+    }
+  ],
+  "id": "native-worker-routing-v6",
+  "lane": "full-risk",
+  "schema_version": 2,
+  "source": {
+    "repository": "CaullenOmdahl/CaPhe-Agentic-Stack",
+    "revision": "ebcec51ccbda3a9302d9223fc3e03aaba1832ea3",
+    "snapshot_digest": "679cb05908b83d512022b2be2f30154a336eada6f1a153b3c0e79daaa03d3453"
+  },
+  "states": {
+    "external_acceptance": {
+      "reason": "No product or hardware behavior is changed.",
+      "scope": "source",
+      "status": "not_applicable"
+    },
+    "implementation": {
+      "reason": "Task-level selection is explicit in binding guidance. Current and new project gates authorize routine choices; existing stock gates migrate safely on refresh and customized conflicts are diagnosed.",
+      "scope": "source",
+      "status": "passed"
+    },
+    "merge": {
+      "reason": "No merge authorization. Pull request remains open.",
+      "scope": "source",
+      "status": "pending"
+    },
+    "release": {
+      "reason": "Five instruction files and two narrowly patched consumer-refresh helpers are installed over the existing runtime. Actual manifest and inventory, live behavior, global canon and four skill copies verified. Unrelated runtime code and review/capacity policy preserved. No remote rollout.",
+      "scope": "artifact",
+      "status": "passed"
+    },
+    "review": {
+      "reason": "Remote PR review covered the final behavioral source. Its sole remaining request for a refreshed source and artifact binding is fulfilled by this generated record. Earlier actionable findings are resolved with verified corrections.",
+      "scope": "source",
+      "status": "passed"
+    },
+    "validation": {
+      "reason": "Full uncached completion passed in a clean checkout with stable source identity. Missing-policy regression failed before correction. All 15 current and 13 retained accepted-base doctor tests passed. Staged installed-runtime checks verify owner-policy health failures and no mutation on blank-policy refresh. Linux and macOS CI passed including the unchanged retained accepted-base harness. The actual installed runtime passed fresh initialization, both stock upgrades, idempotence, owner-policy health failures and no mutation on blank-policy refresh.",
+      "scope": "source",
+      "status": "passed"
+    }
+  },
+  "summary": "Verified native-worker routing source including current and generated owner gates plus existing-consumer refresh. Exact stock historical templates receive a minimal transactional gate edit; customized conflicts are diagnosed before writes. Final activation comprises five instruction files and two narrowly patched consumer-refresh helpers over the existing 43-file runtime, plus global canon and four agent skill copies. The artifact binding identifies the actual installed manifest, not a full source-tree installation. Later generated evidence changes do not alter behavior. Missing and empty owner policies now produce unresolved errors and fail the diagnostic command. Project managed retains its accepted hook and instruction activation meaning. Blank policy refresh fails before mutation.",
+  "supersedes": [
+    "native-worker-routing-v5"
+  ]
+}
