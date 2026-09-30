@@ -126,6 +126,8 @@ def add_opencode_instruction(config: Path, entry: str) -> str:
     instructions = data.get("instructions", [])
     if isinstance(instructions, str):
         instructions = [instructions]
+    elif not isinstance(instructions, list):
+        instructions = []
     data["instructions"] = instructions
     if entry not in instructions:
         instructions.append(entry)

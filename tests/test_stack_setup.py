@@ -180,6 +180,9 @@ class HubTests(HomeTest):
         cfg.write_text(json.dumps({"instructions": "mine.md"}))
         setup.wire_clients({"opencode": {}}, self.home / "hub", None)
         self.assertEqual(json.loads(cfg.read_text())["instructions"][0], "mine.md")
+        cfg.write_text(json.dumps({"instructions": None}))
+        setup.wire_clients({"opencode": {}}, self.home / "hub", None)
+        self.assertEqual(len(json.loads(cfg.read_text())["instructions"]), 1)
 
     def test_existing_clone_fast_forwards_and_rejects_foreign_remote(self):
         dest = self.home / "agent-memory"
