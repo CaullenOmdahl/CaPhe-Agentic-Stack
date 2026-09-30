@@ -21,18 +21,35 @@ take the family of the model you configure, so confirm the model before counting
 Hosted review services run the vendor's own model mix; treat them as independent of a local author
 only when the owner policy accepts vendor-managed reviewers.
 
+## Who pays for the compute
+
+Never set up a route that bills cloud compute to someone who did not choose it. Every route falls
+into one of four groups:
+
+1. **Your machine**: local CLIs and PR-Agent's CLI run locally. Only the model provider is billed,
+   under the key or plan the operator already chose. **Default.**
+2. **An existing subscription**: the Codex connector runs on OpenAI's side under the owner's ChatGPT
+   plan and uses no GitHub Actions minutes.
+3. **Third-party review services**: CodeRabbit, Greptile, and Cursor Bugbot run on the vendor's
+   cloud. Use only when the owner opts in, and prefer free tiers.
+4. **The repository's GitHub Actions minutes**: the Claude Code Action, PR-Agent as an Action, and,
+   since 2026-06-01, Copilot code review on private repositories. These bill the repository owner's
+   Actions minutes (plus model or Copilot usage). **Never add or trigger one by default**; only with
+   the repository owner's explicit opt-in for that repository.
+
 ## Remote reviewers (on the pull request)
 
-| Reviewer | Trigger | Family | Cost and limits | Notes |
-|---|---|---|---|---|
-| Codex code review (ChatGPT Codex connector) | `@codex review` comment, or automatic reviews | OpenAI | Included on ChatGPT plans; subject to Codex usage limits | Replies with a quota message when limits are reached; record that as unavailability. |
-| GitHub Copilot code review | `gh pr edit <n> --add-reviewer @copilot` (also in `gh pr create`) | GitHub-selected models | Requires a Copilot plan with code review | Posts a standard GitHub review; review effort levels are selectable. |
-| Claude Code GitHub Action (`anthropics/claude-code-action`) | Workflow on `pull_request` or an `@claude` comment | Anthropic | `ANTHROPIC_API_KEY`, or a Pro/Max subscription via `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token` (counts against that subscription) | Needs no local Claude install once the workflow and secret exist. |
-| PR-Agent (`The-PR-Agent/pr-agent`, open source) | GitHub Action, webhook, or CLI `pr-agent --pr_url <url> review` | Any LiteLLM model (OpenAI, Anthropic, Gemini, MiniMax, DeepSeek, OpenRouter, local) | Pay the model provider only | One completion over the diff, no tools; a portable independent route that uses whichever provider key the owner already has. |
-| CodeRabbit | Automatic on PRs after installing the app | Vendor-managed | Free plan, rate-limited (about 4 PR reviews an hour) | Also has a CLI (below). |
-| Greptile | Automatic on PRs after installing the app | Vendor-managed | Free tier of 50 reviews a month; then per-review billing | GitHub and GitLab only. |
-| Cursor Bugbot | Automatic or on demand from Cursor | Vendor-managed | Usage-billed, roughly $1 to $1.50 per run | Skips a diff already reviewed with `/review` in Cursor. |
-| Gemini Code Assist on GitHub | Enterprise app only | Google | Google Cloud enterprise subscription | The consumer app shut down on 2026-07-17: never request it. The enterprise app requires current installation evidence. |
+| Reviewer | Trigger | Family | Compute | Cost and limits | Notes |
+|---|---|---|---|---|---|
+| Codex code review (ChatGPT Codex connector) | `@codex review` comment, or automatic reviews | OpenAI | Subscription (OpenAI) | Included on ChatGPT plans; subject to Codex usage limits | Replies with a quota message when limits are reached; record that as unavailability. |
+| PR-Agent run locally (`The-PR-Agent/pr-agent`, open source) | CLI `pr-agent --pr_url <url> review` from any machine | Any LiteLLM model (OpenAI, Anthropic, Gemini, MiniMax, DeepSeek, OpenRouter, local) | Your machine | The model provider only | Posts to the PR without Actions. One completion over the diff, no tools. A portable independent route using whichever provider key the operator already has. |
+| CodeRabbit | Automatic on PRs after installing the app | Vendor-managed | Third-party service | Free plan, rate-limited (about 4 PR reviews an hour) | Opt-in only. Also has a CLI (below). |
+| Greptile | Automatic on PRs after installing the app | Vendor-managed | Third-party service | Free tier of 50 reviews a month; then per-review billing | Opt-in only. GitHub and GitLab only. |
+| Cursor Bugbot | Automatic or on demand from Cursor | Vendor-managed | Third-party service | Usage-billed, roughly $1 to $1.50 per run | Opt-in only. |
+| GitHub Copilot code review | `gh pr edit <n> --add-reviewer @copilot` | GitHub-selected models | **Repository Actions minutes** on private repos (since 2026-06-01), plus Copilot usage | Copilot plan with code review | Explicit owner opt-in only. |
+| Claude Code GitHub Action (`anthropics/claude-code-action`) | Workflow on `pull_request` or an `@claude` comment | Anthropic | **Repository Actions minutes** | `ANTHROPIC_API_KEY`, or a Pro/Max subscription via `CLAUDE_CODE_OAUTH_TOKEN` | Explicit owner opt-in only. |
+| PR-Agent as a GitHub Action | Workflow on `pull_request` | Any LiteLLM model | **Repository Actions minutes** | Model provider plus Actions | Explicit owner opt-in only; prefer running the CLI locally. |
+| Gemini Code Assist on GitHub | Enterprise app only | Google | Google Cloud enterprise | Enterprise subscription | The consumer app shut down on 2026-07-17: never request it. The enterprise app requires current installation evidence. |
 
 ## Local command-line reviewers
 
@@ -61,7 +78,7 @@ Remote review stays preferred. When it is unavailable, pick the first independen
 |---|---|---|
 | Codex | Claude or agy | Claude for correctness, agy for design; OpenCode with a non-OpenAI provider |
 | Claude | Codex or agy | agy or Codex; OpenCode with a non-Anthropic provider |
-| Either | only its own client | A remote route that needs no local client: Copilot review, the Claude Code Action on a subscription token, or PR-Agent on any provider key |
+| Either | only its own client | Codex review under an existing ChatGPT plan, or PR-Agent's CLI run locally with any provider key the operator already has (for example a MiniMax plan). Actions-based reviewers only with the repository owner's opt-in |
 | Any | nothing independent | Report the review blocker; never treat missing review as approval |
 
 To promote a **documented** entry: run its read-only invocation on a real diff, confirm it cannot
@@ -71,6 +88,7 @@ failure, then add the exact command to `second-opinion` and mark it verified her
 
 ## Sources
 
+- [Copilot code review consumes Actions minutes from 2026-06-01](https://github.blog/changelog/2026-04-27-github-copilot-code-review-will-start-consuming-github-actions-minutes-on-june-1-2026/)
 - [Request Copilot code review from GitHub CLI](https://github.blog/changelog/2026-03-11-request-copilot-code-review-from-github-cli/)
 - [Copilot CLI agentic code review](https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/agentic-code-review)
 - [Copilot CLI headless mode](https://www.devleader.ca/2026/07/27/running-github-copilot-cli-in-scripts-and-cicd-pipelines-headless-mode)
