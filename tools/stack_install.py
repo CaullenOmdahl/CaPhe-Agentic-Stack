@@ -16,7 +16,7 @@ class InstallError(RuntimeError):
     pass
 
 
-_RUNTIME_DIRS = ("tools", "skills", "strict-mode", "schemas")
+_RUNTIME_DIRS = ("tools", "skills", "strict-mode", "schemas", "memory")
 _SUPPORT_DOCS = ("docs/efficiency-runtime.md", "docs/review-workflow.md", "docs/canon.md")
 _MANIFEST = ".caphe-runtime.json"
 
