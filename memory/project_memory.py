@@ -487,6 +487,8 @@ def link_claude(repo: Path, claude_home: Path) -> Path:
         if pending:
             raise StoreError(f"{link} has unimported memories: {', '.join(p.name for p in pending)}")
         link.rename(link.with_name(f"memory.pre-git-{today()}"))
+    elif link.exists():
+        raise StoreError(f"{link} is a file, not a memory directory; move it aside first")
     link.parent.mkdir(parents=True, exist_ok=True)
     link.symlink_to(store, target_is_directory=True)
     return link
@@ -561,9 +563,10 @@ def cmd_check(args: argparse.Namespace) -> int:
     problems = [p for s in _stores_arg(args.stores) for p in check_store(s)]
     for p in problems:
         print(p)
+    failing = errors(problems)
     if args.fail_on_secrets:
-        return 1 if problems else 0
-    return 1 if errors(problems) else 0
+        failing += [p for p in problems if p.severity == "warning" and p.message.startswith("secret:")]
+    return 1 if failing else 0
 
 
 def cmd_index(args: argparse.Namespace) -> int:

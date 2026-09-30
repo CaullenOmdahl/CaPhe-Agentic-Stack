@@ -123,7 +123,10 @@ def add_opencode_instruction(config: Path, entry: str) -> str:
     except json.JSONDecodeError:
         return "manual: opencode config is not plain JSON"
     before = json.dumps(data, sort_keys=True)
-    instructions = data.setdefault("instructions", [])
+    instructions = data.get("instructions", [])
+    if isinstance(instructions, str):
+        instructions = [instructions]
+    data["instructions"] = instructions
     if entry not in instructions:
         instructions.append(entry)
     # Memory stores sit outside the working directory (parent repositories, the hub); let agents
@@ -229,7 +232,7 @@ def ensure_hub(run: Runner, dest: Path, name: str, owner: str | None, create: bo
             raise SetupError(f"clone failed: {out.strip()}")
         action = "cloned"
     added = scaffold(dest)
-    if added and created:
+    if added:  # a new or hand-made empty hub: publish the scaffold so other machines get it
         for cmd in (["git", "-C", str(dest), "add", "-A"],
                     ["git", "-C", str(dest), "commit", "-qm", "Scaffold agent memory hub"],
                     ["git", "-C", str(dest), "push", "-q", "-u", "origin", "HEAD"]):

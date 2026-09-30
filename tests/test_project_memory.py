@@ -100,6 +100,12 @@ class FormatTests(TempTree):
         self.assertEqual(pm.main(["check", str(store)]), 0)
         self.assertEqual(pm.main(["check", "--fail-on-secrets", str(store)]), 1)
 
+    def test_fail_on_secrets_ignores_non_secret_warnings(self):
+        store = self.tmp / "s"
+        self.write(store, "feedback_x.md", "---\nname: X\ndescription: d\ntype: feedback\n---\n\nbody\n")
+        (store / pm.INDEX).write_text("stale\n")  # stale index + missing recommended fields: warnings only
+        self.assertEqual(pm.main(["check", "--fail-on-secrets", str(store)]), 0)
+
     def test_index_refuses_schema_errors(self):
         store = self.tmp / "s"
         self.write(store, "x.md", GOOD.replace("type: feedback\n", ""))
@@ -258,6 +264,17 @@ class LinkTests(TempTree):
         self.assertEqual(link.resolve(), (repo / pm.STORE_REL).resolve())
         self.assertTrue(any(p.name.startswith("memory.pre-git-") for p in link.parent.iterdir()))
         self.assertEqual(pm.link_claude(repo, claude), link)  # idempotent
+
+    def test_link_claude_refuses_to_replace_a_regular_file(self):
+        repo = self.make_repo("proj2")
+        claude = self.tmp / "claude-home"
+        slug = str(repo).replace("/", "-").replace("_", "-").replace(".", "-")
+        path = claude / "projects" / slug / "memory"
+        path.parent.mkdir(parents=True)
+        path.write_text("user data")
+        with self.assertRaises(pm.StoreError):
+            pm.link_claude(repo, claude)
+        self.assertEqual(path.read_text(), "user data")
 
 
 class CliTests(TempTree):

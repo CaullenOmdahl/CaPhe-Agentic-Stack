@@ -97,7 +97,7 @@ class NoClaudeMachineTests(HomeTest):
         (dest / ".git").mkdir(parents=True)
         gh = FakeGh([(["gh", "api", "user"], user()), (["gh", "repo", "view"], (0, "PRIVATE\n")),
                      (["git", "-C", str(dest), "remote"], (0, "https://github.com/owner/agent-memory.git\n")),
-                     (["git", "-C", str(dest), "pull"], (0, ""))])
+                     (["git", "-C", str(dest), "pull"], (0, "")), (["git"], (0, ""))])
         with mock.patch.object(setup.shutil, "which", lambda cmd: None):
             rc = setup.main(["memory-hub", "--dest", str(dest), "--runtime", str(self.home / "rt")], run=gh)
         self.assertEqual(rc, 0)
@@ -162,12 +162,31 @@ class HubTests(HomeTest):
         self.assertTrue(any("push" in c and "-u" in c for c in gh.calls))
         self.assertTrue(result["action"].startswith("created"))
 
+    def test_existing_empty_hub_gets_scaffold_committed_and_pushed(self):
+        dest = self.home / "agent-memory"
+
+        def clone(cmd):
+            Path(cmd[-1]).mkdir(parents=True)
+            return 0, ""
+
+        gh = FakeGh([(["gh", "api", "user"], user()), (["gh", "repo", "view"], (0, "PRIVATE\n")),
+                     (["gh", "repo", "clone"], clone), (["git"], (0, ""))])
+        setup.ensure_hub(gh, dest, "agent-memory", None, False)
+        self.assertTrue(any("push" in c for c in gh.calls))
+
+    def test_opencode_string_instructions_are_kept_and_extended(self):
+        cfg = self.home / ".config" / "opencode" / "opencode.json"
+        cfg.parent.mkdir(parents=True)
+        cfg.write_text(json.dumps({"instructions": "mine.md"}))
+        setup.wire_clients({"opencode": {}}, self.home / "hub", None)
+        self.assertEqual(json.loads(cfg.read_text())["instructions"][0], "mine.md")
+
     def test_existing_clone_fast_forwards_and_rejects_foreign_remote(self):
         dest = self.home / "agent-memory"
         (dest / ".git").mkdir(parents=True)
         base = [(["gh", "api", "user"], user()), (["gh", "repo", "view"], (0, "PRIVATE\n"))]
         ok = FakeGh(base + [(["git", "-C", str(dest), "remote"], (0, "git@github.com:owner/agent-memory.git\n")),
-                            (["git", "-C", str(dest), "pull"], (0, ""))])
+                            (["git", "-C", str(dest), "pull"], (0, "")), (["git"], (0, ""))])
         self.assertEqual(setup.ensure_hub(ok, dest, "agent-memory", None, False)["action"], "fast-forwarded")
         bad = FakeGh(base + [(["git", "-C", str(dest), "remote"], (0, "https://github.com/else/thing.git\n"))])
         with self.assertRaisesRegex(setup.SetupError, "not a clone"):
