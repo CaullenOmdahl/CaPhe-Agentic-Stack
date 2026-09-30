@@ -762,6 +762,14 @@ class ReviewFindingTests(unittest.TestCase):
             self.assertFalse(harness._result_dir_clean(result_dir, result_dir / "result.txt"))
             self.assertFalse((result_dir / "filler.bin").exists())
             self.assertTrue((result_dir / "result.txt").exists())
+            (result_dir / "result.txt").unlink()
+            (result_dir / "result.txt").mkdir()  # a worker swapped the result for a directory
+            (result_dir / "result.txt" / "big").write_bytes(b"0")
+            self.assertFalse(harness._result_dir_clean(result_dir, result_dir / "result.txt"))
+            self.assertFalse((result_dir / "result.txt").exists())
+            os.symlink("/etc/passwd", result_dir / "result.txt")
+            self.assertFalse(harness._result_dir_clean(result_dir, result_dir / "result.txt"))
+            self.assertFalse((result_dir / "result.txt").is_symlink())
 
     def test_archive_entries_through_an_earlier_symlink_are_rejected(self):
         buffer = io.BytesIO()
@@ -782,6 +790,14 @@ class ReviewFindingTests(unittest.TestCase):
             plain = Path(tmp) / "plain"
             plain.mkdir()
             self.assertFalse(harness._is_git_checkout(plain))
+            calls = []
+            real_run = subprocess.run
+            def capture(cmd, **kwargs):
+                calls.append(kwargs.get("env", {}))
+                return real_run(cmd, **kwargs)
+            with patch.object(harness.subprocess, "run", side_effect=capture):
+                harness._is_git_checkout(plain)
+            self.assertEqual(calls[0].get("LC_ALL"), "C")  # message match must not depend on locale
             dubious = subprocess.CompletedProcess([], 128, stdout="", stderr="fatal: detected dubious ownership")
             with patch.object(harness.subprocess, "run", return_value=dubious):
                 self.assertTrue(harness._is_git_checkout(plain))

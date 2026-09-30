@@ -572,7 +572,7 @@ def _result_dir_clean(result_dir, output_path):
     """Remove anything but the result from its writable directory; False if any was found."""
     clean = True
     for entry in Path(result_dir).iterdir():
-        if entry == Path(output_path):
+        if entry == Path(output_path) and entry.is_file() and not entry.is_symlink():
             continue
         clean = False
         if entry.is_dir() and not entry.is_symlink():
@@ -1416,7 +1416,8 @@ def _is_git_checkout(path):
         return True
     try:
         probe = subprocess.run(["git", "-C", str(path), "rev-parse", "--is-inside-work-tree"],
-                               capture_output=True, text=True, timeout=10, env=_child_env("codex"))
+                               capture_output=True, text=True, timeout=10,
+                               env={**_child_env("codex"), "LC_ALL": "C"})  # English messages
     except (OSError, subprocess.SubprocessError):
         return True
     if probe.returncode == 0:
