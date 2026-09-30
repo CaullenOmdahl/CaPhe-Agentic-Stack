@@ -78,7 +78,7 @@ Remote review stays preferred. When it is unavailable, pick the first independen
 |---|---|---|
 | Codex | Claude or agy | Claude for correctness, agy for design; OpenCode with a non-OpenAI provider |
 | Claude | Codex or agy | agy or Codex; OpenCode with a non-Anthropic provider |
-| Either | only its own client | Codex review under an existing ChatGPT plan, or PR-Agent's CLI run locally with any provider key the operator already has (for example a MiniMax plan). Actions-based reviewers only with the repository owner's opt-in |
+| Either | only its own client | PR-Agent's CLI run locally with a model from another family that the operator already pays for (for example a MiniMax plan); for Claude-authored work, Codex review under an existing ChatGPT plan also qualifies. Actions-based reviewers only with the repository owner's opt-in |
 | Any | nothing independent | Report the review blocker; never treat missing review as approval |
 
 To promote a **documented** entry: run its read-only invocation on a real diff, confirm it cannot
