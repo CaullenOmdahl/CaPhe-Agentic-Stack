@@ -247,15 +247,25 @@ def ensure_hub(run: Runner, dest: Path, name: str, owner: str | None, create: bo
 
 # ------------------------------------------------------------------ review routes
 
-# Local command-line reviewers, their model family, and the review-models.conf key holding
-# the pinned review model. Invocations live in the `second-opinion` skill.
+# Local command-line reviewers: name, binary, model family, review-models.conf key, verification,
+# and a caution when its headless mode is unsafe for review. "verified" invocations live in the
+# `second-opinion` skill; "documented" ones come from vendor docs (see docs/reviewer-catalog.md)
+# and must be checked on the machine before relying on them.
+CONFIGURED = "configured-provider"
 REVIEWERS = (
-    ("claude", "claude", "anthropic", "STRICT_CONFER_CLAUDE_MODEL"),
-    ("agy", "agy", "google", "STRICT_CONFER_AGY_MODEL"),
-    ("codex", "codex", "openai", "STRICT_CONFER_CODEX_MODEL"),
-    ("opencode", "opencode", "configured-provider", "STRICT_CONFER_OPENCODE_MODEL"),
+    ("claude", "claude", "anthropic", "STRICT_CONFER_CLAUDE_MODEL", "verified", None),
+    ("agy", "agy", "google", "STRICT_CONFER_AGY_MODEL", "verified", None),
+    ("codex", "codex", "openai", "STRICT_CONFER_CODEX_MODEL", "verified", None),
+    ("opencode", "opencode", CONFIGURED, "STRICT_CONFER_OPENCODE_MODEL", "verified", None),
+    ("copilot", "copilot", CONFIGURED, "STRICT_CONFER_COPILOT_MODEL", "documented", None),
+    ("cursor", "cursor-agent", CONFIGURED, "STRICT_CONFER_CURSOR_MODEL", "documented", None),
+    ("qwen", "qwen", "alibaba", "STRICT_CONFER_QWEN_MODEL", "documented", None),
+    ("kimi", "kimi", "moonshot", "STRICT_CONFER_KIMI_MODEL", "documented",
+     "print mode auto-approves every tool call; run only inside an external sandbox"),
+    ("coderabbit", "coderabbit", "vendor-managed", None, "documented",
+     "hosted service with rate-limited free tier; reviews are sent to CodeRabbit"),
 )
-FAMILY = {name: family for name, _, family, _ in REVIEWERS}
+FAMILY = {row[0]: row[2] for row in REVIEWERS}
 
 
 def review_models() -> dict[str, str]:
@@ -280,16 +290,26 @@ def review_routes(run: Runner, which: Callable[[str], str | None] | None = None,
     which = which or shutil.which
     models = review_models()
     local = []
-    for name, cmd, family, key in REVIEWERS:
+    current_family = FAMILY.get(current)
+    for name, cmd, family, key, verification, note in REVIEWERS:
         binary = which(cmd)
         if not binary:
             continue
         rc, out = run([binary, "--version"])
+        if current is None:
+            independence = "yes"
+        elif current_family is None or CONFIGURED in (family, current_family):
+            # Unknown author family, or a configured provider: confirm the model before relying on it.
+            independence = "unknown"
+        else:
+            independence = "yes" if family != current_family else "no"
         local.append({
             "reviewer": name, "binary": binary, "family": family,
             "version": out.strip().splitlines()[0] if rc == 0 and out.strip() else "unknown",
-            "model": models.get(key),
-            "independent": current is None or FAMILY.get(current) != family,
+            "model": models.get(key) if key else None,
+            # "independent" stays a strict boolean for existing callers: unknown counts as not independent.
+            "independent": independence == "yes", "independence": independence,
+            "verification": verification, "note": note,
         })
     gh = which("gh")
     authed = bool(gh) and run(["gh", "auth", "status"])[0] == 0
@@ -299,6 +319,7 @@ def review_routes(run: Runner, which: Callable[[str], str | None] | None = None,
                    "note": "remote PR reviewers are selected per docs/review-workflow.md"},
         "local": local,
         "guide": "skills/second-opinion/SKILL.md",
+        "catalog": "docs/reviewer-catalog.md",
     }
 
 
@@ -363,7 +384,7 @@ def main(argv: list[str] | None = None, run: Runner = default_runner) -> int:
     p.add_argument("--runtime", default=str(Path(__file__).resolve().parents[1]))
     p.add_argument("--allow-unverified-2fa", action="store_true")
     p = sub.add_parser("review-routes")
-    p.add_argument("--current", choices=sorted(FAMILY), help="the agent asking, to judge independence")
+    p.add_argument("--current", help="the authoring agent (e.g. codex, claude), to judge independence")
     p = sub.add_parser("update-check")
     p.add_argument("--force", action="store_true")
     p.add_argument("--interval-days", type=float, default=2.0)
