@@ -145,7 +145,11 @@ def _internal_symlink(member):
 
 def _extract_validated_tar(bundle, target, label):
     members = bundle.getmembers()
+    links = {PurePosixPath(member.name) for member in members if member.issym()}
     for member in members:
+        # An entry beneath a symlink would be written through it, wherever it points.
+        if any(parent in links for parent in PurePosixPath(member.name).parents):
+            raise HarnessError(label + " archive contains unsafe entries")
         name = PurePosixPath(member.name)
         # Tracked symlinks are part of the recorded revision; keep those that stay inside it.
         if (member.islnk() or member.isdev() or name.is_absolute()
@@ -291,7 +295,13 @@ def _codex_install_root(executable=None):
     executable = executable or shutil.which("codex")
     if not executable:
         return None
-    root = Path(os.path.realpath(executable)).parent.parent
+    resolved = Path(os.path.realpath(executable))
+    parts = resolved.parts
+    root = resolved.parent  # a native binary: only its own folder
+    for index in range(len(parts) - 2):
+        if parts[index:index + 3] == ("node_modules", "@openai", "codex"):
+            root = Path(*parts[:index + 3])  # an npm install: exactly the Codex package
+            break
     home = Path.home().resolve()
     # System prefixes are already visible through ":minimal"; never widen to them, home, or /.
     if root in {Path("/"), Path("/usr"), Path("/usr/local"), Path("/opt"), home, home.parent}:
@@ -300,9 +310,10 @@ def _codex_install_root(executable=None):
 
 
 def _write_codex_profile(home, route, allowed_writes=(), config_profile="caphe-worker", output_path=None):
-    scoped = ['"." = "read"']
+    access = {".": "read"}
     if route["permissions"] == "worktree-write":
-        scoped.extend(json.dumps(path) + ' = "write"' for path in allowed_writes)
+        access.update({path: "write" for path in allowed_writes})  # "." may become writable
+    scoped = [json.dumps(path) + ' = "' + mode + '"' for path, mode in access.items()]
     codex_home = Path(home).resolve()
     filesystem = ('{ ":minimal" = "read", ":workspace_roots" = { ' + ", ".join(scoped) + " }, "
                   + json.dumps(str(codex_home / "auth.json")) + ' = "deny", '
@@ -510,21 +521,24 @@ def _changes_allowed(paths, allowed, baseline=None):
     return True
 
 
-def _validate_platform_write_grants(workspace, allowed_writes, platform=None):
-    """Codex's Linux sandbox (bubblewrap) can only grant write access to directories.
+def _sandbox_write_grants(workspace, allowed_writes, platform=None):
+    """Paths the Codex sandbox may write, derived from the exact allowlist.
 
-    A file grant makes it panic before the worker starts, so require existing directories
-    there and fail before any allowance is spent. Other platforms accept files.
+    Codex's Linux sandbox (bubblewrap) panics on file grants, so there each declared path is
+    widened to its nearest existing directory for the sandbox only. Post-run verification
+    still uses the exact allowlist and rejects any other change in that directory.
     """
     platform = platform or sys.platform
     if not platform.startswith("linux"):
-        return
+        return list(allowed_writes)
     root = Path(workspace)
-    bad = [path for path in allowed_writes
-           if (root / path).is_symlink() or not (root / path).is_dir()]
-    if bad:
-        raise HarnessError("on Linux, Codex can grant write access only to existing directories; "
-                           "declare the enclosing directory instead of: " + ", ".join(bad))
+    grants = set()
+    for value in allowed_writes:
+        path = PurePosixPath(value)
+        while path.parts and ((root / path).is_symlink() or not (root / path).is_dir()):
+            path = path.parent
+        grants.add(path.as_posix() if path.parts else ".")
+    return sorted(grants)
 
 
 def _verify_write_scope(route, effective_cwd, workspace, baseline, allowed_writes):
@@ -552,6 +566,20 @@ def _network_enabled(policy):
         return True
     network = policy.get("network")
     return network is True or (isinstance(network, dict) and network.get("enabled") is True)
+
+
+def _result_dir_clean(result_dir, output_path):
+    """Remove anything but the result from its writable directory; False if any was found."""
+    clean = True
+    for entry in Path(result_dir).iterdir():
+        if entry == Path(output_path):
+            continue
+        clean = False
+        if entry.is_dir() and not entry.is_symlink():
+            shutil.rmtree(entry, ignore_errors=True)
+        else:
+            entry.unlink(missing_ok=True)
+    return clean
 
 
 def _require_result(record):
@@ -945,14 +973,14 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
         if not readiness["supported"]:
             raise HarnessError("route sandbox self-test failed: " + str(readiness["reason"]))
         workspace = _snapshot_repo(repo, run_dir / "workspace", source.stdout.strip())
-        if route["permissions"] == "worktree-write":
-            _validate_platform_write_grants(workspace, allowed_writes)
+
         baseline = _tree_manifest(workspace)
         if baseline is None:
             raise HarnessError("immutable source snapshot could not be inventoried")
         sandbox_tmp = run_dir / "codex-tmp"
         sandbox_tmp.mkdir(mode=0o700)
-        home, profile_path = _prepare_codex_profile(route, allowed_writes, config_profile, output_path)
+        home, profile_path = _prepare_codex_profile(
+            route, _sandbox_write_grants(workspace, allowed_writes), config_profile, output_path)
         argv = build_command(route, prompt_path, output_path, workspace, config_profile)
     except (HarnessError, OSError, subprocess.SubprocessError, ValueError) as error:
         if profile_path and profile_path.is_file() and not profile_path.is_symlink():
@@ -1015,6 +1043,10 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
         record["result_read_error"] = str(error)
     if record.get("result_path") and not output_path.exists():
         record["result_path"] = None
+    if not _result_dir_clean(result_dir, output_path):
+        record["result_dir_extra_files"] = True
+        if record.get("status") == "completed":
+            record["status"] = "rejected_result_dir"
     _require_result(record)
     if record.get("route_verified") is not True and record.get("status") == "completed":
         record["status"] = "unverified"
@@ -1050,8 +1082,6 @@ def run_batch(config, tasks, *, execute=False, parent_run_id=None):
             raise HarnessError("read-only routes cannot declare writable paths")
         if route["permissions"] == "worktree-write" and not writes:
             raise HarnessError("worktree-write routes require explicit allow_write paths")
-        if execute and writes:
-            _validate_platform_write_grants(repo, writes)  # clean checkout == HEAD snapshot
         brief_path = Path(task["brief_file"]).expanduser()
         if brief_path.is_symlink() or not brief_path.is_file():
             raise HarnessError("batch briefs must be regular files")
@@ -1380,12 +1410,18 @@ def _check_update_preview(state, digest, report):
 
 
 def _is_git_checkout(path):
+    """Fail closed: only a confirmed non-repository counts as an installed runtime."""
+    path = Path(path).resolve()
+    if any((p / ".git").exists() or (p / ".git").is_symlink() for p in (path, *path.parents)):
+        return True
     try:
         probe = subprocess.run(["git", "-C", str(path), "rev-parse", "--is-inside-work-tree"],
                                capture_output=True, text=True, timeout=10, env=_child_env("codex"))
     except (OSError, subprocess.SubprocessError):
-        return True  # cannot prove otherwise; refuse to treat it as an installed runtime
-    return probe.returncode == 0 and probe.stdout.strip() == "true"
+        return True
+    if probe.returncode == 0:
+        return probe.stdout.strip() == "true"
+    return "not a git repository" not in probe.stderr
 
 
 def _update_target(root, target_text):

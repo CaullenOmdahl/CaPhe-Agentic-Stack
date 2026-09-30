@@ -682,7 +682,7 @@ class ReviewFindingTests(unittest.TestCase):
                 text = harness._write_codex_profile(home, route).read_text()
             self.assertIn(json.dumps(str(pkg.resolve())) + ' = "read"', text)
             for broad in (Path.home(), Path("/")):
-                self.assertIsNone(harness._codex_install_root(str(broad / "bin" / "codex")))
+                self.assertIsNone(harness._codex_install_root(str(broad / "codex")))
 
     @unittest.skipUnless(harness._systemd_scope_status(dict(os.environ)).get("supported"),
                          "needs a Linux user systemd manager")
@@ -727,16 +727,64 @@ class ReviewFindingTests(unittest.TestCase):
         kept = {"status": "timed_out", "result_path": None}
         self.assertEqual(harness._require_result(kept)["status"], "timed_out")
 
-    def test_linux_write_grants_must_name_existing_directories(self):
+    def test_sandbox_grants_are_directories_on_linux_while_verification_stays_exact(self):
         with tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
             ws = Path(tmp)
             (ws / "src").mkdir()
-            (ws / "file.txt").write_text("x")
-            harness._validate_platform_write_grants(ws, ("src",), platform="linux")
-            harness._validate_platform_write_grants(ws, ("file.txt",), platform="darwin")
-            for grants in (("file.txt",), ("missing",)):
-                with self.assertRaisesRegex(harness.HarnessError, "directories"):
-                    harness._validate_platform_write_grants(ws, grants, platform="linux")
+            (ws / "src" / "a.py").write_text("x")
+            (ws / "top.txt").write_text("x")
+            grants = harness._sandbox_write_grants(ws, ("src/a.py", "src", "top.txt", "new/deep/file.md"),
+                                                   platform="linux")
+            self.assertEqual(grants, [".", "src"])  # nearest existing directories, deduplicated
+            self.assertEqual(harness._sandbox_write_grants(ws, ("src/a.py",), platform="darwin"), ["src/a.py"])
+            baseline = harness._tree_manifest(ws)
+            (ws / "src" / "b.py").write_text("sibling")
+            changed = harness._worktree_changes(ws, baseline, ("src/a.py",))
+            self.assertFalse(harness._changes_allowed(changed, ("src/a.py",), baseline))
+
+    def test_install_root_grant_is_exact_package_or_binary_folder(self):
+        with tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
+            pkg = Path(tmp) / "lib" / "node_modules" / "@openai" / "codex"
+            (pkg / "bin").mkdir(parents=True)
+            (pkg / "bin" / "codex.js").write_text("")
+            self.assertEqual(harness._codex_install_root(str(pkg / "bin" / "codex.js")), pkg.resolve())
+            native = Path(tmp) / "dot-local" / "bin"
+            native.mkdir(parents=True)
+            (native / "codex").write_text("")
+            self.assertEqual(harness._codex_install_root(str(native / "codex")), native.resolve())
+
+    def test_result_directory_must_hold_only_the_result(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result_dir = Path(tmp)
+            (result_dir / "result.txt").write_text("ok")
+            self.assertTrue(harness._result_dir_clean(result_dir, result_dir / "result.txt"))
+            (result_dir / "filler.bin").write_bytes(b"0" * 10)
+            self.assertFalse(harness._result_dir_clean(result_dir, result_dir / "result.txt"))
+            self.assertFalse((result_dir / "filler.bin").exists())
+            self.assertTrue((result_dir / "result.txt").exists())
+
+    def test_archive_entries_through_an_earlier_symlink_are_rejected(self):
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode="w") as bundle:
+            link = tarfile.TarInfo("dir"); link.type = tarfile.SYMTYPE; link.linkname = "."
+            bundle.addfile(link)
+            escape = tarfile.TarInfo("dir/escape"); escape.type = tarfile.SYMTYPE; escape.linkname = ".."
+            bundle.addfile(escape)
+        buffer.seek(0)
+        with tempfile.TemporaryDirectory() as tmp, tarfile.open(fileobj=buffer, mode="r:") as bundle:
+            with self.assertRaises(harness.HarnessError):
+                harness._extract_validated_tar(bundle, Path(tmp), "test")
+
+    def test_git_checkout_detection_fails_closed(self):
+        with tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
+            checkout = init_repo(Path(tmp) / "checkout")
+            self.assertTrue(harness._is_git_checkout(checkout / "sub" if (checkout / "sub").mkdir() is None else checkout))
+            plain = Path(tmp) / "plain"
+            plain.mkdir()
+            self.assertFalse(harness._is_git_checkout(plain))
+            dubious = subprocess.CompletedProcess([], 128, stdout="", stderr="fatal: detected dubious ownership")
+            with patch.object(harness.subprocess, "run", return_value=dubious):
+                self.assertTrue(harness._is_git_checkout(plain))
 
 
 if __name__ == "__main__":
