@@ -11,7 +11,9 @@ hub repository, `$CAPHE_MEMORY_HUB` (default `~/agent-memory`), under
     caphe-memory list [PATH] [--full]   stores that apply to PATH, innermost first
     caphe-memory where [PATH]           the store new memories for PATH belong in
     caphe-memory new TYPE NAME DESC [--path PATH] [--source AGENT]
-    caphe-memory check [STORE ...]      schema, secrets, and index freshness
+    caphe-memory check [--fail-on-secrets] [STORE ...]
+                                        schema and index freshness; secrets are warnings unless
+                                        --fail-on-secrets (use it for any public repository)
     caphe-memory index [STORE ...]      regenerate MEMORY.md
     caphe-memory import-claude SRC DEST
     caphe-memory import-codex CODEX_HOME
@@ -70,9 +72,14 @@ class Problem:
     path: Path
     line: int
     message: str
+    severity: str = "error"  # error | warning
 
     def __str__(self) -> str:
-        return f"{self.path}:{self.line}: {self.message}"
+        return f"{self.path}:{self.line}: {self.severity}: {self.message}"
+
+
+def errors(problems: list[Problem]) -> list[Problem]:
+    return [p for p in problems if p.severity == "error"]
 
 
 @dataclass
@@ -157,7 +164,9 @@ def scan_secrets(path: Path) -> list[Problem]:
     for label, pattern in SECRET_PATTERNS:
         for m in pattern.finditer(text):
             line = text.count("\n", 0, m.start()) + 1
-            problems.append(Problem(path, line, f"secret: {label} value must not be stored"))
+            # Private stores may keep credentials that would otherwise be lost; public ones must not.
+            problems.append(Problem(path, line, f"secret: {label} value present; keep this store private",
+                                    "warning"))
     return problems
 
 
@@ -183,7 +192,7 @@ def check_file(path: Path) -> list[Problem]:
 
 def check_store(store: Path, *, include_index: bool = True) -> list[Problem]:
     problems = [p for f in memory_files(store) for p in check_file(f)]
-    if include_index and not problems:
+    if include_index and not errors(problems):
         index = store / INDEX
         current = index.read_text(encoding="utf-8") if index.is_file() else None
         if current != render_index(store):
@@ -204,7 +213,7 @@ def render_index(store: Path) -> str:
 
 
 def write_index(store: Path) -> Path:
-    problems = check_store(store, include_index=False)
+    problems = errors(check_store(store, include_index=False))
     if problems:
         raise StoreError("\n".join(map(str, problems)))
     store.mkdir(parents=True, exist_ok=True)
@@ -484,7 +493,9 @@ def cmd_check(args: argparse.Namespace) -> int:
     problems = [p for s in _stores_arg(args.stores) for p in check_store(s)]
     for p in problems:
         print(p)
-    return 1 if problems else 0
+    if args.fail_on_secrets:
+        return 1 if problems else 0
+    return 1 if errors(problems) else 0
 
 
 def cmd_index(args: argparse.Namespace) -> int:
@@ -525,7 +536,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("where"); p.add_argument("path", nargs="?", default="."); p.set_defaults(fn=cmd_where)
     p = sub.add_parser("new"); p.add_argument("type"); p.add_argument("name"); p.add_argument("description")
     p.add_argument("--path", default="."); p.add_argument("--source", default="owner"); p.add_argument("--body"); p.set_defaults(fn=cmd_new)
-    p = sub.add_parser("check"); p.add_argument("stores", nargs="*"); p.set_defaults(fn=cmd_check)
+    p = sub.add_parser("check"); p.add_argument("stores", nargs="*"); p.add_argument("--fail-on-secrets", action="store_true"); p.set_defaults(fn=cmd_check)
     p = sub.add_parser("index"); p.add_argument("stores", nargs="*"); p.set_defaults(fn=cmd_index)
     p = sub.add_parser("import-claude"); p.add_argument("src"); p.add_argument("dest"); p.set_defaults(fn=cmd_import_claude)
     p = sub.add_parser("import-codex"); p.add_argument("codex_home", nargs="?", default=str(Path.home() / ".codex")); p.set_defaults(fn=cmd_import_codex)

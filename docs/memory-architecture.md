@@ -13,8 +13,10 @@ Durable memory that every agent shares lives in Git, not in any one client's pri
   `status` (`active|superseded`), and optional `supersedes`. `MEMORY.md` is generated.
 - **Discovery:** `caphe-memory list` walks every enclosing repository root (so nested repositories see
   their parent project), then the hub mapping, then the hub's global store.
-- **Safety:** `caphe-memory check` validates the schema, rejects credential values with the sanitizer's
-  `SECRET_PATTERNS`, and reports a stale index. Public repositories never receive memory files.
+- **Safety:** `caphe-memory check` validates the schema, reports a stale index, and warns about
+  credential values found with the sanitizer's `SECRET_PATTERNS`. Private stores may keep credentials;
+  `--fail-on-secrets` turns the warnings into failures for anything bound for a public repository, and
+  public repositories never receive memory files.
 - **Durability:** memory is committed with the work it belongs to and pushed with the branch, so a lost
   session, context, or machine loses nothing.
 - **Client stores:** agent-native memory directories are inputs, not the canonical store. Claude's

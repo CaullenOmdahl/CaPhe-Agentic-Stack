@@ -48,12 +48,15 @@ Before writing, check the index for an existing memory on the same subject and u
 (bump `updated`). When a fact is replaced, set the old file's `status: superseded` and add
 `supersedes: <old file>` to the new one.
 
-Never write credential values (tokens, keys, passwords). Name the secret and where it lives instead.
+Memory stores are private, and a credential recorded there may be the only surviving copy, so keeping
+one is allowed. `caphe-memory check` warns about every credential it finds so the owner knows. Public
+repositories never hold memory: if a repository is about to become public, move `.agent/memory/` to the
+hub (or gitignore it) first and make `caphe-memory check --fail-on-secrets` pass.
 
 ## Commit
 
 ```bash
-caphe-memory check      # schema, secret scan, index freshness
+caphe-memory check      # schema and index freshness; credential warnings
 caphe-memory index      # regenerate MEMORY.md; never hand-edit it
 git add .agent/memory && git commit -m "memory: <what was learned>"
 ```

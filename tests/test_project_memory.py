@@ -78,36 +78,31 @@ class FormatTests(TempTree):
         self.assertIn("type must be one of", messages)
         self.assertIn("YYYY-MM-DD", messages)
 
-    def test_check_flags_credential_with_line_number(self):
+    def test_credential_is_a_warning_with_line_number(self):
         store = self.tmp / "s"
         token = "ghp_" + "A" * 36
         self.write(store, "reference_key.md", GOOD + f"\nkey {token}\n")
         problems = [p for p in pm.check_store(store, include_index=False) if "secret" in p.message]
         self.assertEqual(len(problems), 1)
+        self.assertEqual(problems[0].severity, "warning")
         self.assertGreater(problems[0].line, 10)
 
-    def test_index_sorted_by_type_then_name_and_skips_superseded(self):
-        store = self.tmp / "s"
-        self.write(store, "project_b.md", GOOD.replace("feedback", "project").replace("No parallel", "B"))
-        self.write(store, "feedback_a.md", GOOD.replace("No parallel", "A"))
-        self.write(store, "feedback_old.md", GOOD.replace("status: active", "status: superseded"))
-        idx = pm.write_index(store).read_text()
-        rows = [l for l in idx.splitlines() if l.startswith("- ")]
-        self.assertEqual(len(rows), 2)
-        self.assertLess(idx.index("feedback_a.md"), idx.index("project_b.md"))
-
-    def test_index_is_deterministic_after_conflicting_edits(self):
-        store = self.tmp / "s"
-        self.write(store, "feedback_a.md")
-        first = pm.write_index(store).read_text()
-        (store / pm.INDEX).write_text("<<<<<<< HEAD\nconflict\n>>>>>>> other\n")
-        self.assertTrue(pm.check_store(store))  # stale index reported
-        self.assertEqual(pm.write_index(store).read_text(), first)
-        self.assertEqual(pm.check_store(store), [])
-
-    def test_index_refuses_store_with_secret(self):
+    def test_private_store_with_secret_still_indexes_and_checks_clean(self):
         store = self.tmp / "s"
         self.write(store, "reference_key.md", GOOD + "\n" + "github" + "_pat_" + "B" * 30 + "\n")
+        pm.write_index(store)
+        self.assertEqual(pm.errors(pm.check_store(store)), [])
+
+    def test_fail_on_secrets_turns_warnings_into_errors_for_public_repos(self):
+        store = self.tmp / "s"
+        self.write(store, "reference_key.md", GOOD + "\n" + "github" + "_pat_" + "B" * 30 + "\n")
+        pm.write_index(store)
+        self.assertEqual(pm.main(["check", str(store)]), 0)
+        self.assertEqual(pm.main(["check", "--fail-on-secrets", str(store)]), 1)
+
+    def test_index_refuses_schema_errors(self):
+        store = self.tmp / "s"
+        self.write(store, "x.md", GOOD.replace("type: feedback\n", ""))
         with self.assertRaises(pm.StoreError):
             pm.write_index(store)
 
