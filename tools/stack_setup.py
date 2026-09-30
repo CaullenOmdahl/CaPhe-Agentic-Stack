@@ -297,16 +297,19 @@ def review_routes(run: Runner, which: Callable[[str], str | None] | None = None,
             continue
         rc, out = run([binary, "--version"])
         if current is None:
-            independent = True
-        elif CONFIGURED in (family, current_family):
-            independent = None  # depends on the configured model; confirm before relying on it
+            independence = "yes"
+        elif current_family is None or CONFIGURED in (family, current_family):
+            # Unknown author family, or a configured provider: confirm the model before relying on it.
+            independence = "unknown"
         else:
-            independent = family != current_family
+            independence = "yes" if family != current_family else "no"
         local.append({
             "reviewer": name, "binary": binary, "family": family,
             "version": out.strip().splitlines()[0] if rc == 0 and out.strip() else "unknown",
             "model": models.get(key) if key else None,
-            "independent": independent, "verification": verification, "note": note,
+            # "independent" stays a strict boolean for existing callers: unknown counts as not independent.
+            "independent": independence == "yes", "independence": independence,
+            "verification": verification, "note": note,
         })
     gh = which("gh")
     authed = bool(gh) and run(["gh", "auth", "status"])[0] == 0
@@ -381,7 +384,7 @@ def main(argv: list[str] | None = None, run: Runner = default_runner) -> int:
     p.add_argument("--runtime", default=str(Path(__file__).resolve().parents[1]))
     p.add_argument("--allow-unverified-2fa", action="store_true")
     p = sub.add_parser("review-routes")
-    p.add_argument("--current", choices=sorted(FAMILY), help="the agent asking, to judge independence")
+    p.add_argument("--current", help="the authoring agent (e.g. codex, claude), to judge independence")
     p = sub.add_parser("update-check")
     p.add_argument("--force", action="store_true")
     p.add_argument("--interval-days", type=float, default=2.0)
