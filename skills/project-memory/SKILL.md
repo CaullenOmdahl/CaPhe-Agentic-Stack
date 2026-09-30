@@ -61,7 +61,8 @@ caphe-memory index      # regenerate MEMORY.md; never hand-edit it
 git add .agent/memory && git commit -m "memory: <what was learned>"
 ```
 
-Commit memory with the work it belongs to and push with the branch. If `MEMORY.md` conflicts during a
+Commit memory with the work it belongs to and push with the branch. Memory written to the hub is
+committed and pushed straight to the hub's default branch: never open a pull request for the hub. If `MEMORY.md` conflicts during a
 merge or rebase, resolve by running `caphe-memory index`; the index is generated deterministically.
 
 ## Where memory goes

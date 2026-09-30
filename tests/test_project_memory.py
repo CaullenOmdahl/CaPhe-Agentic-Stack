@@ -107,6 +107,27 @@ class FormatTests(TempTree):
             pm.write_index(store)
 
 
+class NativeWriterTests(TempTree):
+    CLAUDE_NATIVE = "---\nname: X\ndescription: d\nmetadata:\n  type: feedback\n---\n\nbody\n"
+
+    def test_claude_native_file_has_no_errors_only_recommendations(self):
+        store = self.tmp / "s"
+        self.write(store, "feedback_x.md", self.CLAUDE_NATIVE)
+        problems = pm.check_store(store, include_index=False)
+        self.assertEqual(pm.errors(problems), [])
+        self.assertTrue(any("recommended" in p.message for p in problems))
+        pm.write_index(store)
+
+    def test_hand_edited_index_is_a_warning(self):
+        store = self.tmp / "s"
+        self.write(store, "feedback_x.md")
+        pm.write_index(store)
+        (store / pm.INDEX).write_text("# Memory Index\n\n- hand edit\n")
+        problems = pm.check_store(store)
+        self.assertEqual(pm.errors(problems), [])
+        self.assertTrue(any("stale" in p.message for p in problems))
+
+
 class DiscoveryTests(TempTree):
     def test_nested_repo_sees_inner_then_parent_store(self):
         outer = self.make_repo("outer")

@@ -41,8 +41,10 @@ STORE_REL = Path(".agent") / "memory"
 INDEX = "MEMORY.md"
 TYPES = ("user", "feedback", "project", "reference", "session")
 STATUSES = ("active", "superseded")
-REQUIRED = ("name", "description", "type", "created", "updated", "source", "status")
-KEY_ORDER = (*REQUIRED, "supersedes")
+REQUIRED = ("name", "description", "type")
+# Recommended so agents without the canonical template (e.g. a client's native writer) still pass.
+RECOMMENDED = ("created", "updated", "source", "status")
+KEY_ORDER = (*REQUIRED, *RECOMMENDED, "supersedes")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 INDEX_HEADER = (
     "# Memory Index\n\n"
@@ -178,6 +180,9 @@ def check_file(path: Path) -> list[Problem]:
     for key in REQUIRED:
         if not mem.meta.get(key):
             problems.append(Problem(path, 1, f"missing required field: {key}"))
+    for key in RECOMMENDED:
+        if not mem.meta.get(key):
+            problems.append(Problem(path, 1, f"missing recommended field: {key}", "warning"))
     if mem.meta.get("type") and mem.meta["type"] not in TYPES:
         problems.append(Problem(path, 1, f"type must be one of {', '.join(TYPES)}"))
     if mem.meta.get("status") and mem.meta["status"] not in STATUSES:
@@ -196,7 +201,7 @@ def check_store(store: Path, *, include_index: bool = True) -> list[Problem]:
         index = store / INDEX
         current = index.read_text(encoding="utf-8") if index.is_file() else None
         if current != render_index(store):
-            problems.append(Problem(index, 1, "index is stale; run `caphe-memory index`"))
+            problems.append(Problem(index, 1, "index is stale; run `caphe-memory index`", "warning"))
     return problems
 
 
