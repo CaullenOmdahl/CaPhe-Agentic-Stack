@@ -6,6 +6,9 @@ shared implementation-review policy for the canon, skills and project templates.
 
 ## Selection and completion
 
+- Discover routes first: `python3 <runtime>/tools/stack_setup.py review-routes --current <agent>`
+  lists installed local reviewers, their model family, configured review model, independence from
+  the current agent, and whether `gh` is authenticated for remote review.
 - Select one responsive remote reviewer unless actual repository branch protection
   requires more. Do not request every installed integration merely because it exists.
 - Do not request the retired consumer Gemini Code Assist GitHub reviewer. Google

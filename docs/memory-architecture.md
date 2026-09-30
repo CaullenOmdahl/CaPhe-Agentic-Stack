@@ -1,5 +1,30 @@
 # Local Memory Architecture
 
+## Canonical project store
+
+Durable memory that every agent shares lives in Git, not in any one client's private store:
+
+- **Location:** `<repo>/.agent/memory/` in the project's private repository. Memory that cannot live
+  there (public repositories, non-Git folders, local-only repositories, cross-project owner facts) goes to
+  a private hub repository (`$CAPHE_MEMORY_HUB`, default `~/agent-memory`) under `projects/<name>/` and
+  `global/`, with directory-to-project mapping in the hub's `projects.json`.
+- **Format:** one fact per Markdown file named `<type>_<slug>.md`, with frontmatter `name`,
+  `description`, `type` (`user|feedback|project|reference|session`), `created`, `updated`, `source`,
+  `status` (`active|superseded`), and optional `supersedes`. `MEMORY.md` is generated.
+- **Discovery:** `caphe-memory list` walks every enclosing repository root (so nested repositories see
+  their parent project), then the hub mapping, then the hub's global store.
+- **Safety:** `caphe-memory check` validates the schema, rejects credential values with the sanitizer's
+  `SECRET_PATTERNS`, and reports a stale index. Public repositories never receive memory files.
+- **Durability:** memory is committed with the work it belongs to and pushed with the branch, so a lost
+  session, context, or machine loses nothing.
+- **Client stores:** agent-native memory directories are inputs, not the canonical store. Claude's
+  per-project directory is linked to the repository store; Codex memory and Claude memory written
+  elsewhere are imported idempotently.
+
+The MemPalace index described below is an optional derived retrieval layer over canonical records.
+
+## Derived retrieval index
+
 The stack uses protected source records plus rebuildable local retrieval indexes.
 
 - **Source:** transcripts and explicit notes remain canonical.

@@ -7,6 +7,7 @@ description: Obtain an independent AI assessment for code, architecture, writing
 
 Use another model family for independent assessment. In a Codex session, prefer Claude Code for
 correctness-focused code review and agy for Gemini-family product, architecture, or writing review.
+OpenCode with a provider from another family (for example MiniMax) is also independent.
 Codex is a same-family fallback and must be labeled that way. For implementation review,
 read `~/.local/share/caphe/runtime/docs/review-workflow.md`: prefer one remote PR reviewer;
 use this independent local route only when remote review is unavailable/quota-limited, or the user
@@ -77,6 +78,30 @@ agy --sandbox --mode plan --dangerously-skip-permissions --effort high --add-dir
 ```
 
 The permission skip is bounded by agy's sandbox and plan mode. Do not remove either boundary.
+
+### OpenCode (family of its configured provider)
+
+Independent only when its provider's family differs from the current agent's, for example a MiniMax
+model reviewing Codex or Claude work. Run `python3 <runtime>/tools/stack_setup.py review-routes
+--current <agent>` to see which installed reviewers qualify on this machine.
+
+OpenCode has no MCP-isolation flag, so point `XDG_CONFIG_HOME` at an empty directory: that loads no
+global config, MCP servers, or plugins, while provider credentials (its data directory and environment)
+still apply. Use the read-only `plan` agent, `--pure`, and attach the diff instead of letting the
+reviewer run commands:
+
+```bash
+out=$(mktemp "${TMPDIR:-/tmp}/second-opinion-opencode.XXXXXX")
+opencode_model=$(awk -F= '$1 == "STRICT_CONFER_OPENCODE_MODEL" {sub(/^[^=]*=/, ""); print; exit}' ~/.config/caphe/review-models.conf)
+test -n "$opencode_model"
+empty_config=$(mktemp -d)
+git diff "$BASE"...HEAD > "${out}.diff"
+XDG_CONFIG_HOME="$empty_config" opencode run --pure --agent plan -m "$opencode_model" \
+  -f "${out}.diff" "PROMPT" > "$out" 2> "${out}.err"
+```
+
+The model uses OpenCode's `provider/model` form. Treat empty output or a non-zero exit as a failed
+review, never approval.
 
 ### Codex same-family fallback
 

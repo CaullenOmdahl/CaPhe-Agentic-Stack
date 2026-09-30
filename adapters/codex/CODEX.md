@@ -9,4 +9,5 @@ Codex-specific notes:
 - Full filesystem or network access increases responsibility; it does not lower the review bar.
 - Keep going by default when the next step is clear.
 - Use available memory or skills when relevant, but the canon is authoritative over stale local context.
+- Shared project memory is Git-stored `.agent/memory/`; follow the `project-memory` skill. Codex's own memory store is an import source, not the shared record.
 - For heavy or specialized execution, use the environment-specific offload workflow documented privately for the machine. Do not encode private hostnames or credentials in this public repo.

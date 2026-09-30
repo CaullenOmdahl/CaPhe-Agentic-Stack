@@ -71,7 +71,28 @@ The repository is the distribution source. The local machine is the runtime envi
      `.agent/.strict-version`, or has verified hook/source drift; ordinary skill invocation should not refresh files repeatedly.
    - Treat `FAST GREEN` as focused feedback. Completion requires `--mode completion`.
 
-7. Configure local memory retrieval only when requested.
+7. Set up shared project memory.
+   - Run `python3 tools/stack_setup.py clients` to see which agents are installed; configure every one
+     that is present and skip the rest.
+   - Run `python3 tools/stack_setup.py memory-hub`. It requires an authenticated `gh` whose account has
+     two-factor authentication enabled, then finds the owner's private memory hub repository
+     (default `agent-memory`), refuses it if it is public, clones or fast-forwards it to
+     `~/agent-memory`, and writes a marked block into each installed agent's global entrypoint naming
+     the hub and the `project-memory` skill.
+   - If no hub exists, recommend creating one and rerun with `--create` only after the owner agrees; it
+     creates the repository as private and scaffolds `global/`, `projects/`, and `projects.json`.
+   - Link `caphe-memory` onto `PATH` from the installed runtime (`memory/project_memory.py`).
+   - Project memories live in each private project repository at `.agent/memory/`; see the
+     `project-memory` skill. Never place memory in a public repository.
+
+8. Keep the stack current.
+   - Agents run `python3 <runtime>/tools/stack_setup.py update-check` at session start. It contacts the
+     public repository at most once per interval (default two days), records the last check in
+     `~/.local/state/caphe/`, outside Git, and reports when `main` has moved past the installed version.
+   - When an update is reported, rerun this install (plan, apply, verify); the applied version is
+     recorded after verification with `update-check --mark-applied`.
+
+9. Configure derived memory retrieval (MemPalace) only when requested.
    - Keep private domain mappings, sanitized exports, physical palaces, and benchmark fixtures outside
      this public repository with owner-only permissions.
    - Use separate physical domain roots for separate security domains and a distinct palace directory
@@ -92,18 +113,20 @@ The repository is the distribution source. The local machine is the runtime envi
      delete or hand-edit the owner-only mapping-state marker to bypass this gate.
    - Re-run owner-only hardening and the tree permission audit after every index write.
 
-8. Create or update private local notes when useful.
+10. Create or update private local notes when useful.
    - Local notes may include exact paths, available CLIs, account names, hostnames, project names, and operating facts.
    - Keep those notes outside this repository.
    - Do not commit them to the public stack.
 
-9. Verify the install.
+11. Verify the install.
    - Confirm the machine-level canon is readable.
    - Confirm each installed entrypoint points to the machine-level canon.
    - Confirm each installed skill has its supporting files.
    - Confirm no runtime checkout of this repository is required for normal agent use.
    - Confirm strict-mode source tests and the completion gate pass.
-   - Confirm memory indexes are outside Git trees, owner-only, and citation-resolvable.
+   - Confirm `caphe-memory list` resolves the hub and a project store, and each installed agent's
+     entrypoint names the hub.
+   - Confirm MemPalace indexes, if configured, are outside Git trees, owner-only, and citation-resolvable.
 
 ## Tool Inventory Guidance
 

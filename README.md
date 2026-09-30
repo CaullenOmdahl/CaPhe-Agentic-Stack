@@ -60,6 +60,7 @@ If a workflow depends on private operational details, document the shape of the 
 │   ├── benchmark_memory.py
 │   ├── export_codex_memory.py
 │   ├── mempalace_adapter.py
+│   ├── project_memory.py
 │   ├── resolve_codex_memory.py
 │   └── sync_mempalace.py
 ├── strict-mode/
@@ -122,6 +123,7 @@ The `skills/` directory contains reusable public workflow skills:
 - [`skills/gh-review-certify-loop`](skills/gh-review-certify-loop/SKILL.md): discover currently active GitHub reviewers and drive thread-aware PR review without waiting on retired integrations.
 - [`skills/intended-behavior`](skills/intended-behavior/SKILL.md): infer product behavior, UI placement, recurrence, and ask-versus-infer thresholds before implementation.
 - [`skills/memory-palace-recall`](skills/memory-palace-recall/SKILL.md): retrieve scoped prior context through sanitized, source-linked local evidence.
+- [`skills/project-memory`](skills/project-memory/SKILL.md): read and write the Git-stored project memory that every agent shares.
 - [`skills/prepare-branch-context`](skills/prepare-branch-context/SKILL.md): build read-only context for a branch or PR before follow-up work.
 - [`skills/strict-mode`](skills/strict-mode/SKILL.md): apply evidence-preserving work lanes, human gates, PR review, and full completion checks.
 - [`skills/ux-flow-plan`](skills/ux-flow-plan/SKILL.md): map current and desired product flows before attaching implementation files.
