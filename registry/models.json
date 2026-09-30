@@ -1,9 +1,260 @@
 {
   "schema_version": 1,
   "models": {
-    "codex-terra": {"vendor":"OpenAI","family":"GPT","client":"codex","vendor_model":"gpt-5.6-terra","tier":"standard","roles":["hypervisor","worker"],"classes":["settled-implementation","test-authoring"],"efforts":["medium","high"],"rates":{"checked":"2026-09-19","source":"https://openai.com/api/pricing/"},"context_window":128000,"status":"candidate","lifecycle":{"added":"2026-09-19","last_reviewed":"2026-09-19"},"rationale":"Initial incumbent hypothesis; capability must be locally probed.","decision_refs":["ADR-0005"]},
-    "codex-astra": {"vendor":"OpenAI","family":"GPT","client":"codex","vendor_model":"gpt-6-astra","tier":"frontier","roles":["planner"],"classes":["planning-architecture"],"efforts":["high"],"rates":{"checked":"2026-09-19","source":"https://openai.com/api/pricing/"},"context_window":128000,"status":"candidate","lifecycle":{"added":"2026-09-19","last_reviewed":"2026-09-19"},"rationale":"Planner hypothesis; capability must be locally probed.","decision_refs":["ADR-0005"]},
-    "claude-sonnet": {"vendor":"Anthropic","family":"Claude","client":"claude","vendor_model":"sonnet","tier":"strong","roles":["worker"],"classes":["settled-implementation","difficult-implementation"],"efforts":["medium","high"],"rates":{"checked":"2026-09-19","source":"https://www.anthropic.com/pricing"},"context_window":200000,"status":"candidate","lifecycle":{"added":"2026-09-19","last_reviewed":"2026-09-19"},"rationale":"Cross-vendor worker candidate.","decision_refs":["ADR-0005"]},
-    "gemini-flash": {"vendor":"Google","family":"Gemini","client":"agy","vendor_model":"gemini-3.7-flash-high","tier":"light","roles":["worker"],"classes":["lookup-extraction"],"efforts":["high"],"rates":{"checked":"2026-09-19","source":"https://ai.google.dev/gemini-api/docs/pricing"},"context_window":1000000,"status":"candidate","lifecycle":{"added":"2026-09-19","last_reviewed":"2026-09-19"},"rationale":"Cross-vendor extraction candidate; direct Gemini CLI is not assumed usable.","decision_refs":["ADR-0005"]}
+    "codex-terra": {
+      "vendor": "OpenAI",
+      "family": "GPT",
+      "client": "codex",
+      "vendor_model": "gpt-5.6-terra",
+      "tier": "standard",
+      "roles": [
+        "hypervisor",
+        "worker"
+      ],
+      "classes": [
+        "settled-implementation",
+        "test-authoring"
+      ],
+      "efforts": [
+        "medium",
+        "high"
+      ],
+      "rates": {
+        "checked": "2026-09-19",
+        "source": "https://openai.com/api/pricing/"
+      },
+      "context_window": 128000,
+      "status": "candidate",
+      "lifecycle": {
+        "added": "2026-09-19",
+        "last_reviewed": "2026-09-19"
+      },
+      "rationale": "Initial incumbent hypothesis; capability must be locally probed.",
+      "decision_refs": [
+        "ADR-0005"
+      ]
+    },
+    "codex-astra": {
+      "vendor": "OpenAI",
+      "family": "GPT",
+      "client": "codex",
+      "vendor_model": "gpt-6-astra",
+      "tier": "frontier",
+      "roles": [
+        "planner"
+      ],
+      "classes": [
+        "planning-architecture"
+      ],
+      "efforts": [
+        "high"
+      ],
+      "rates": {
+        "checked": "2026-09-19",
+        "source": "https://openai.com/api/pricing/"
+      },
+      "context_window": 128000,
+      "status": "candidate",
+      "lifecycle": {
+        "added": "2026-09-19",
+        "last_reviewed": "2026-09-19"
+      },
+      "rationale": "Planner hypothesis; capability must be locally probed.",
+      "decision_refs": [
+        "ADR-0005"
+      ]
+    },
+    "claude-fable": {
+      "vendor": "Anthropic",
+      "family": "Claude",
+      "client": "claude",
+      "vendor_model": "claude-fable-5-1",
+      "tier": "frontier",
+      "roles": [
+        "planner",
+        "hypervisor"
+      ],
+      "classes": [
+        "planning-architecture",
+        "coordination",
+        "difficult-implementation"
+      ],
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "rates": {
+        "checked": "2026-09-23",
+        "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+        "input_per_mtok_usd": 10,
+        "output_per_mtok_usd": 50,
+        "cache_read_per_mtok_usd": 0.25
+      },
+      "context_window": 1000000,
+      "status": "candidate",
+      "lifecycle": {
+        "added": "2026-09-23",
+        "last_reviewed": "2026-09-23",
+        "retirement_not_before": "2027-09-01"
+      },
+      "rationale": "Frontier-tier Claude client route; thinking always on, default effort high. Realised in Claude Code via the Agent tool model alias 'fable'.",
+      "decision_refs": [
+        "ADR-0005",
+        "ADR-0006"
+      ]
+    },
+    "claude-opus": {
+      "vendor": "Anthropic",
+      "family": "Claude",
+      "client": "claude",
+      "vendor_model": "claude-opus-5-5",
+      "tier": "strong",
+      "roles": [
+        "worker",
+        "integrator"
+      ],
+      "classes": [
+        "difficult-implementation",
+        "settled-implementation",
+        "coordination"
+      ],
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "rates": {
+        "checked": "2026-09-23",
+        "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+        "input_per_mtok_usd": 4,
+        "output_per_mtok_usd": 20,
+        "cache_read_per_mtok_usd": 0.2
+      },
+      "context_window": 1000000,
+      "status": "candidate",
+      "lifecycle": {
+        "added": "2026-09-23",
+        "last_reviewed": "2026-09-23",
+        "retirement_not_before": "2027-09-22"
+      },
+      "rationale": "Strong-tier Claude client route. Default effort is medium, one level below the rest of the lineup, so routes requiring high must declare it explicitly. Realised via model alias 'opus'.",
+      "decision_refs": [
+        "ADR-0005",
+        "ADR-0006"
+      ],
+      "predecessor": "claude-opus-5"
+    },
+    "claude-sonnet": {
+      "vendor": "Anthropic",
+      "family": "Claude",
+      "client": "claude",
+      "vendor_model": "claude-sonnet-5",
+      "tier": "standard",
+      "roles": [
+        "worker"
+      ],
+      "classes": [
+        "settled-implementation",
+        "test-authoring",
+        "lookup-extraction"
+      ],
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "rates": {
+        "checked": "2026-09-23",
+        "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+        "input_per_mtok_usd": 2,
+        "output_per_mtok_usd": 10,
+        "cache_read_per_mtok_usd": 0.2
+      },
+      "context_window": 1000000,
+      "status": "candidate",
+      "lifecycle": {
+        "added": "2026-09-19",
+        "last_reviewed": "2026-09-23",
+        "retirement_not_before": "2027-06-30"
+      },
+      "rationale": "Standard-tier Claude client route. Re-tiered from strong on 2026-09-23 when the frontier/strong/standard/light bands were mapped one-to-one onto the current lineup; vendor_model pinned and context window corrected from the stale 200k alias entry. Realised via model alias 'sonnet'.",
+      "decision_refs": [
+        "ADR-0005",
+        "ADR-0006"
+      ]
+    },
+    "claude-haiku": {
+      "vendor": "Anthropic",
+      "family": "Claude",
+      "client": "claude",
+      "vendor_model": "claude-haiku-4-5-20251001",
+      "tier": "light",
+      "roles": [
+        "worker"
+      ],
+      "classes": [
+        "lookup-extraction",
+        "mechanical"
+      ],
+      "efforts": [
+        "none"
+      ],
+      "rates": {
+        "checked": "2026-09-23",
+        "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+        "input_per_mtok_usd": 1,
+        "output_per_mtok_usd": 5,
+        "cache_read_per_mtok_usd": 0.1
+      },
+      "context_window": 200000,
+      "status": "candidate",
+      "lifecycle": {
+        "added": "2026-09-23",
+        "last_reviewed": "2026-09-23",
+        "retirement_not_before": "2026-10-15"
+      },
+      "rationale": "Light-tier Claude client route. No effort parameter (extended thinking via budget only), 64k max output, and the earliest retirement date in the lineup; a successor must be recorded before that date. Realised via model alias 'haiku'.",
+      "decision_refs": [
+        "ADR-0005",
+        "ADR-0006"
+      ]
+    },
+    "gemini-flash": {
+      "vendor": "Google",
+      "family": "Gemini",
+      "client": "agy",
+      "vendor_model": "gemini-3.7-flash-high",
+      "tier": "light",
+      "roles": [
+        "worker"
+      ],
+      "classes": [
+        "lookup-extraction"
+      ],
+      "efforts": [
+        "high"
+      ],
+      "rates": {
+        "checked": "2026-09-19",
+        "source": "https://ai.google.dev/gemini-api/docs/pricing"
+      },
+      "context_window": 1000000,
+      "status": "candidate",
+      "lifecycle": {
+        "added": "2026-09-19",
+        "last_reviewed": "2026-09-19"
+      },
+      "rationale": "Cross-vendor extraction candidate; direct Gemini CLI is not assumed usable.",
+      "decision_refs": [
+        "ADR-0005"
+      ]
+    }
   }
 }

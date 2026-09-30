@@ -34,6 +34,8 @@ class InstallContracts(unittest.TestCase):
         harness_entry = source / "bin" / "harness"
         harness_entry.write_text("#!/bin/sh\nexit 0\n")
         harness_entry.chmod(0o755)
+        (source / "memory").mkdir()
+        (source / "memory" / "project_memory.py").write_text("print('memory')\n")
         subprocess.run(["git", "init", "-q", str(source)], check=True)
         subprocess.run(["git", "-C", str(source), "add", "."], check=True)
         return source
@@ -58,6 +60,14 @@ class InstallContracts(unittest.TestCase):
             self.assertTrue(first["verified"] and second["verified"])
             self.assertTrue(Path(first["receipt_path"]).is_file())
             self.assertEqual((inventory.stat().st_mode & 0o077), 0)
+
+    def test_runtime_ships_memory_tooling(self):
+        # caphe-memory runs from the installed runtime, so memory/ must be in the payload.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); source = self.fixture_source(root); target = root / "target"
+            plan = installer.plan_runtime_install(source, target)
+            installer.apply_runtime_plan(plan, inventory_root=root / "private")
+            self.assertTrue((target / "memory" / "project_memory.py").exists())
 
     def test_source_mutation_rejects_apply_before_target_write(self):
         with tempfile.TemporaryDirectory() as tmp:
