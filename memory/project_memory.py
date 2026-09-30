@@ -299,7 +299,8 @@ class Hit:
 
 def search(path: Path, terms: list[str], hub: Hub, include_superseded: bool = False) -> list[Hit]:
     """Memories in every applicable store containing all TERMS; name/description matches rank first."""
-    terms = [t.lower() for t in terms if t.strip()]
+    # Agents often quote a whole phrase; treat it as its words, all of which must match.
+    terms = [w.lower() for t in terms for w in t.split()]
     hits = []
     for order, store in enumerate(stores_for(path, hub)):
         for f in memory_files(store.root):

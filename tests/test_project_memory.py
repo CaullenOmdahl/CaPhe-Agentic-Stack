@@ -176,6 +176,8 @@ class SearchTests(TempTree):
         hits = pm.search(inner, ["android", "bond"], self.hub)
         self.assertEqual([h.path.name for h in hits], ["project_bond.md"])  # all terms must match
         self.assertEqual(hits[0].store.root, outer / pm.STORE_REL)
+        phrase = pm.search(inner, ["android 15 BLE bond"], self.hub)  # quoted phrase = its words
+        self.assertEqual([h.path.name for h in phrase], ["project_bond.md"])
         any_hits = pm.search(inner, ["bond"], self.hub)
         self.assertEqual({h.path.name for h in any_hits}, {"project_bond.md", "user_x.md"})
 

@@ -107,6 +107,22 @@ class NoClaudeMachineTests(HomeTest):
         self.assertFalse((self.home / ".gemini").exists())
 
 
+class OpenCodePermissionTests(HomeTest):
+    def test_memory_stores_readable_without_prompts_and_existing_rules_kept(self):
+        cfg = self.home / ".config" / "opencode" / "opencode.json"
+        cfg.parent.mkdir(parents=True)
+        cfg.write_text(json.dumps({"permission": {"external_directory": "ask", "bash": {"*": "allow"}}}))
+        setup.wire_clients({"opencode": {}}, self.home / "hub", None)
+        data = json.loads(cfg.read_text())
+        rules = data["permission"]["external_directory"]
+        self.assertEqual(rules["*"], "ask")  # previous blanket rule becomes the default
+        self.assertEqual(rules[f"{self.home / 'hub'}/*"], "allow")
+        self.assertEqual(rules["*/.agent/memory/*"], "allow")
+        self.assertEqual(data["permission"]["bash"], {"*": "allow"})
+        setup.wire_clients({"opencode": {}}, self.home / "hub", None)
+        self.assertEqual(json.loads(cfg.read_text()), data)  # idempotent
+
+
 class HubTests(HomeTest):
     def test_refuses_without_2fa(self):
         with self.assertRaisesRegex(setup.SetupError, "two-factor"):
