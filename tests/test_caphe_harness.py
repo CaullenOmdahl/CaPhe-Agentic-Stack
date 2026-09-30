@@ -706,6 +706,27 @@ class ReviewFindingTests(unittest.TestCase):
             harness.time.sleep(2.5)
             self.assertFalse(marker.exists(), "a setsid descendant outlived the worker scope")
 
+    def test_effective_route_rejects_any_recorded_network_access(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            route = sample_config(tmp)["routes"][0]
+            base = {"model": route["model"], "effort": route["effort"], "cwd": tmp,
+                    "permission_profile": {"name": "caphe-worker"}}
+            ok = dict(base, sandbox_policy={"type": "workspace-write"})
+            self.assertTrue(harness._effective_route_verified(route, ok, tmp))
+            for policy in ({"type": "workspace-write", "network_access": True},
+                           {"type": "managed", "network": {"enabled": True}},
+                           {"type": "workspace-write", "network": True}):
+                self.assertFalse(harness._effective_route_verified(route, dict(base, sandbox_policy=policy), tmp))
+            profile = dict(base, sandbox_policy={"type": "workspace-write"},
+                           permission_profile={"name": "caphe-worker", "network": {"enabled": True}})
+            self.assertFalse(harness._effective_route_verified(route, profile, tmp))
+
+    def test_completed_run_without_a_result_file_is_not_completed(self):
+        record = {"status": "completed", "result_path": None}
+        self.assertEqual(harness._require_result(record)["status"], "failed_no_result")
+        kept = {"status": "timed_out", "result_path": None}
+        self.assertEqual(harness._require_result(kept)["status"], "timed_out")
+
     def test_linux_write_grants_must_name_existing_directories(self):
         with tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
             ws = Path(tmp)

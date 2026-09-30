@@ -544,6 +544,23 @@ def _verify_write_scope(route, effective_cwd, workspace, baseline, allowed_write
             "write_scope_verified": bool(changed is not None and _changes_allowed(changed, allowed, baseline))}
 
 
+def _network_enabled(policy):
+    """True when a recorded sandbox policy or permission profile grants network access."""
+    if not isinstance(policy, dict):
+        return False
+    if policy.get("network_access") is True:
+        return True
+    network = policy.get("network")
+    return network is True or (isinstance(network, dict) and network.get("enabled") is True)
+
+
+def _require_result(record):
+    """A worker that exits cleanly without writing its result has not completed its task."""
+    if record.get("status") == "completed" and not record.get("result_path"):
+        record["status"] = "failed_no_result"
+    return record
+
+
 def _effective_route_verified(route, effective, workspace):
     if not isinstance(effective, dict) or effective.get("model") != route["model"] or effective.get("effort") != route["effort"]:
         return False
@@ -553,6 +570,9 @@ def _effective_route_verified(route, effective, workspace):
     if not isinstance(profile, dict) or (profile.get("name") or profile.get("profile")) != "caphe-worker":
         return False
     if not isinstance(sandbox, dict) or sandbox.get("type") == "danger-full-access":
+        return False
+    # The requested profile disables network; reject any run whose recorded policy enabled it.
+    if _network_enabled(sandbox) or _network_enabled(profile):
         return False
     if not isinstance(cwd, str):
         return False
@@ -995,6 +1015,7 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
         record["result_read_error"] = str(error)
     if record.get("result_path") and not output_path.exists():
         record["result_path"] = None
+    _require_result(record)
     if record.get("route_verified") is not True and record.get("status") == "completed":
         record["status"] = "unverified"
     record_path = run_dir / "run.json"
