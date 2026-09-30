@@ -53,7 +53,7 @@ class HarnessConfigTests(unittest.TestCase):
 
     def test_systemd_scope_command_uses_control_group_cleanup(self):
         self.assertEqual(harness._systemd_scope_command(["codex", "exec"], "caphe-worker-test.scope"),
-                         ["systemd-run", "--user", "--scope", "--wait", "--collect", "--quiet",
+                         ["systemd-run", "--user", "--scope", "--collect", "--quiet",
                           "--unit", "caphe-worker-test.scope", "--property=KillMode=control-group",
                           "--", "codex", "exec"])
 
@@ -149,8 +149,8 @@ class HarnessConfigTests(unittest.TestCase):
 
     def test_brief_token_bound_is_conservative_and_deterministic(self):
         self.assertEqual(harness.estimate_tokens(""), 1)
-        self.assertEqual(harness.estimate_tokens("abc"), 1)
-        self.assertEqual(harness.estimate_tokens("abcd"), 2)
+        self.assertEqual(harness.estimate_tokens("abc"), 3)  # one token per UTF-8 byte upper bound
+        self.assertEqual(harness.estimate_tokens("é"), 2)
         with self.assertRaises(harness.HarnessError):
             harness.run_worker(sample_config("/tmp/runs"), sample_config("/tmp/runs")["routes"][0],
                                "/definitely/missing", "x" * 4000)
@@ -361,11 +361,16 @@ class HarnessConfigTests(unittest.TestCase):
             config = sample_config(Path(tmp) / "runs")
             config["routes"][0]["permissions"] = "worktree-write"
             repo = init_repo(Path(tmp) / "repo")
+            (repo / "out").mkdir()  # a directory grant, valid on every platform
+            (repo / "out" / ".keep").write_text("")
+            subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+            subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@e.invalid",
+                            "commit", "-qm", "out"], check=True)
             brief = Path(tmp) / "brief.md"
             brief.write_text("brief")
             tasks = [
                 {"category": "lookup-extraction", "repo": str(repo), "brief_file": str(brief),
-                 "allow_write": ["result.md"]},
+                 "allow_write": ["out"]},
                 {"category": "lookup-extraction", "repo": str(repo), "brief_file": str(brief)},
             ]
             with patch.object(harness, "run_worker") as launch:
@@ -555,12 +560,16 @@ class HarnessEvidenceTests(unittest.TestCase):
             secret.write_text("CAPHE_SECRET_SENTINEL", encoding="utf-8")
             (home / "sessions").mkdir()
             (home / "sessions" / "parent-rollout.jsonl").write_text("CAPHE_PARENT_SENTINEL", encoding="utf-8")
-            (workspace / "allowed.txt").write_text("before", encoding="utf-8")
+            # Directory grant: Codex's Linux sandbox panics on file grants (see
+            # _validate_platform_write_grants); directories work on every platform.
+            (workspace / "allowed").mkdir()
+            (workspace / "allowed" / "out.txt").write_text("before", encoding="utf-8")
             (workspace / "blocked.txt").write_text("before", encoding="utf-8")
             route = sample_config(workspace)["routes"][0]
             route["permissions"] = "worktree-write"
-            output_path = base / "worker-result.txt"
-            harness._write_codex_profile(home, route, ("allowed.txt",), output_path=output_path)
+            (base / "result").mkdir(mode=0o700)
+            output_path = base / "result" / "worker-result.txt"
+            harness._write_codex_profile(home, route, ("allowed",), output_path=output_path)
             def sandbox(*command):
                 return subprocess.run(["codex", "sandbox", "--profile", "caphe-worker",
                                        "--permission-profile", "caphe-worker", "--cd", str(workspace),
@@ -570,13 +579,143 @@ class HarnessEvidenceTests(unittest.TestCase):
                 self.assertNotIn("CAPHE_SECRET_SENTINEL", read.stdout)
                 self.assertNotIn("CAPHE_PARENT_SENTINEL", read.stdout)
                 self.assertNotEqual(read.returncode, 0)
-            write = sandbox("sh", "-c", "printf 'after' > allowed.txt; printf 'after' > blocked.txt")
+            write = sandbox("sh", "-c", "printf 'after' > allowed/out.txt; printf 'after' > blocked.txt")
             self.assertNotEqual(write.returncode, 0)
-            self.assertEqual((workspace / "allowed.txt").read_text(), "after")
+            self.assertEqual((workspace / "allowed" / "out.txt").read_text(), "after")
             self.assertEqual((workspace / "blocked.txt").read_text(), "before")
             result_write = sandbox("sh", "-c", "printf 'result' > " + str(output_path))
             self.assertEqual(result_write.returncode, 0, result_write.stderr)
             self.assertEqual(output_path.read_text(), "result")
+
+
+class ReviewFindingTests(unittest.TestCase):
+    """Regression tests for PR #15 review findings that remained open on its final head."""
+
+    def test_scope_query_failure_is_unknown_not_stopped(self):
+        failed = subprocess.CompletedProcess([], 1, stdout="", stderr="bus unavailable")
+        with patch.object(harness.subprocess, "run", return_value=failed):
+            self.assertIsNone(harness._systemd_scope_state("caphe-worker-x.scope", {}))
+            self.assertFalse(harness._stop_systemd_scope("caphe-worker-x.scope", {}))
+        gone = subprocess.CompletedProcess([], 0, stdout="inactive\n", stderr="")
+        with patch.object(harness.subprocess, "run", return_value=gone):
+            self.assertIs(harness._systemd_scope_state("caphe-worker-x.scope", {}), False)
+            self.assertTrue(harness._stop_systemd_scope("caphe-worker-x.scope", {}))
+
+    def test_token_estimate_never_undercounts_one_token_per_byte(self):
+        dense = "\x7f" * 2999 + "é"  # high-entropy text can approach one token per byte
+        self.assertGreaterEqual(harness.estimate_tokens(dense), len(dense.encode("utf-8")))
+        self.assertEqual(harness.brief_byte_limit({"context_budget_tokens": 1000}), 1000)
+
+    def test_snapshot_keeps_internal_symlinks_and_rejects_escaping_ones(self):
+        with tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
+            repo = init_repo(Path(tmp) / "repo")
+            (repo / "docs").mkdir()
+            (repo / "docs" / "guide.md").write_text("guide")
+            os.symlink("docs/guide.md", repo / "link.md")
+            os.symlink("../guide.md", repo / "docs" / "self.md")  # stays inside after normalisation
+            subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+            subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@e.invalid",
+                            "commit", "-qm", "links"], check=True)
+            snap = harness._snapshot_repo(repo, Path(tmp) / "snap")
+            self.assertEqual(os.readlink(snap / "link.md"), "docs/guide.md")
+            self.assertEqual((snap / "link.md").read_text(), "guide")
+            for target in ("../outside", "/etc/passwd", "docs/../../outside"):
+                bad = init_repo(Path(tmp) / ("bad" + str(abs(hash(target)))))
+                os.symlink(target, bad / "escape")
+                subprocess.run(["git", "-C", str(bad), "add", "."], check=True)
+                subprocess.run(["git", "-C", str(bad), "-c", "user.name=t", "-c", "user.email=t@e.invalid",
+                                "commit", "-qm", "escape"], check=True)
+                with self.assertRaises(harness.HarnessError):
+                    harness._snapshot_repo(bad, Path(tmp) / ("snap-" + bad.name))
+
+    def test_read_only_runs_are_verified_against_the_snapshot_baseline(self):
+        with tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
+            workspace = init_repo(Path(tmp) / "ws")
+            (workspace / "a.txt").write_text("before")
+            baseline = harness._tree_manifest(workspace)
+            route = {"permissions": "read-only"}
+            ok = harness._verify_write_scope(route, str(workspace), workspace, baseline, ())
+            self.assertTrue(ok["write_scope_verified"])
+            (workspace / "a.txt").write_text("after")
+            changed = harness._verify_write_scope(route, str(workspace), workspace, baseline, ())
+            self.assertFalse(changed["write_scope_verified"])
+            self.assertEqual(changed["changed_paths"], ["a.txt"])
+            self.assertFalse(harness._verify_write_scope(route, None, workspace, baseline, ())["write_scope_verified"])
+
+    def test_execution_requires_a_passing_live_profile_self_test(self):
+        with tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
+            repo = init_repo(Path(tmp) / "repo")
+            config = sample_config(Path(tmp) / "runs")
+            with patch.object(harness, "_command_status", return_value={"installed": True,
+                           "authenticated": True, "auth_mode": "chatgpt"}), \
+                 patch.object(harness, "_systemd_scope_status", return_value={"supported": True}), \
+                 patch.object(harness, "_codex_profile_parse_check", return_value={"supported": False,
+                       "reason": "filesystem profile allows an undeclared write"}), \
+                 patch.object(harness, "_run_process", side_effect=AssertionError("worker must not start")):
+                record = harness.run_worker(config, config["routes"][0], repo, "small brief", execute=True)
+            self.assertEqual(record["status"], "preflight_failed")
+            self.assertIn("undeclared write", record["execution_error"])
+
+    def test_installed_runtime_may_update_itself_but_a_source_checkout_may_not(self):
+        with tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
+            installed = Path(tmp) / "runtime"
+            installed.mkdir()
+            (installed / ".caphe-runtime.json").write_text("{}")
+            self.assertEqual(harness._update_target(installed, str(installed)), installed)
+            checkout = init_repo(Path(tmp) / "checkout")
+            (checkout / ".caphe-runtime.json").write_text("{}")
+            with self.assertRaisesRegex(harness.HarnessError, "source checkout"):
+                harness._update_target(checkout, str(checkout))
+            self.assertEqual(harness._update_target(checkout, str(installed)), installed)
+            with self.assertRaisesRegex(harness.HarnessError, "inventoried"):
+                harness._update_target(checkout, str(Path(tmp) / "missing"))
+
+    def test_profile_lets_the_sandbox_read_codexs_own_install_but_nothing_broader(self):
+        with tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
+            pkg = Path(tmp) / "node_modules" / "@openai" / "codex"
+            (pkg / "bin").mkdir(parents=True)
+            (pkg / "bin" / "codex.js").write_text("")
+            route = dict(sample_config(tmp)["routes"][0])
+            home = Path(tmp) / "codex-home"
+            home.mkdir()
+            with patch.object(harness.shutil, "which", return_value=str(pkg / "bin" / "codex.js")):
+                text = harness._write_codex_profile(home, route).read_text()
+            self.assertIn(json.dumps(str(pkg.resolve())) + ' = "read"', text)
+            for broad in (Path.home(), Path("/")):
+                self.assertIsNone(harness._codex_install_root(str(broad / "bin" / "codex")))
+
+    @unittest.skipUnless(harness._systemd_scope_status(dict(os.environ)).get("supported"),
+                         "needs a Linux user systemd manager")
+    def test_real_systemd_scope_stops_setsid_descendants_before_return(self):
+        # Real-artifact check for the containment boundary: a worker that detaches a grandchild
+        # with setsid() escapes its process group, but not its systemd scope.
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / "escaped-write"
+            grandchild = ("import os,pathlib,time; os.setsid(); time.sleep(1.5); pathlib.Path("
+                          + repr(str(marker)) + ").write_text('escaped')")
+            # The grandchild calls setsid() itself; it must not already lead a session.
+            # The worker waits until the grandchild has left its process group, then exits.
+            worker = ("import subprocess,sys,time; subprocess.Popen([sys.executable,'-c'," + repr(grandchild)
+                      + "], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); time.sleep(0.6)")
+            unit = "caphe-worker-test-" + os.urandom(4).hex() + ".scope"
+            env = dict(os.environ)
+            result = harness._run_process([sys.executable, "-c", worker], cwd=tmp, env=env, prompt="",
+                                          timeout=20, containment_unit=unit)
+            self.assertEqual(result[0], 0, result[2])
+            self.assertIs(harness._systemd_scope_state(unit, env), False)
+            harness.time.sleep(2.5)
+            self.assertFalse(marker.exists(), "a setsid descendant outlived the worker scope")
+
+    def test_linux_write_grants_must_name_existing_directories(self):
+        with tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
+            ws = Path(tmp)
+            (ws / "src").mkdir()
+            (ws / "file.txt").write_text("x")
+            harness._validate_platform_write_grants(ws, ("src",), platform="linux")
+            harness._validate_platform_write_grants(ws, ("file.txt",), platform="darwin")
+            for grants in (("file.txt",), ("missing",)):
+                with self.assertRaisesRegex(harness.HarnessError, "directories"):
+                    harness._validate_platform_write_grants(ws, grants, platform="linux")
 
 
 if __name__ == "__main__":

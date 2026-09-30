@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import posixpath
 from pathlib import Path
 from pathlib import PurePosixPath
 import re
@@ -122,18 +123,35 @@ def default_config_path():
 
 
 def estimate_tokens(text):
-    # No tokenizer is shared across configured providers. This deliberately
-    # conservative UTF-8 bound is checked before launch; client usage is recorded after.
-    return max(1, (len(text.encode("utf-8")) + 2) // 3)
+    # No tokenizer is shared across configured providers, and high-entropy or minified
+    # text can approach one token per UTF-8 byte, so bytes are the only safe upper bound.
+    # Client usage is recorded after the run.
+    return max(1, len(text.encode("utf-8")))
+
+
+def brief_byte_limit(route):
+    """Largest brief file accepted before reading it; matches estimate_tokens' bound."""
+    return route["context_budget_tokens"]
+
+
+def _internal_symlink(member):
+    """True for a relative symlink whose normalized target stays inside the archive root."""
+    link = member.linkname
+    if not link or "\0" in link or PurePosixPath(link).is_absolute():
+        return False
+    resolved = posixpath.normpath(posixpath.join(posixpath.dirname(member.name), link))
+    return resolved != ".." and not resolved.startswith("../") and not posixpath.isabs(resolved)
 
 
 def _extract_validated_tar(bundle, target, label):
     members = bundle.getmembers()
     for member in members:
         name = PurePosixPath(member.name)
-        if (member.issym() or member.islnk() or member.isdev() or name.is_absolute()
+        # Tracked symlinks are part of the recorded revision; keep those that stay inside it.
+        if (member.islnk() or member.isdev() or name.is_absolute()
                 or ".." in name.parts or member.mode & 0o7000
-                or not (member.isfile() or member.isdir())):
+                or (member.issym() and not _internal_symlink(member))
+                or not (member.isfile() or member.isdir() or member.issym())):
             raise HarnessError(label + " archive contains unsafe entries")
     kwargs = {"members": members}
     if callable(getattr(tarfile.TarFile, "data_filter", None)):
@@ -154,7 +172,9 @@ def build_command(route, prompt_path, output_path, repo, config_profile="caphe-w
 
 
 def _systemd_scope_command(argv, unit):
-    return ["systemd-run", "--user", "--scope", "--wait", "--collect", "--quiet",
+    # A scope already runs its command in the foreground and returns its exit status;
+    # systemd rejects "--wait" combined with "--scope".
+    return ["systemd-run", "--user", "--scope", "--collect", "--quiet",
             "--unit", unit, "--property=KillMode=control-group", "--", *argv]
 
 
@@ -186,7 +206,8 @@ def _systemd_scope_state(unit, env):
     except (OSError, subprocess.SubprocessError):
         return None
     if result.returncode:
-        return False
+        # A missing unit reports "inactive" with status 0; a failed query proves nothing.
+        return None
     state = result.stdout.strip()
     return state not in {"", "inactive", "failed"}
 
@@ -260,6 +281,24 @@ def _snapshot_repo(repo, target, revision=None):
     return target
 
 
+def _codex_install_root(executable=None):
+    """Directory holding the Codex package, which its Linux sandbox re-executes from.
+
+    The worker profile only exposes a minimal system view, so a Codex installed under the
+    user's home (npm, nvm) cannot re-execute itself inside the sandbox. Grant read access to
+    its own package only; never to the home directory or filesystem root.
+    """
+    executable = executable or shutil.which("codex")
+    if not executable:
+        return None
+    root = Path(os.path.realpath(executable)).parent.parent
+    home = Path.home().resolve()
+    # System prefixes are already visible through ":minimal"; never widen to them, home, or /.
+    if root in {Path("/"), Path("/usr"), Path("/usr/local"), Path("/opt"), home, home.parent}:
+        return None
+    return root
+
+
 def _write_codex_profile(home, route, allowed_writes=(), config_profile="caphe-worker", output_path=None):
     scoped = ['"." = "read"']
     if route["permissions"] == "worktree-write":
@@ -267,10 +306,17 @@ def _write_codex_profile(home, route, allowed_writes=(), config_profile="caphe-w
     codex_home = Path(home).resolve()
     filesystem = ('{ ":minimal" = "read", ":workspace_roots" = { ' + ", ".join(scoped) + " }, "
                   + json.dumps(str(codex_home / "auth.json")) + ' = "deny", '
-                  + json.dumps(str(codex_home / "sessions" / "**")) + ' = "deny"')
+                  # Deny the directory, not a "/**" glob: on Linux, a glob that matches existing
+                  # session files makes bubblewrap setup fail, so no sandboxed command runs at all.
+                  + json.dumps(str(codex_home / "sessions")) + ' = "deny"')
     if output_path is not None:
-        output_path = Path(output_path).expanduser().resolve(strict=False)
-        filesystem += ", " + json.dumps(str(output_path)) + ' = "write"'
+        # Grant the result's dedicated directory: file grants fail in Codex's Linux sandbox,
+        # and the directory holds nothing but the result.
+        result_dir = Path(output_path).expanduser().resolve(strict=False).parent
+        filesystem += ", " + json.dumps(str(result_dir)) + ' = "write"'
+    install_root = _codex_install_root()
+    if install_root is not None:
+        filesystem += ", " + json.dumps(str(install_root)) + ' = "read"'
     filesystem += " }"
     profile = codex_home / (config_profile + ".config.toml")
     profile.write_text(
@@ -310,15 +356,17 @@ def _codex_profile_parse_check(route):
             workspace.mkdir(mode=0o700)
             sandbox_tmp = home_root / "codex-tmp"
             sandbox_tmp.mkdir(mode=0o700)
-            output_path = home_root / "worker-result.txt"
-            (workspace / "allowed.txt").write_text("before", encoding="utf-8")
+            (home_root / "result").mkdir(mode=0o700)
+            output_path = home_root / "result" / "worker-result.txt"
+            (workspace / "allowed").mkdir(mode=0o700)
+            (workspace / "allowed" / "out.txt").write_text("before", encoding="utf-8")
             (workspace / "blocked.txt").write_text("before", encoding="utf-8")
             (Path(home) / "auth.json").write_text("CAPHE_SECRET_SENTINEL", encoding="utf-8")
             sessions = Path(home) / "sessions"
             sessions.mkdir(mode=0o700)
             (sessions / "parent.jsonl").write_text("CAPHE_PARENT_SENTINEL", encoding="utf-8")
             profile_name = "caphe-doctor-check"
-            allowed = ("allowed.txt",) if route["permissions"] == "worktree-write" else ()
+            allowed = ("allowed",) if route["permissions"] == "worktree-write" else ()
             _write_codex_profile(home, route, allowed, profile_name, output_path)
             env = {**_child_env("codex"), "CODEX_HOME": home, "TMPDIR": str(sandbox_tmp)}
             parse = subprocess.run([executable, "--profile", profile_name, "debug", "prompt-input", "profile check"],
@@ -337,8 +385,8 @@ def _codex_profile_parse_check(route):
             if blocked_write.returncode == 0 or (workspace / "blocked.txt").read_text() != "before":
                 return {"supported": False, "reason": "filesystem profile allows an undeclared write"}
             if route["permissions"] == "worktree-write":
-                allowed_write = sandbox("sh", "-c", "printf after > allowed.txt")
-                if allowed_write.returncode or (workspace / "allowed.txt").read_text() != "after":
+                allowed_write = sandbox("sh", "-c", "printf after > allowed/out.txt")
+                if allowed_write.returncode or (workspace / "allowed" / "out.txt").read_text() != "after":
                     return {"supported": False, "reason": "filesystem profile blocks a declared write"}
             result_write = sandbox("sh", "-c", "printf after > " + shlex.quote(str(output_path)))
             if result_write.returncode or output_path.read_text() != "after":
@@ -460,6 +508,40 @@ def _changes_allowed(paths, allowed, baseline=None):
                    and path.startswith(prefix + "/") for prefix in allowed):
             return False
     return True
+
+
+def _validate_platform_write_grants(workspace, allowed_writes, platform=None):
+    """Codex's Linux sandbox (bubblewrap) can only grant write access to directories.
+
+    A file grant makes it panic before the worker starts, so require existing directories
+    there and fail before any allowance is spent. Other platforms accept files.
+    """
+    platform = platform or sys.platform
+    if not platform.startswith("linux"):
+        return
+    root = Path(workspace)
+    bad = [path for path in allowed_writes
+           if (root / path).is_symlink() or not (root / path).is_dir()]
+    if bad:
+        raise HarnessError("on Linux, Codex can grant write access only to existing directories; "
+                           "declare the enclosing directory instead of: " + ", ".join(bad))
+
+
+def _verify_write_scope(route, effective_cwd, workspace, baseline, allowed_writes):
+    """Compare the snapshot with its pre-run baseline for every run, read-only included."""
+    allowed = allowed_writes if route["permissions"] == "worktree-write" else ()
+    if not isinstance(effective_cwd, str):
+        return {"write_scope_verified": False}
+    try:
+        work_root = subprocess.run(["git", "-C", effective_cwd, "rev-parse", "--show-toplevel"],
+                                   capture_output=True, text=True, timeout=20, env=_child_env("codex"))
+    except (OSError, subprocess.SubprocessError):
+        return {"write_scope_verified": False}
+    if work_root.returncode or Path(work_root.stdout.strip()).resolve() != Path(workspace).resolve():
+        return {"write_scope_verified": False}
+    changed = _worktree_changes(work_root.stdout.strip(), baseline, allowed)
+    return {"worktree": work_root.stdout.strip(), "changed_paths": changed,
+            "write_scope_verified": bool(changed is not None and _changes_allowed(changed, allowed, baseline))}
 
 
 def _effective_route_verified(route, effective, workspace):
@@ -800,7 +882,9 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ-") + os.urandom(6).hex()
     run_dir = run_root / run_id
     run_dir.mkdir(mode=0o700)
-    prompt_path, output_path = run_dir / "brief.txt", run_dir / "result.txt"
+    result_dir = run_dir / "result"
+    result_dir.mkdir(mode=0o700)  # dedicated: the only path outside the snapshot a worker may write
+    prompt_path, output_path = run_dir / "brief.txt", result_dir / "result.txt"
     prompt_path.write_text(prompt, encoding="utf-8")
     prompt_path.chmod(0o600)
     source = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True,
@@ -835,7 +919,14 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
         containment = _systemd_scope_status(child_env)
         if not containment["supported"]:
             raise HarnessError(containment["reason"])
+        # Bind execution to this machine's current sandbox behaviour, not rollout metadata:
+        # the self-test is local and spends no provider allowance.
+        readiness = _codex_profile_parse_check(route)
+        if not readiness["supported"]:
+            raise HarnessError("route sandbox self-test failed: " + str(readiness["reason"]))
         workspace = _snapshot_repo(repo, run_dir / "workspace", source.stdout.strip())
+        if route["permissions"] == "worktree-write":
+            _validate_platform_write_grants(workspace, allowed_writes)
         baseline = _tree_manifest(workspace)
         if baseline is None:
             raise HarnessError("immutable source snapshot could not be inventoried")
@@ -888,25 +979,10 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
                   usage=evidence.get("usage") if evidence else None, stderr_path=str(error_path))
     record["events_truncated"] = events_truncated
     record["stderr_truncated"] = stderr_truncated
-    if route["permissions"] == "worktree-write":
-        if not isinstance(effective_cwd, str):
-            record["write_scope_verified"] = False
-        else:
-            try:
-                work_root = subprocess.run(["git", "-C", effective_cwd, "rev-parse", "--show-toplevel"],
-                                           capture_output=True, text=True, timeout=20, env=_child_env("codex"))
-            except (OSError, subprocess.SubprocessError):
-                work_root = None
-            if work_root is None or work_root.returncode or Path(work_root.stdout.strip()).resolve() != workspace:
-                record["write_scope_verified"] = False
-            else:
-                changed = _worktree_changes(work_root.stdout.strip(), baseline, allowed_writes)
-                record["worktree"] = work_root.stdout.strip()
-                record["changed_paths"] = changed
-                record["write_scope_verified"] = bool(changed is not None
-                                                       and _changes_allowed(changed, allowed_writes, baseline))
-        if record["write_scope_verified"] is False and record.get("status") == "completed":
-            record["status"] = "rejected_write_scope"
+    # Read-only runs are verified too: an ineffective profile must not let a write pass.
+    record.update(_verify_write_scope(route, effective_cwd, workspace, baseline, allowed_writes))
+    if record["write_scope_verified"] is False and record.get("status") == "completed":
+        record["status"] = "rejected_write_scope"
     try:
         if output_path.is_file() and not output_path.is_symlink():
             _, truncated = _bounded_result(output_path, route["max_output_bytes"])
@@ -953,10 +1029,12 @@ def run_batch(config, tasks, *, execute=False, parent_run_id=None):
             raise HarnessError("read-only routes cannot declare writable paths")
         if route["permissions"] == "worktree-write" and not writes:
             raise HarnessError("worktree-write routes require explicit allow_write paths")
+        if execute and writes:
+            _validate_platform_write_grants(repo, writes)  # clean checkout == HEAD snapshot
         brief_path = Path(task["brief_file"]).expanduser()
         if brief_path.is_symlink() or not brief_path.is_file():
             raise HarnessError("batch briefs must be regular files")
-        if brief_path.stat().st_size > route["context_budget_tokens"] * 3:
+        if brief_path.stat().st_size > brief_byte_limit(route):
             raise HarnessError("batch brief exceeds the route context budget")
         brief = brief_path.read_text(encoding="utf-8")
         retry_of = _validate_run_reference(task.get("retry_of"), "retry_of")
@@ -1082,7 +1160,7 @@ def doctor(config_path, *, apply=False, probe=False):
                     outcome = run_worker(config, route, probe_repo,
                                          "This is a route verification probe. Reply with exactly the supplied marker and do not use tools. Marker: "
                                          + "CAPHE_PROBE_" + os.urandom(6).hex(), execute=True,
-                                         allowed_writes=("CAPHE_PROBE_MARKER.txt",)
+                                         allowed_writes=("probe-output",)
                                          if route["permissions"] == "worktree-write" else ())
                     report["probes"].append({"category": route["category"], "status": outcome["status"],
                                              "route_verified": outcome.get("route_verified", False),
@@ -1280,6 +1358,26 @@ def _check_update_preview(state, digest, report):
         raise HarnessError("release plan changed since preview; review a new preview before applying")
 
 
+def _is_git_checkout(path):
+    try:
+        probe = subprocess.run(["git", "-C", str(path), "rev-parse", "--is-inside-work-tree"],
+                               capture_output=True, text=True, timeout=10, env=_child_env("codex"))
+    except (OSError, subprocess.SubprocessError):
+        return True  # cannot prove otherwise; refuse to treat it as an installed runtime
+    return probe.returncode == 0 and probe.stdout.strip() == "true"
+
+
+def _update_target(root, target_text):
+    """The runtime to update. An installed runtime may update itself; a source checkout may not."""
+    target = Path(target_text).expanduser().absolute()
+    resolved, root = target.resolve(), Path(root).resolve()
+    if (resolved == root or root in resolved.parents) and _is_git_checkout(root):
+        raise HarnessError("source checkout is not an installed runtime target")
+    if not target.is_dir() or not (target / ".caphe-runtime.json").is_file():
+        raise HarnessError("target is not an inventoried installed runtime")
+    return target
+
+
 def update_runtime(*, apply=False, tag=None, preview_digest=None):
     if apply and not tag:
         raise HarnessError("apply requires the exact previewed tag: --apply --tag vX.Y.Z --preview-digest <sha256>")
@@ -1290,11 +1388,7 @@ def update_runtime(*, apply=False, tag=None, preview_digest=None):
     target_text = os.environ.get("CAPHE_RUNTIME")
     if not target_text:
         raise HarnessError("CAPHE_RUNTIME must identify the installed runtime")
-    target = Path(target_text).expanduser().absolute()
-    if target.resolve() == ROOT or (ROOT in target.resolve().parents):
-        raise HarnessError("source checkout is not an installed runtime target")
-    if not target.is_dir() or not (target / ".caphe-runtime.json").is_file():
-        raise HarnessError("target is not an inventoried installed runtime")
+    target = _update_target(ROOT, target_text)
     spec = importlib.util.spec_from_file_location("caphe_stack_install", ROOT / "tools" / "stack_install.py")
     stack_install = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(stack_install)
@@ -1381,7 +1475,7 @@ def main(argv=None):
             brief_path = Path(args.brief_file)
             if brief_path.is_symlink() or not brief_path.is_file():
                 raise HarnessError("brief file must be a regular file")
-            if brief_path.stat().st_size > route["context_budget_tokens"] * 3:
+            if brief_path.stat().st_size > brief_byte_limit(route):
                 raise HarnessError("brief file exceeds the route context budget")
             result = run_worker(config, route, args.repo, brief_path.read_text(encoding="utf-8"),
                                 execute=args.execute, allowed_writes=args.allow_write,
