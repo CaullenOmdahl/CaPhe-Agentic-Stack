@@ -163,6 +163,32 @@ class DiscoveryTests(TempTree):
         self.assertEqual(target.root, self.hub.root / "projects" / "notes")
 
 
+class SearchTests(TempTree):
+    def test_search_covers_parent_repo_and_hub_stores(self):
+        outer = self.make_repo("outer")
+        (outer / ".gitignore").write_text("inner/\n")
+        inner = self.make_repo("outer/inner")
+        self.write(outer / pm.STORE_REL, "project_bond.md",
+                   GOOD.replace("No parallel builds", "Android 15 BLE bond staleness"))
+        self.write(inner / pm.STORE_REL, "feedback_other.md")
+        (self.hub.root / "global").mkdir(parents=True)
+        self.write(self.hub.root / "global", "user_x.md", GOOD.replace("heavy builds", "bond reviews"))
+        hits = pm.search(inner, ["android", "bond"], self.hub)
+        self.assertEqual([h.path.name for h in hits], ["project_bond.md"])  # all terms must match
+        self.assertEqual(hits[0].store.root, outer / pm.STORE_REL)
+        any_hits = pm.search(inner, ["bond"], self.hub)
+        self.assertEqual({h.path.name for h in any_hits}, {"project_bond.md", "user_x.md"})
+
+    def test_search_ranks_name_and_description_matches_first_and_skips_index(self):
+        repo = self.make_repo("r")
+        store = repo / pm.STORE_REL
+        self.write(store, "project_body.md", GOOD + "\nmentions widget in body\n")
+        self.write(store, "project_title.md", GOOD.replace("No parallel builds", "Widget rules"))
+        pm.write_index(store)
+        names = [h.path.name for h in pm.search(repo, ["widget"], self.hub)]
+        self.assertEqual(names, ["project_title.md", "project_body.md"])
+
+
 class ImportTests(TempTree):
     def test_import_claude_converts_and_is_idempotent(self):
         src = self.tmp / "claude"

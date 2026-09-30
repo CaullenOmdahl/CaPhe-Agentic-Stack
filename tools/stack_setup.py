@@ -86,7 +86,9 @@ def memory_block(client: str, hub: Path, runtime: Path | None) -> str:
         "## Shared project memory",
         "",
         "Project memory is Git-stored and shared by every agent. At the start of project work run",
-        "`caphe-memory list` and follow the `project-memory` skill.",
+        "`caphe-memory list`; to look something up, run `caphe-memory search <terms>`, which searches",
+        "this repository, enclosing parent repositories, and the hub together. Follow the",
+        "`project-memory` skill.",
         f"Owner memory hub: `{hub}` (global index: `{hub / 'global' / 'MEMORY.md'}`).",
     ]
     if client == "claude":

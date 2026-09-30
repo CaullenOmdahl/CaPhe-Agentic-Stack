@@ -122,7 +122,7 @@ repositories, non-Git folders, cross-project owner facts) goes to the owner's pr
 repositories never receive memory files.
 
 At the start of project work, run `caphe-memory list` and read the entries whose descriptions match the
-task. Write a memory when you learn something durable that code and Git history do not already record:
+task; look things up with `caphe-memory search <terms>`, which covers parent repositories and the hub. Write a memory when you learn something durable that code and Git history do not already record:
 owner decisions, corrections, environment facts, hard-won procedures. Update an existing file rather than
 adding a near-duplicate; mark a replaced fact `status: superseded`. A private store may keep credentials
 that would otherwise be lost; `caphe-memory check` warns about them. Before a repository is made public,

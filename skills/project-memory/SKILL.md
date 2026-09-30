@@ -14,7 +14,11 @@ lost machine because it is committed and pushed like any other project file.
 ```bash
 caphe-memory list            # stores for this directory, innermost first, plus the write target
 caphe-memory list --full     # also print each store's index
+caphe-memory search <terms>  # every applicable store at once; all terms must match
 ```
+
+Use `search` for lookups rather than grepping one directory: it covers the parent project and the hub,
+which a single-directory search misses.
 
 Stores are listed innermost first: the current repository, each enclosing repository (a nested
 repository also sees its parent project), the owner's hub entry for this project if one exists, and the

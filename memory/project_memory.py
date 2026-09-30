@@ -9,6 +9,8 @@ hub repository, `$CAPHE_MEMORY_HUB` (default `~/agent-memory`), under
 `projects/<name>/` and `global/`.
 
     caphe-memory list [PATH] [--full]   stores that apply to PATH, innermost first
+    caphe-memory search TERM... [--path PATH] [--all]
+                                        search every store that applies, parents and hub included
     caphe-memory where [PATH]           the store new memories for PATH belong in
     caphe-memory new TYPE NAME DESC [--path PATH] [--source AGENT]
     caphe-memory check [--fail-on-secrets] [STORE ...]
@@ -287,6 +289,31 @@ def stores_for(path: Path, hub: Hub) -> list[Store]:
     return stores
 
 
+@dataclass
+class Hit:
+    path: Path
+    store: Store
+    memory: Memory
+    score: int
+
+
+def search(path: Path, terms: list[str], hub: Hub, include_superseded: bool = False) -> list[Hit]:
+    """Memories in every applicable store containing all TERMS; name/description matches rank first."""
+    terms = [t.lower() for t in terms if t.strip()]
+    hits = []
+    for order, store in enumerate(stores_for(path, hub)):
+        for f in memory_files(store.root):
+            mem = parse_memory(f)
+            if not include_superseded and mem.meta.get("status", "active") != "active":
+                continue
+            head = f"{mem.meta.get('name', '')} {mem.meta.get('description', '')} {f.stem}".lower()
+            text = head + " " + mem.body.lower()
+            if terms and all(t in text for t in terms):
+                score = sum(2 if t in head else 1 for t in terms)
+                hits.append((-score, order, f.name, Hit(f, store, mem, score)))
+    return [h[-1] for h in sorted(hits, key=lambda h: h[:3])]
+
+
 def write_target(path: Path, hub: Hub) -> Store:
     """Hub mapping wins (public, non-Git, local-only); otherwise the innermost repo."""
     path = path.resolve()
@@ -461,6 +488,18 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_search(args: argparse.Namespace) -> int:
+    hits = search(Path(args.path).expanduser(), args.terms, Hub.load(), args.all)
+    if not hits:
+        print("no matching memories in: " + ", ".join(
+            str(s.root) for s in stores_for(Path(args.path).expanduser().resolve(), Hub.load())))
+        return 1
+    for h in hits:
+        print(f"{h.path}\n    [{h.store.kind}] {h.memory.meta.get('name', h.path.stem)}: "
+              f"{h.memory.meta.get('description', '')}")
+    return 0
+
+
 def cmd_where(args: argparse.Namespace) -> int:
     print(write_target(Path(args.path).expanduser(), Hub.load()).root)
     return 0
@@ -538,6 +577,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="caphe-memory", description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("list"); p.add_argument("path", nargs="?", default="."); p.add_argument("--full", action="store_true"); p.set_defaults(fn=cmd_list)
+    p = sub.add_parser("search"); p.add_argument("terms", nargs="+"); p.add_argument("--path", default="."); p.add_argument("--all", action="store_true"); p.set_defaults(fn=cmd_search)
     p = sub.add_parser("where"); p.add_argument("path", nargs="?", default="."); p.set_defaults(fn=cmd_where)
     p = sub.add_parser("new"); p.add_argument("type"); p.add_argument("name"); p.add_argument("description")
     p.add_argument("--path", default="."); p.add_argument("--source", default="owner"); p.add_argument("--body"); p.set_defaults(fn=cmd_new)
