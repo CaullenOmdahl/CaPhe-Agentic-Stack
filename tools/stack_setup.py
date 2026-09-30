@@ -69,8 +69,9 @@ def client_table() -> dict[str, dict[str, Path | str]]:
     }
 
 
-def detect_clients(which: Callable[[str], str | None] = shutil.which) -> dict[str, dict[str, str]]:
+def detect_clients(which: Callable[[str], str | None] | None = None) -> dict[str, dict[str, str]]:
     """Installed agents: the CLI is on PATH or its config directory exists."""
+    which = which or shutil.which
     found = {}
     for name, info in client_table().items():
         binary = which(str(info["cmd"]))
@@ -249,7 +250,7 @@ def review_models() -> dict[str, str]:
     return models
 
 
-def review_routes(run: Runner, which: Callable[[str], str | None] = shutil.which,
+def review_routes(run: Runner, which: Callable[[str], str | None] | None = None,
                   current: str | None = None) -> dict:
     """Remote (GitHub) and local CLI review routes available on this machine.
 
@@ -257,6 +258,7 @@ def review_routes(run: Runner, which: Callable[[str], str | None] = shutil.which
     OpenCode's family depends on its configured provider, so it is independent of any agent whose
     family differs from that provider's; the caller must confirm which provider it uses.
     """
+    which = which or shutil.which
     models = review_models()
     local = []
     for name, cmd, family, key in REVIEWERS:

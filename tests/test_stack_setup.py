@@ -88,6 +88,25 @@ class ClientTests(HomeTest):
         self.assertIn("manual", setup.wire_clients({"opencode": {}}, self.home / "hub", None)["opencode"])
 
 
+class NoClaudeMachineTests(HomeTest):
+    def test_memory_hub_setup_works_without_claude_and_never_creates_claude_config(self):
+        (self.home / ".codex").mkdir()
+        (self.home / ".config" / "opencode").mkdir(parents=True)
+        (self.home / ".config" / "opencode" / "opencode.json").write_text("{}")
+        dest = self.home / "agent-memory"
+        (dest / ".git").mkdir(parents=True)
+        gh = FakeGh([(["gh", "api", "user"], user()), (["gh", "repo", "view"], (0, "PRIVATE\n")),
+                     (["git", "-C", str(dest), "remote"], (0, "https://github.com/owner/agent-memory.git\n")),
+                     (["git", "-C", str(dest), "pull"], (0, ""))])
+        with mock.patch.object(setup.shutil, "which", lambda cmd: None):
+            rc = setup.main(["memory-hub", "--dest", str(dest), "--runtime", str(self.home / "rt")], run=gh)
+        self.assertEqual(rc, 0)
+        self.assertIn(setup.BEGIN, (self.home / ".codex" / "AGENTS.md").read_text())
+        self.assertIn(setup.BEGIN, (self.home / ".config" / "opencode" / "AGENTS.md").read_text())
+        self.assertFalse((self.home / ".claude").exists())
+        self.assertFalse((self.home / ".gemini").exists())
+
+
 class HubTests(HomeTest):
     def test_refuses_without_2fa(self):
         with self.assertRaisesRegex(setup.SetupError, "two-factor"):
