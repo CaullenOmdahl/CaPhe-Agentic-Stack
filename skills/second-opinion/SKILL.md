@@ -7,7 +7,9 @@ description: Obtain an independent AI assessment for code, architecture, writing
 
 Use another model family for independent assessment. In a Codex session, prefer Claude Code for
 correctness-focused code review and agy for Gemini-family product, architecture, or writing review.
-OpenCode with a provider from another family (for example MiniMax) is also independent.
+OpenCode with a provider from another family (for example MiniMax) is also independent. Other
+reviewers, remote and local, are listed with their verification status in the stack's
+`docs/reviewer-catalog.md`; use only verified invocations without first testing them.
 Codex is a same-family fallback and must be labeled that way. For implementation review,
 read `~/.local/share/caphe/runtime/docs/review-workflow.md`: prefer one remote PR reviewer;
 use this independent local route only when remote review is unavailable/quota-limited, or the user

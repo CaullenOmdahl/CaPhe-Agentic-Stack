@@ -214,6 +214,20 @@ class ReviewRouteTests(HomeTest):
         self.assertIsNone(local["codex"]["model"])
         self.assertTrue(routes["remote"]["gh_authenticated"])
 
+    def test_catalog_reviewers_report_verification_and_unknown_independence(self):
+        which = {"opencode": "/bin/opencode", "kimi": "/bin/kimi", "qwen": "/bin/qwen",
+                 "copilot": "/bin/copilot", "gh": None}.get
+        run = FakeGh([(["/bin/opencode", "--version"], (0, "1.18\n")), (["/bin/kimi", "--version"], (0, "1\n")),
+                      (["/bin/qwen", "--version"], (0, "0.9\n")), (["/bin/copilot", "--version"], (0, "1\n"))])
+        local = {r["reviewer"]: r for r in setup.review_routes(run, which=which, current="claude")["local"]}
+        self.assertEqual(local["opencode"]["verification"], "verified")
+        self.assertIsNone(local["opencode"]["independent"])  # depends on the configured provider
+        self.assertIsNone(local["copilot"]["independent"])
+        self.assertTrue(local["qwen"]["independent"])
+        self.assertEqual(local["qwen"]["verification"], "documented")
+        self.assertIn("auto-approves", local["kimi"]["note"])
+        self.assertEqual(setup.review_routes(run, which=which, current="claude")["catalog"], "docs/reviewer-catalog.md")
+
     def test_no_reviewers_installed_is_reported_not_raised(self):
         routes = setup.review_routes(FakeGh([]), which=lambda c: None, current="claude")
         self.assertEqual(routes["local"], [])

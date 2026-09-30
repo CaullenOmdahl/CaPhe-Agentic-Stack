@@ -56,7 +56,8 @@ If a workflow depends on private operational details, document the shape of the 
 │   ├── external-workflow-integrations.md
 │   ├── install-for-agents.md
 │   ├── public-safety.md
-│   └── review-workflow.md
+│   ├── review-workflow.md
+│   └── reviewer-catalog.md
 ├── memory/
 │   ├── benchmark_memory.py
 │   ├── export_codex_memory.py
@@ -150,7 +151,8 @@ The default route is:
 7. Address actionable findings.
 8. Leave merge approval to a human maintainer.
 
-See [`docs/review-workflow.md`](docs/review-workflow.md) for the detailed route.
+See [`docs/review-workflow.md`](docs/review-workflow.md) for the detailed route. [`docs/reviewer-catalog.md`](docs/reviewer-catalog.md) lists every remote and local reviewer the
+route can use, including options for machines that have only one agent installed.
 
 Successful independent local fallback satisfies the workflow review gate; do not routinely run both.
 Persistent UTC cooldowns and atomic request reservations prevent duplicate requests across tasks.
