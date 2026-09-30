@@ -266,6 +266,23 @@ def enclosing_repos(path: Path) -> list[Path]:
     return roots
 
 
+def hub_store_for(path: Path, hub: Hub) -> Store | None:
+    """The hub store a path inside the hub checkout belongs to; None when outside the hub."""
+    root = hub.root.resolve()
+    if path != root and root not in path.parents:
+        return None
+    projects = root / "projects"
+    if projects in path.parents:
+        # Nearest indexed folder (entries may nest, e.g. projects/group/name); else the top folder.
+        probe = path
+        while probe.parent != projects:
+            if (probe / INDEX).is_file():
+                break
+            probe = probe.parent
+        return hub.project_store(str(probe.relative_to(projects)))
+    return hub.global_store()
+
+
 def hub_project_for(path: Path, hub: Hub) -> str | None:
     for p in [path, *path.parents]:
         name = hub.projects.get(str(p))
@@ -276,6 +293,9 @@ def hub_project_for(path: Path, hub: Hub) -> str | None:
 
 def stores_for(path: Path, hub: Hub) -> list[Store]:
     path = path.resolve()
+    inside = hub_store_for(path, hub)
+    if inside is not None:
+        return [s for s in (inside, hub.global_store()) if s.root.is_dir()][:1 if inside.kind == "hub-global" else 2]
     stores: list[Store] = []
     for repo in enclosing_repos(path):
         store = repo / STORE_REL
@@ -318,6 +338,9 @@ def search(path: Path, terms: list[str], hub: Hub, include_superseded: bool = Fa
 def write_target(path: Path, hub: Hub) -> Store:
     """Hub mapping wins (public, non-Git, local-only); otherwise the innermost repo."""
     path = path.resolve()
+    inside = hub_store_for(path, hub)
+    if inside is not None:
+        return inside
     name = hub_project_for(path, hub)
     if name:
         return hub.project_store(name)

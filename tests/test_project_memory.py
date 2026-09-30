@@ -156,6 +156,14 @@ class DiscoveryTests(TempTree):
         kinds = [s.kind for s in pm.stores_for(public, self.hub)]
         self.assertEqual(kinds[-2:], ["hub-project", "hub-global"])
 
+    def test_paths_inside_the_hub_target_hub_stores_not_a_repo_store(self):
+        hub = self.make_repo("hub")  # the hub is itself a Git checkout
+        self.hub.root = hub
+        (hub / "projects" / "p").mkdir(parents=True)
+        self.assertEqual(pm.write_target(hub, self.hub).root, hub / "global")
+        self.assertEqual(pm.write_target(hub / "projects" / "p", self.hub).root, hub / "projects" / "p")
+        self.assertEqual(pm.write_target(hub / "projects" / "p" / "sub", self.hub).root, hub / "projects" / "p")
+
     def test_non_git_unmapped_folder_goes_to_hub_by_name(self):
         folder = self.tmp / "notes"
         folder.mkdir()
