@@ -111,6 +111,11 @@ Doctor uses a non-empty committed fixture. Its live probes must read the fixture
 must create the exact declared marker file. Successful process exit or a matching model name is not
 enough. Empty source trees remain valid inputs to the snapshotter and are tested separately.
 
+Linux Codex creates empty `.git`, `.codex`, and `.agents` mount directories within writable roots.
+Prepare missing directories before taking the immutable baseline, and accept them only while their
+type, mode, and empty contents remain unchanged. Existing paths are never exempted. This avoids
+misclassifying CLI mount setup as worker output without ignoring arbitrary hidden files or changes.
+
 Design review must challenge route authenticity, provider-account billing separation, credential handling,
 source/context boundaries, subprocess/worktree isolation, and update rollback. Implementation review is the
 actual PR diff. Completion requires regression tests, the uncached completion matrix, no secret leakage,

@@ -584,11 +584,36 @@ def _network_enabled(policy):
     return network is True or (isinstance(network, dict) and network.get("enabled") is True)
 
 
-def _result_dir_clean(result_dir, output_path):
+def _prepare_sandbox_mounts(roots):
+    mounts = {}
+    if not sys.platform.startswith("linux"):
+        return mounts
+    for root in roots:
+        for name in (".git", ".codex", ".agents"):
+            path = Path(root) / name
+            if path.exists() or path.is_symlink():
+                continue
+            path.mkdir(mode=0o755)
+            mounts[str(path)] = stat.S_IMODE(path.stat().st_mode)
+    return mounts
+
+
+def _sandbox_mounts_unchanged(mounts):
+    try:
+        return all(not Path(path).is_symlink() and Path(path).is_dir()
+                   and stat.S_IMODE(Path(path).stat().st_mode) == mode
+                   and not any(Path(path).iterdir()) for path, mode in mounts.items())
+    except OSError:
+        return False
+
+
+def _result_dir_clean(result_dir, output_path, mounts=None):
     """Remove anything but the result from its writable directory; False if any was found."""
     clean = True
     for entry in Path(result_dir).iterdir():
         if entry == Path(output_path) and entry.is_file() and not entry.is_symlink():
+            continue
+        if mounts and str(entry) in mounts and _sandbox_mounts_unchanged({str(entry): mounts[str(entry)]}):
             continue
         clean = False
         if entry.is_dir() and not entry.is_symlink():
@@ -1052,13 +1077,15 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
             raise HarnessError("route sandbox self-test failed: " + str(readiness["reason"]))
         workspace = _snapshot_repo(repo, run_dir / "workspace", source.stdout.strip())
 
+        sandbox_grants = _sandbox_write_grants(workspace, allowed_writes)
+        mounts = _prepare_sandbox_mounts([workspace / grant for grant in sandbox_grants] + [result_dir])
         baseline = _tree_manifest(workspace)
         if baseline is None:
             raise HarnessError("immutable source snapshot could not be inventoried")
         sandbox_tmp = run_dir / "codex-tmp"
         sandbox_tmp.mkdir(mode=0o700)
         home, profile_path = _prepare_codex_profile(
-            route, _sandbox_write_grants(workspace, allowed_writes), config_profile, output_path)
+            route, sandbox_grants, config_profile, output_path)
         expected_profile = _expected_permission_profile(profile_path, workspace)
         argv = build_command(route, prompt_path, output_path, workspace, config_profile, profile_path=profile_path)
     except (HarnessError, OSError, subprocess.SubprocessError, ValueError) as error:
@@ -1113,6 +1140,9 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
     record.update(_verify_write_scope(route, effective_cwd, workspace, baseline, allowed_writes))
     if record["write_scope_verified"] is False and record.get("status") == "completed":
         record["status"] = "rejected_write_scope"
+    record["sandbox_mounts_verified"] = _sandbox_mounts_unchanged(mounts)
+    if record["sandbox_mounts_verified"] is False and record.get("status") == "completed":
+        record["status"] = "rejected_sandbox_mounts"
     try:
         if output_path.is_file() and not output_path.is_symlink():
             _, truncated = _bounded_result(output_path, route["max_output_bytes"])
@@ -1125,7 +1155,7 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
         record["result_read_error"] = str(error)
     if record.get("result_path") and not output_path.exists():
         record["result_path"] = None
-    if not _result_dir_clean(result_dir, output_path):
+    if not _result_dir_clean(result_dir, output_path, mounts):
         record["result_dir_extra_files"] = True
         if record.get("status") == "completed":
             record["status"] = "rejected_result_dir"

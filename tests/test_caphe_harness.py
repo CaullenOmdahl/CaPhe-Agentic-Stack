@@ -38,6 +38,37 @@ def init_repo(path):
 
 
 class WorkerPermissionTests(unittest.TestCase):
+    def test_mount_scaffolding_is_baselined_but_never_writable_output(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(harness.sys, "platform", "linux"):
+            root = Path(tmp)
+            workspace = root / "workspace"
+            (workspace / "allowed").mkdir(parents=True)
+            result = root / "result"
+            result.mkdir()
+            mounts = harness._prepare_sandbox_mounts([workspace / "allowed", result])
+            baseline = harness._tree_manifest(workspace)
+            self.assertEqual(len(mounts), 6)
+            self.assertTrue(harness._sandbox_mounts_unchanged(mounts))
+            self.assertTrue(harness._result_dir_clean(result, result / "out", mounts))
+            (workspace / "allowed" / "marker").write_text("ok")
+            self.assertEqual(harness._worktree_changes(workspace, baseline), ["allowed/marker"])
+            (workspace / "allowed" / ".codex" / "injected").write_text("bad")
+            self.assertFalse(harness._sandbox_mounts_unchanged(mounts))
+            (result / ".agents" / "injected").write_text("bad")
+            self.assertFalse(harness._result_dir_clean(result, result / "out", mounts))
+
+    def test_mount_scaffolding_does_not_exempt_existing_or_replaced_paths(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(harness.sys, "platform", "linux"):
+            root = Path(tmp)
+            (root / ".codex").mkdir()
+            (root / ".codex" / "tracked").write_text("keep")
+            mounts = harness._prepare_sandbox_mounts([root])
+            self.assertNotIn(str(root / ".codex"), mounts)
+            self.assertEqual((root / ".codex" / "tracked").read_text(), "keep")
+            (root / ".agents").rmdir()
+            (root / ".agents").symlink_to(root / ".codex", target_is_directory=True)
+            self.assertFalse(harness._sandbox_mounts_unchanged(mounts))
+
     @unittest.skipUnless(shutil.which("codex"), "Codex CLI is not installed")
     def test_real_exec_uses_explicit_permissions_without_a_model_request(self):
         with tempfile.TemporaryDirectory(prefix="caphe-exec-test-", dir=Path.home()) as tmp:
