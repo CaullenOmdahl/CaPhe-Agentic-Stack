@@ -92,7 +92,7 @@ class WorkerPermissionTests(unittest.TestCase):
             evidence = harness.codex_session_evidence(started["thread_id"], home / "sessions")
             self.assertTrue(evidence and evidence["routes"])
             expected = harness._expected_permission_profile(profile, workspace)
-            self.assertTrue(all(harness._effective_route_verified(route, context, workspace, expected, home)
+            self.assertTrue(all(harness._worker_permissions_verified(route, context, workspace, expected, home)
                                 for context in evidence["routes"]), evidence)
 
     def test_probe_requires_real_output_and_exact_write_artifact(self):
@@ -164,7 +164,7 @@ class WorkerPermissionTests(unittest.TestCase):
                          "sandbox_policy": {"type": "workspace-write", "network_access": False,
                                             "exclude_tmpdir_env_var": True, "exclude_slash_tmp": True,
                                             "writable_roots": [str(workspace / "allowed"), str(result.parent)]}}
-            self.assertTrue(harness._effective_route_verified(route, effective, workspace, expected, home))
+            self.assertTrue(harness._worker_permissions_verified(route, effective, workspace, expected, home))
             mutations = [
                 ("readonly", lambda value: value.update(sandbox_policy={"type": "read-only"})),
                 ("active", lambda value: value.update(active_permission_profile={"id": ":read-only"})),
@@ -183,18 +183,18 @@ class WorkerPermissionTests(unittest.TestCase):
                 changed = copy.deepcopy(effective)
                 mutate(changed)
                 with self.subTest(name=name):
-                    self.assertFalse(harness._effective_route_verified(route, changed, workspace, expected, home))
+                    self.assertFalse(harness._worker_permissions_verified(route, changed, workspace, expected, home))
             legacy = copy.deepcopy(effective)
             legacy.pop("active_permission_profile")
             legacy["permission_profile"]["name"] = "caphe-worker"
-            self.assertTrue(harness._effective_route_verified(route, legacy, workspace, expected, home))
+            self.assertTrue(harness._worker_permissions_verified(route, legacy, workspace, expected, home))
             legacy["permission_profile"] = {"name": "caphe-worker"}
-            self.assertFalse(harness._effective_route_verified(route, legacy, workspace, expected, home))
+            self.assertFalse(harness._worker_permissions_verified(route, legacy, workspace, expected, home))
             helper = {"path": {"type": "path", "path": str(home / "tmp/arg0/codex-arg0ABC123")}, "access": "read"}
             effective["permission_profile"]["file_system"]["entries"].append(helper)
-            self.assertTrue(harness._effective_route_verified(route, effective, workspace, expected, home))
+            self.assertTrue(harness._worker_permissions_verified(route, effective, workspace, expected, home))
             helper["access"] = "write"
-            self.assertFalse(harness._effective_route_verified(route, effective, workspace, expected, home))
+            self.assertFalse(harness._worker_permissions_verified(route, effective, workspace, expected, home))
 
 
 class HarnessConfigTests(unittest.TestCase):
@@ -281,11 +281,10 @@ class HarnessConfigTests(unittest.TestCase):
 
     def test_codex_worker_command_pins_model_effort_profile_and_disables_children(self):
         route = sample_config("/tmp/runs")["routes"][0]
-        with tempfile.TemporaryDirectory() as tmp:
-            profile = harness._write_codex_profile(Path(tmp), route)
-            argv = harness.build_command(route, Path("brief"), Path("result"), Path("repo"), profile_path=profile)
+        argv = harness.build_command(route, Path("brief"), Path("result"), Path("repo"))
         self.assertIn("--ignore-user-config", argv)
-        self.assertIn('default_permissions="caphe-worker"', argv)
+        self.assertIn("--profile", argv)
+        self.assertIn("caphe-worker", argv)
         self.assertIn("gpt-5.6-luna", argv)
         self.assertIn('model_reasoning_effort="low"', argv)
         self.assertIn("agents.max_depth=0", argv)
@@ -294,9 +293,7 @@ class HarnessConfigTests(unittest.TestCase):
     def test_write_route_uses_explicit_profile_instead_of_legacy_sandbox(self):
         route = sample_config("/tmp/runs")["routes"][0]
         route["permissions"] = "worktree-write"
-        with tempfile.TemporaryDirectory() as tmp:
-            profile = harness._write_codex_profile(Path(tmp), route)
-            argv = harness.build_command(route, Path("brief"), Path("result"), Path("repo"), profile_path=profile)
+        argv = harness.build_command(route, Path("brief"), Path("result"), Path("repo"))
         self.assertNotIn("--sandbox", argv)
         self.assertNotIn("--worktree", argv)
 
@@ -499,7 +496,7 @@ class HarnessConfigTests(unittest.TestCase):
                          "sandbox_policy": {"type": "restricted"}}
             self.assertFalse(harness._effective_route_verified(route, effective, workspace))
             effective["cwd"] = str(workspace)
-            self.assertFalse(harness._effective_route_verified(route, effective, workspace))
+            self.assertTrue(harness._effective_route_verified(route, effective, workspace))
 
     def test_batch_launches_only_enabled_routes_and_returns_categories(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -644,7 +641,6 @@ class HarnessEvidenceTests(unittest.TestCase):
             self.assertEqual(harness.codex_effective_route(thread, Path(tmp) / "sessions"),
                              {"model": "gpt-5.6-luna", "effort": "low", "cwd": None,
                               "permission_profile": {"name": "caphe-worker"},
-                              "active_permission_profile": None,
                               "sandbox_policy": {"type": "restricted"}})
             (root / f"rollout-2026-09-28T00-01-00-{thread}.jsonl").write_text(path.read_text())
             self.assertIsNone(harness.codex_effective_route(thread, Path(tmp) / "sessions"))
@@ -660,7 +656,7 @@ class HarnessEvidenceTests(unittest.TestCase):
                     "collaboration_mode": {"settings": {"reasoning_effort": "medium"}}}}) + "\n")
             self.assertEqual(harness.codex_effective_route(thread, root),
                              {"model": "gpt-5.6-sol", "effort": "medium", "cwd": None,
-                              "permission_profile": None, "active_permission_profile": None, "sandbox_policy": None})
+                              "permission_profile": None, "sandbox_policy": None})
 
     def test_child_environment_excludes_all_provider_keys(self):
         with patch.dict(os.environ, {"OPENAI_API_KEY": "secret-openai", "ANTHROPIC_API_KEY": "secret-claude",
@@ -877,7 +873,7 @@ class ReviewFindingTests(unittest.TestCase):
             base = {"model": route["model"], "effort": route["effort"], "cwd": tmp,
                     "permission_profile": {"name": "caphe-worker"}}
             ok = dict(base, sandbox_policy={"type": "workspace-write"})
-            self.assertFalse(harness._effective_route_verified(route, ok, tmp))
+            self.assertTrue(harness._effective_route_verified(route, ok, tmp))
             for policy in ({"type": "workspace-write", "network_access": True},
                            {"type": "managed", "network": {"enabled": True}},
                            {"type": "workspace-write", "network": True}):

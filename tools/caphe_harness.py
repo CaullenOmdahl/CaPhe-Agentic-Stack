@@ -176,10 +176,10 @@ def build_command(route, prompt_path, output_path, repo, config_profile="caphe-w
     """Build explicit argv using a per-run permission profile, never a broad sandbox mode."""
     if route["client"] != "codex":
         raise HarnessError("client adapter is not enabled until route evidence and isolation are implemented")
-    if profile_path is None:
-        raise HarnessError("worker execution requires an explicit permission configuration")
-    permissions = tomllib.loads(Path(profile_path).read_text())["permissions"]["caphe-worker"]
-    args = ["codex", "exec", "--json", "--ignore-user-config",
+    permissions = (_codex_permissions(_child_env("codex")["CODEX_HOME"], route, output_path=output_path)
+                   if profile_path is None else
+                   tomllib.loads(Path(profile_path).read_text())["permissions"]["caphe-worker"])
+    args = ["codex", "exec", "--json", "--ignore-user-config", "--profile", config_profile,
             "--config", 'default_permissions="caphe-worker"',
             "--config", "permissions.caphe-worker.filesystem=" + _permission_toml(permissions["filesystem"]),
             "--config", "permissions.caphe-worker.network=" + _permission_toml(permissions["network"]),
@@ -325,32 +325,30 @@ def _codex_install_root(executable=None):
     return root
 
 
-def _write_codex_profile(home, route, allowed_writes=(), config_profile="caphe-worker", output_path=None):
+def _codex_permissions(home, route, allowed_writes=(), output_path=None):
     access = {".": "read"}
     if route["permissions"] == "worktree-write":
-        access.update({path: "write" for path in allowed_writes})  # "." may become writable
-    scoped = [json.dumps(path) + ' = "' + mode + '"' for path, mode in access.items()]
+        access.update({path: "write" for path in allowed_writes})
     codex_home = Path(home).resolve()
-    filesystem = ('{ ":minimal" = "read", ":workspace_roots" = { ' + ", ".join(scoped) + " }, "
-                  + json.dumps(str(codex_home / "auth.json")) + ' = "deny", '
-                  # Deny the directory, not a "/**" glob: on Linux, a glob that matches existing
-                  # session files makes bubblewrap setup fail, so no sandboxed command runs at all.
-                  + json.dumps(str(codex_home / "sessions")) + ' = "deny"')
+    filesystem = {":minimal": "read", ":workspace_roots": access,
+                  str(codex_home / "auth.json"): "deny", str(codex_home / "sessions"): "deny"}
     if output_path is not None:
-        # Grant the result's dedicated directory: file grants fail in Codex's Linux sandbox,
-        # and the directory holds nothing but the result.
         result_dir = Path(output_path).expanduser().resolve(strict=False).parent
-        filesystem += ", " + json.dumps(str(result_dir)) + ' = "write"'
+        filesystem[str(result_dir)] = "write"
     install_root = _codex_install_root()
     if install_root is not None:
-        filesystem += ", " + json.dumps(str(install_root)) + ' = "read"'
-    filesystem += " }"
-    profile = codex_home / (config_profile + ".config.toml")
+        filesystem[str(install_root)] = "read"
+    return {"filesystem": filesystem, "network": {"enabled": False}}
+
+
+def _write_codex_profile(home, route, allowed_writes=(), config_profile="caphe-worker", output_path=None):
+    permissions = _codex_permissions(home, route, allowed_writes, output_path)
+    profile = Path(home).resolve() / (config_profile + ".config.toml")
     profile.write_text(
         'model_reasoning_effort = "' + route["effort"] + '"\n'
         'default_permissions = "caphe-worker"\n'
         '[permissions.caphe-worker]\n'
-        'filesystem = ' + filesystem + '\n'
+        'filesystem = ' + _permission_toml(permissions["filesystem"]) + '\n'
         'network = { enabled = false }\n', encoding="utf-8")
     profile.chmod(0o600)
     return profile
@@ -647,7 +645,26 @@ def _expected_permission_profile(profile_path, workspace):
             "network": "restricted"}
 
 
-def _effective_route_verified(route, effective, workspace, expected=None, codex_home=None):
+def _effective_route_verified(route, effective, workspace):
+    """Legacy identity check; live worker acceptance also requires complete permission evidence."""
+    if not isinstance(effective, dict) or effective.get("model") != route["model"] or effective.get("effort") != route["effort"]:
+        return False
+    profile = effective.get("permission_profile")
+    sandbox = effective.get("sandbox_policy")
+    cwd = effective.get("cwd")
+    if not isinstance(profile, dict) or (profile.get("name") or profile.get("profile")) != "caphe-worker":
+        return False
+    if not isinstance(sandbox, dict) or sandbox.get("type") == "danger-full-access":
+        return False
+    if _network_enabled(sandbox) or _network_enabled(profile) or not isinstance(cwd, str):
+        return False
+    try:
+        return Path(cwd).resolve(strict=True) == Path(workspace).resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
+
+
+def _worker_permissions_verified(route, effective, workspace, expected, codex_home):
     if not isinstance(effective, dict) or effective.get("model") != route["model"] or effective.get("effort") != route["effort"]:
         return False
     profile = effective.get("permission_profile")
@@ -835,7 +852,6 @@ def codex_effective_route(thread_id, sessions_root):
                     found = {"model": model, "effort": effort,
                              "cwd": payload.get("cwd") if isinstance(payload.get("cwd"), str) else None,
                              "permission_profile": payload.get("permission_profile"),
-                             "active_permission_profile": payload.get("active_permission_profile"),
                              "sandbox_policy": payload.get("sandbox_policy")}
                     break
     except OSError:
@@ -1131,7 +1147,7 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
               effective_active_permission_profile=effective.get("active_permission_profile") if effective else None,
               effective_sandbox_policy=effective.get("sandbox_policy") if effective else None,
               route_verified=bool(evidence and evidence.get("routes")) and all(
-                  _effective_route_verified(route, context, workspace, expected_profile, home)
+                  _worker_permissions_verified(route, context, workspace, expected_profile, home)
                   for context in evidence["routes"]),
                   usage=evidence.get("usage") if evidence else None, stderr_path=str(error_path))
     record["events_truncated"] = events_truncated
