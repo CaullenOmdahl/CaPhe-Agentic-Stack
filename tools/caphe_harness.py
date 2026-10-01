@@ -163,11 +163,26 @@ def _extract_validated_tar(bundle, target, label):
     bundle.extractall(target, **kwargs)
 
 
-def build_command(route, prompt_path, output_path, repo, config_profile="caphe-worker"):
+def _permission_toml(value):
+    if isinstance(value, dict):
+        return "{ " + ", ".join(json.dumps(key) + " = " + _permission_toml(item)
+                                 for key, item in value.items()) + " }"
+    if isinstance(value, (str, bool)):
+        return json.dumps(value)
+    raise HarnessError("unsupported permission configuration value")
+
+
+def build_command(route, prompt_path, output_path, repo, config_profile="caphe-worker", *, profile_path=None):
     """Build explicit argv using a per-run permission profile, never a broad sandbox mode."""
     if route["client"] != "codex":
         raise HarnessError("client adapter is not enabled until route evidence and isolation are implemented")
+    permissions = (_codex_permissions(_child_env("codex")["CODEX_HOME"], route, output_path=output_path)
+                   if profile_path is None else
+                   tomllib.loads(Path(profile_path).read_text())["permissions"]["caphe-worker"])
     args = ["codex", "exec", "--json", "--ignore-user-config", "--profile", config_profile,
+            "--config", 'default_permissions="caphe-worker"',
+            "--config", "permissions.caphe-worker.filesystem=" + _permission_toml(permissions["filesystem"]),
+            "--config", "permissions.caphe-worker.network=" + _permission_toml(permissions["network"]),
             "--model", route["model"],
             "--config", 'model_reasoning_effort="' + route["effort"] + '"',
             "--config", "agents.max_depth=0", "--output-last-message", str(output_path), "--cd", str(repo)]
@@ -269,8 +284,9 @@ def _snapshot_repo(repo, target, revision=None):
         raise HarnessError("tracked source snapshot failed or exceeds the 512 MiB limit")
     target.mkdir(mode=0o700)
     try:
-        with tarfile.open(fileobj=io.BytesIO(archive.stdout), mode="r:") as bundle:
-            _extract_validated_tar(bundle, target, "source snapshot")
+        if tree.stdout:
+            with tarfile.open(fileobj=io.BytesIO(archive.stdout), mode="r:") as bundle:
+                _extract_validated_tar(bundle, target, "source snapshot")
     except (tarfile.TarError, OSError) as error:
         raise HarnessError("tracked source snapshot could not be safely unpacked") from error
     git_env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(Path.home()),
@@ -278,7 +294,7 @@ def _snapshot_repo(repo, target, revision=None):
                "GIT_AUTHOR_NAME": "CaPhe Harness", "GIT_AUTHOR_EMAIL": "harness@localhost",
                "GIT_COMMITTER_NAME": "CaPhe Harness", "GIT_COMMITTER_EMAIL": "harness@localhost"}
     for args in (["init", "--quiet", str(target)], ["-C", str(target), "add", "--force", "--all"],
-                 ["-C", str(target), "-c", "core.hooksPath=/dev/null", "commit", "--quiet", "-m", "harness source snapshot"]):
+                 ["-C", str(target), "-c", "core.hooksPath=/dev/null", "commit", "--allow-empty", "--quiet", "-m", "harness source snapshot"]):
         result = subprocess.run(["git", *args], capture_output=True, env=git_env, timeout=30)
         if result.returncode:
             raise HarnessError("standalone source snapshot could not be initialized")
@@ -309,32 +325,30 @@ def _codex_install_root(executable=None):
     return root
 
 
-def _write_codex_profile(home, route, allowed_writes=(), config_profile="caphe-worker", output_path=None):
+def _codex_permissions(home, route, allowed_writes=(), output_path=None):
     access = {".": "read"}
     if route["permissions"] == "worktree-write":
-        access.update({path: "write" for path in allowed_writes})  # "." may become writable
-    scoped = [json.dumps(path) + ' = "' + mode + '"' for path, mode in access.items()]
+        access.update({path: "write" for path in allowed_writes})
     codex_home = Path(home).resolve()
-    filesystem = ('{ ":minimal" = "read", ":workspace_roots" = { ' + ", ".join(scoped) + " }, "
-                  + json.dumps(str(codex_home / "auth.json")) + ' = "deny", '
-                  # Deny the directory, not a "/**" glob: on Linux, a glob that matches existing
-                  # session files makes bubblewrap setup fail, so no sandboxed command runs at all.
-                  + json.dumps(str(codex_home / "sessions")) + ' = "deny"')
+    filesystem = {":minimal": "read", ":workspace_roots": access,
+                  str(codex_home / "auth.json"): "deny", str(codex_home / "sessions"): "deny"}
     if output_path is not None:
-        # Grant the result's dedicated directory: file grants fail in Codex's Linux sandbox,
-        # and the directory holds nothing but the result.
         result_dir = Path(output_path).expanduser().resolve(strict=False).parent
-        filesystem += ", " + json.dumps(str(result_dir)) + ' = "write"'
+        filesystem[str(result_dir)] = "write"
     install_root = _codex_install_root()
     if install_root is not None:
-        filesystem += ", " + json.dumps(str(install_root)) + ' = "read"'
-    filesystem += " }"
-    profile = codex_home / (config_profile + ".config.toml")
+        filesystem[str(install_root)] = "read"
+    return {"filesystem": filesystem, "network": {"enabled": False}}
+
+
+def _write_codex_profile(home, route, allowed_writes=(), config_profile="caphe-worker", output_path=None):
+    permissions = _codex_permissions(home, route, allowed_writes, output_path)
+    profile = Path(home).resolve() / (config_profile + ".config.toml")
     profile.write_text(
         'model_reasoning_effort = "' + route["effort"] + '"\n'
         'default_permissions = "caphe-worker"\n'
         '[permissions.caphe-worker]\n'
-        'filesystem = ' + filesystem + '\n'
+        'filesystem = ' + _permission_toml(permissions["filesystem"]) + '\n'
         'network = { enabled = false }\n', encoding="utf-8")
     profile.chmod(0o600)
     return profile
@@ -568,11 +582,36 @@ def _network_enabled(policy):
     return network is True or (isinstance(network, dict) and network.get("enabled") is True)
 
 
-def _result_dir_clean(result_dir, output_path):
+def _prepare_sandbox_mounts(roots):
+    mounts = {}
+    if not sys.platform.startswith("linux"):
+        return mounts
+    for root in roots:
+        for name in (".git", ".codex", ".agents"):
+            path = Path(root) / name
+            if path.exists() or path.is_symlink():
+                continue
+            path.mkdir(mode=0o755)
+            mounts[str(path)] = stat.S_IMODE(path.stat().st_mode)
+    return mounts
+
+
+def _sandbox_mounts_unchanged(mounts):
+    try:
+        return all(not Path(path).is_symlink() and Path(path).is_dir()
+                   and stat.S_IMODE(Path(path).stat().st_mode) == mode
+                   and not any(Path(path).iterdir()) for path, mode in mounts.items())
+    except OSError:
+        return False
+
+
+def _result_dir_clean(result_dir, output_path, mounts=None):
     """Remove anything but the result from its writable directory; False if any was found."""
     clean = True
     for entry in Path(result_dir).iterdir():
         if entry == Path(output_path) and entry.is_file() and not entry.is_symlink():
+            continue
+        if mounts and str(entry) in mounts and _sandbox_mounts_unchanged({str(entry): mounts[str(entry)]}):
             continue
         clean = False
         if entry.is_dir() and not entry.is_symlink():
@@ -589,7 +628,25 @@ def _require_result(record):
     return record
 
 
+def _expected_permission_profile(profile_path, workspace):
+    permissions = tomllib.loads(Path(profile_path).read_text())["permissions"]["caphe-worker"]
+    entries = []
+    for path, access in permissions["filesystem"].items():
+        if path == ":workspace_roots":
+            entries.extend({"path": {"type": "path", "path": str((Path(workspace) / relative).resolve())},
+                            "access": mode} for relative, mode in access.items())
+        elif path == ":minimal":
+            entries.append({"path": {"type": "special", "value": {"kind": "minimal"}}, "access": access})
+        else:
+            entries.append({"path": {"type": "path", "path": str(Path(path).resolve())}, "access": access})
+    if permissions["network"] != {"enabled": False}:
+        raise HarnessError("worker network must be disabled")
+    return {"type": "managed", "file_system": {"type": "restricted", "entries": entries},
+            "network": "restricted"}
+
+
 def _effective_route_verified(route, effective, workspace):
+    """Legacy identity check; live worker acceptance also requires complete permission evidence."""
     if not isinstance(effective, dict) or effective.get("model") != route["model"] or effective.get("effort") != route["effort"]:
         return False
     profile = effective.get("permission_profile")
@@ -599,7 +656,65 @@ def _effective_route_verified(route, effective, workspace):
         return False
     if not isinstance(sandbox, dict) or sandbox.get("type") == "danger-full-access":
         return False
-    # The requested profile disables network; reject any run whose recorded policy enabled it.
+    if _network_enabled(sandbox) or _network_enabled(profile) or not isinstance(cwd, str):
+        return False
+    try:
+        return Path(cwd).resolve(strict=True) == Path(workspace).resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
+
+
+def _worker_permissions_verified(route, effective, workspace, expected, codex_home):
+    if not isinstance(effective, dict) or effective.get("model") != route["model"] or effective.get("effort") != route["effort"]:
+        return False
+    profile = effective.get("permission_profile")
+    sandbox = effective.get("sandbox_policy")
+    cwd = effective.get("cwd")
+    if not isinstance(profile, dict) or not isinstance(expected, dict):
+        return False
+    active = effective.get("active_permission_profile")
+    if active is None:
+        if (profile.get("name") or profile.get("profile")) != "caphe-worker":
+            return False
+    elif not isinstance(active, dict) or active.get("id") != "caphe-worker":
+        return False
+    if profile.get("type") != "managed" or profile.get("network") != "restricted":
+        return False
+    filesystem = profile.get("file_system")
+    if not isinstance(filesystem, dict) or set(filesystem) != {"type", "entries"} or filesystem["type"] != "restricted":
+        return False
+    entries = filesystem["entries"]
+    if not isinstance(entries, list):
+        return False
+    remaining = list(expected["file_system"]["entries"])
+    helpers = 0
+    for entry in entries:
+        if entry in remaining:
+            remaining.remove(entry)
+            continue
+        if not isinstance(entry, dict) or set(entry) != {"path", "access"} or entry["access"] != "read":
+            return False
+        path = entry["path"]
+        if not isinstance(path, dict) or set(path) != {"type", "path"} or path["type"] != "path":
+            return False
+        if not isinstance(path["path"], str) or codex_home is None:
+            return False
+        helper = Path(path["path"])
+        if (helper.parent != Path(codex_home).resolve() / "tmp" / "arg0"
+                or not re.fullmatch(r"codex-arg0[A-Za-z0-9]{6}", helper.name)):
+            return False
+        helpers += 1
+    if remaining or helpers > 1:
+        return False
+    writes = {entry["path"]["path"] for entry in expected["file_system"]["entries"] if entry["access"] == "write"}
+    if (not isinstance(sandbox, dict) or sandbox.get("type") != "workspace-write"
+            or sandbox.get("network_access") is not False
+            or sandbox.get("exclude_tmpdir_env_var") is not True
+            or sandbox.get("exclude_slash_tmp") is not True):
+        return False
+    roots = sandbox.get("writable_roots")
+    if not isinstance(roots, list) or not all(isinstance(root, str) for root in roots) or set(roots) != writes:
+        return False
     if _network_enabled(sandbox) or _network_enabled(profile):
         return False
     if not isinstance(cwd, str):
@@ -778,7 +893,7 @@ def codex_session_evidence(thread_id, sessions_root):
     candidates = list(Path(sessions_root).glob(f"**/rollout-*-{thread_id}.jsonl"))
     if len(candidates) != 1 or candidates[0].is_symlink():
         return None
-    route, usage = None, None
+    route, usage, routes = None, None, []
     try:
         with candidates[0].open(encoding="utf-8") as stream:
             for line in stream:
@@ -801,12 +916,16 @@ def codex_session_evidence(thread_id, sessions_root):
                         route = {"model": model, "effort": effort,
                                  "cwd": payload.get("cwd") if isinstance(payload.get("cwd"), str) else None,
                                  "permission_profile": payload.get("permission_profile"),
+                                 "active_permission_profile": payload.get("active_permission_profile"),
                                  "sandbox_policy": payload.get("sandbox_policy")}
+                        routes.append(route)
+                    else:
+                        routes.append(None)
                 if record.get("type") in {"token_usage_record", "token_count"}:
                     usage = _usage_object(_context_payload(record)) or usage
     except OSError:
         return None
-    return {"route": route, "usage": usage} if route or usage else None
+    return {"route": route, "routes": routes, "usage": usage} if route or usage else None
 
 
 def _terminate_process_group(pgid, grace_seconds=1):
@@ -974,14 +1093,17 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
             raise HarnessError("route sandbox self-test failed: " + str(readiness["reason"]))
         workspace = _snapshot_repo(repo, run_dir / "workspace", source.stdout.strip())
 
+        sandbox_grants = _sandbox_write_grants(workspace, allowed_writes)
+        mounts = _prepare_sandbox_mounts([workspace / grant for grant in sandbox_grants] + [result_dir])
         baseline = _tree_manifest(workspace)
         if baseline is None:
             raise HarnessError("immutable source snapshot could not be inventoried")
         sandbox_tmp = run_dir / "codex-tmp"
         sandbox_tmp.mkdir(mode=0o700)
         home, profile_path = _prepare_codex_profile(
-            route, _sandbox_write_grants(workspace, allowed_writes), config_profile, output_path)
-        argv = build_command(route, prompt_path, output_path, workspace, config_profile)
+            route, sandbox_grants, config_profile, output_path)
+        expected_profile = _expected_permission_profile(profile_path, workspace)
+        argv = build_command(route, prompt_path, output_path, workspace, config_profile, profile_path=profile_path)
     except (HarnessError, OSError, subprocess.SubprocessError, ValueError) as error:
         if profile_path and profile_path.is_file() and not profile_path.is_symlink():
             profile_path.unlink()
@@ -1022,8 +1144,11 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
                   events_path=str(out_path), effective_model=effective.get("model") if effective else None,
               effective_effort=effective.get("effort") if effective else None,
               effective_permission_profile=effective.get("permission_profile") if effective else None,
+              effective_active_permission_profile=effective.get("active_permission_profile") if effective else None,
               effective_sandbox_policy=effective.get("sandbox_policy") if effective else None,
-              route_verified=_effective_route_verified(route, effective, workspace),
+              route_verified=bool(evidence and evidence.get("routes")) and all(
+                  _worker_permissions_verified(route, context, workspace, expected_profile, home)
+                  for context in evidence["routes"]),
                   usage=evidence.get("usage") if evidence else None, stderr_path=str(error_path))
     record["events_truncated"] = events_truncated
     record["stderr_truncated"] = stderr_truncated
@@ -1031,6 +1156,9 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
     record.update(_verify_write_scope(route, effective_cwd, workspace, baseline, allowed_writes))
     if record["write_scope_verified"] is False and record.get("status") == "completed":
         record["status"] = "rejected_write_scope"
+    record["sandbox_mounts_verified"] = _sandbox_mounts_unchanged(mounts)
+    if record["sandbox_mounts_verified"] is False and record.get("status") == "completed":
+        record["status"] = "rejected_sandbox_mounts"
     try:
         if output_path.is_file() and not output_path.is_symlink():
             _, truncated = _bounded_result(output_path, route["max_output_bytes"])
@@ -1043,7 +1171,7 @@ def run_worker(config, route, repo, brief, *, execute=False, allowed_writes=(), 
         record["result_read_error"] = str(error)
     if record.get("result_path") and not output_path.exists():
         record["result_path"] = None
-    if not _result_dir_clean(result_dir, output_path):
+    if not _result_dir_clean(result_dir, output_path, mounts):
         record["result_dir_extra_files"] = True
         if record.get("status") == "completed":
             record["status"] = "rejected_result_dir"
@@ -1199,22 +1327,36 @@ def doctor(config_path, *, apply=False, probe=False):
         with tempfile.TemporaryDirectory(prefix="caphe-route-probe-") as tmp:
             probe_repo = Path(tmp) / "repo"
             probe_repo.mkdir()
+            marker = "CAPHE_PROBE_" + os.urandom(12).hex()
+            (probe_repo / "fixture.txt").write_text(marker + "\n", encoding="utf-8")
+            (probe_repo / "probe-output").mkdir()
+            (probe_repo / "probe-output" / ".keep").write_text("", encoding="utf-8")
             subprocess.run(["git", "init", "--quiet", str(probe_repo)], check=True, timeout=10)
+            subprocess.run(["git", "-C", str(probe_repo), "add", "fixture.txt", "probe-output/.keep"],
+                           check=True, timeout=10)
             subprocess.run(["git", "-C", str(probe_repo), "-c", "user.name=Caphe Probe",
-                            "-c", "user.email=probe@example.invalid", "commit", "--allow-empty", "-qm", "probe"],
+                            "-c", "user.email=probe@example.invalid", "commit", "-qm", "probe"],
                            check=True, timeout=10)
             for route in config["routes"]:
                 if route["enabled"] and route["client"] != "codex":
                     report["probes"].append({"category": route["category"], "status": "unsupported",
                                              "reason": "only the Codex adapter is implemented"})
                 elif route["enabled"] and clients[route["client"]]["installed"]:
+                    brief = "Read fixture.txt with a tool. Reply with exactly its contents and no explanation. "
+                    if route["permissions"] == "worktree-write":
+                        brief += "First copy its contents to probe-output/marker.txt using a tool. Change no other files."
+                    else:
+                        brief += "Do not change any files."
                     outcome = run_worker(config, route, probe_repo,
-                                         "This is a route verification probe. Reply with exactly the supplied marker and do not use tools. Marker: "
-                                         + "CAPHE_PROBE_" + os.urandom(6).hex(), execute=True,
-                                         allowed_writes=("probe-output",)
+                                         brief, execute=True,
+                                         allowed_writes=("probe-output/marker.txt",)
                                          if route["permissions"] == "worktree-write" else ())
+                    behavior_verified = _probe_behavior_verified(outcome, route, marker)
                     report["probes"].append({"category": route["category"], "status": outcome["status"],
                                              "route_verified": outcome.get("route_verified", False),
+                                             "behavior_verified": behavior_verified,
+                                             "execution_error": outcome.get("execution_error"),
+                                             "run_id": outcome.get("run_id"),
                                              "effective_model": outcome.get("effective_model"),
                                              "effective_effort": outcome.get("effective_effort"),
                                              "usage": outcome.get("usage")})
@@ -1222,9 +1364,28 @@ def doctor(config_path, *, apply=False, probe=False):
         for item in report["routes"]:
             result = probed.get(item["category"])
             if result is not None:
-                item["ready"] = result.get("route_verified") is True and result.get("status") == "completed"
+                item["ready"] = (result.get("route_verified") is True and result.get("status") == "completed"
+                                 and result.get("behavior_verified") is True)
                 item["reason"] = None if item["ready"] else "live route probe did not verify the requested route"
     return report
+
+
+def _probe_behavior_verified(outcome, route, marker):
+    if (outcome.get("status") != "completed" or outcome.get("route_verified") is not True
+            or outcome.get("write_scope_verified") is not True):
+        return False
+    result = outcome.get("result_path")
+    workspace = outcome.get("worktree")
+    if not isinstance(result, str) or not isinstance(workspace, str):
+        return False
+    paths = [Path(result)]
+    if route["permissions"] == "worktree-write":
+        paths.append(Path(workspace) / "probe-output" / "marker.txt")
+    try:
+        return all(not path.is_symlink() and path.is_file() and path.stat().st_size <= len(marker) + 2
+                   and path.read_text(encoding="utf-8").strip() == marker for path in paths)
+    except (OSError, UnicodeError):
+        return False
 
 
 def _parse_release(raw):

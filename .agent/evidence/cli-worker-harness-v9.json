@@ -1,0 +1,47 @@
+{
+  "schema_version": 2,
+  "id": "cli-worker-harness-v9",
+  "change_id": "cli-worker-harness",
+  "decision": "ADR-0007",
+  "lane": "full-risk",
+  "source": {
+    "repository": "CaullenOmdahl/CaPhe-Agentic-Stack",
+    "revision": "9e195bde19c471395798e9b8fe30921aeccba14b",
+    "snapshot_digest": "14cf1e80e03bff3931e0d770bdd19147b424c2e45c5f1ba9fa67b8f0a1f851e6"
+  },
+  "states": {
+    "implementation": {"scope": "source", "status": "passed"},
+    "validation": {
+      "scope": "source", "status": "passed",
+      "reason": "Actual Linux Codex exec workers completed both fixture probes with exact permissions, behavior, write scope, and sandbox mounts verified; full uncached completion and both CI platforms passed."
+    },
+    "review": {
+      "scope": "source", "status": "passed",
+      "reason": "Independent remote Codex PR review completed on the bound implementation revision with no findings."
+    },
+    "merge": {"scope": "source", "status": "pending"},
+    "release": {
+      "scope": "source", "status": "pending",
+      "reason": "Installed-runtime activation is not authorized by the repair request and has not occurred."
+    },
+    "external_acceptance": {
+      "scope": "source", "status": "not_applicable",
+      "reason": "This evidence verifies the source repair, not production or an installed release."
+    }
+  },
+  "summary": "Repair issue 18 using explicit exec permission overrides, complete per-turn policy verification, non-empty behavioral probes, and immutable Linux sandbox mount baselines.",
+  "evidence": [
+    {"kind": "file", "reference": "docs/adr/ADR-0007-cli-worker-harness-and-lifecycle.md"},
+    {"kind": "file", "reference": "tools/caphe_harness.py"},
+    {"kind": "file", "reference": "tests/test_caphe_harness.py"},
+    {"kind": "url", "reference": "https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/issues/18"},
+    {"kind": "url", "reference": "https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/pull/19"},
+    {"kind": "check", "reference": "PR 19 Codex review comment 5933793796 completed on the bound revision with no findings or unresolved review threads"},
+    {"kind": "url", "reference": "https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/actions/runs/36880012051"},
+    {"kind": "check", "reference": "Linux Codex 0.157.1 Luna low read and Luna medium write workers completed real fixture probes with exact permissions and behavior verified"},
+    {"kind": "check", "reference": "Write worker changed only probe-output/marker.txt with exact contents and unchanged sandbox mount directories"},
+    {"kind": "check", "reference": "Full uncached Linux completion passed all four jobs and retained-base plus candidate CI passed on Ubuntu and macOS"},
+    {"kind": "check", "reference": "Offline real CLI startup and permission mutation regressions reject broader grants and omitted denials and read-only fallback and changed mount scaffolding"}
+  ],
+  "supersedes": ["cli-worker-harness-v8"]
+}

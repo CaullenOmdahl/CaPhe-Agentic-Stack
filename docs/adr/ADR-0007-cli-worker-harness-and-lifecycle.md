@@ -90,6 +90,32 @@ its own explicit approval and evidence.
 
 ## Review and verification
 
+### CLI permission verification repair — 2026-10-01
+
+- **Approver:** Caullen Omdahl
+- **Status:** approved for repair and verification; merge and installed-runtime activation remain separate.
+- **Authorization:** The owner requested a fix after examining issue #18 and the failed live worker probes.
+
+On Codex CLI 0.157.1, `exec --ignore-user-config --profile NAME` omits the named configuration
+profile along with user configuration and falls back to read-only permissions. Keep ignoring unrelated
+user configuration, but pass the generated filesystem and network policy through explicit configuration
+overrides. A standalone `codex sandbox` check does not establish the permissions used by `codex exec`.
+
+Verify the active profile and complete managed permission entries against the requested policy on every
+recorded turn, including exact writable roots, network denial, and temporary-directory exclusions.
+The only additional read grant accepted is the CLI's per-invocation `tmp/arg0/codex-arg0XXXXXX` helper
+directory inside the selected Codex home. Legacy profile names alone cannot prove isolation and are
+rejected; legacy names with complete matching managed permission evidence remain supported.
+
+Doctor uses a non-empty committed fixture. Its live probes must read the fixture, and the write route
+must create the exact declared marker file. Successful process exit or a matching model name is not
+enough. Empty source trees remain valid inputs to the snapshotter and are tested separately.
+
+Linux Codex creates empty `.git`, `.codex`, and `.agents` mount directories within writable roots.
+Prepare missing directories before taking the immutable baseline, and accept them only while their
+type, mode, and empty contents remain unchanged. Existing paths are never exempted. This avoids
+misclassifying CLI mount setup as worker output without ignoring arbitrary hidden files or changes.
+
 Design review must challenge route authenticity, provider-account billing separation, credential handling,
 source/context boundaries, subprocess/worktree isolation, and update rollback. Implementation review is the
 actual PR diff. Completion requires regression tests, the uncached completion matrix, no secret leakage,
