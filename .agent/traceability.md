@@ -24,5 +24,6 @@
 | native-worker-routing-v4 | ADR-0006 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: passed; review: passed; validation: passed | fea830b5ff55/b185f58753b7 superseded by native-worker-routing-v5 |
 | native-worker-routing-v5 | ADR-0006 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: passed; review: passed; validation: passed | db4607f0e45f/82ec7f1016b0 superseded by native-worker-routing-v6 |
 | native-worker-routing-v6 | ADR-0006 | full-risk | external_acceptance: not_applicable; implementation: passed; merge: pending; release: passed; review: passed; validation: passed | ebcec51ccbda/679cb05908b8 |
+| policy-consistency-v1 | ADR-0007 | scoped-behavior | implementation: passed; validation: passed; review: passed; merge: pending; release: pending; external_acceptance: not_applicable | ffd2cd2f43a4/7426f1b25373 |
 | review-tool-capability-parity | ADR-0003 | unbound | unknown acceptance | legacy; provenance not promoted |
 | strict-memory-efficiency-v2 | legacy | unbound | unknown acceptance | legacy; provenance not promoted |

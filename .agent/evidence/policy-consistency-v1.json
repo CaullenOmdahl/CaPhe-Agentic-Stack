@@ -1,0 +1,42 @@
+{
+  "schema_version": 2,
+  "id": "policy-consistency-v1",
+  "change_id": "policy-consistency",
+  "decision": "ADR-0007",
+  "lane": "scoped-behavior",
+  "source": {
+    "repository": "CaullenOmdahl/CaPhe-Agentic-Stack",
+    "revision": "ffd2cd2f43a40bd3cb6a3b3cc885569aa3805b6c",
+    "snapshot_digest": "7426f1b253739466a263f8cec49b7e03e601e7c5b0d36a8687c32c3c450d571b"
+  },
+  "states": {
+    "implementation": {"scope": "source", "status": "passed"},
+    "validation": {"scope": "source", "status": "passed"},
+    "review": {
+      "scope": "source", "status": "passed",
+      "reason": "Remote review reported quota exhaustion. Independent Gemini-family local review examined the complete diff and repair delta and confirmed all actionable findings resolved."
+    },
+    "merge": {"scope": "source", "status": "pending"},
+    "release": {
+      "scope": "source", "status": "pending",
+      "reason": "Installed policy activation requires separate approval. A remote installation host is unreachable. Source checks do not certify those installations."
+    },
+    "external_acceptance": {
+      "scope": "source", "status": "not_applicable",
+      "reason": "This record covers source consistency and read-only diagnostics rather than a customer-facing artifact."
+    }
+  },
+  "summary": "Reconcile stale current policy summaries and scoped merge authority and detect explicitly selected installed skill drift without changing local customizations.",
+  "evidence": [
+    {"kind": "file", "reference": ".agent/abstraction/2026-10-05-policy-consistency.md"},
+    {"kind": "file", "reference": "tests/test_policy_consistency.py"},
+    {"kind": "file", "reference": "tests/test_stack_doctor.py"},
+    {"kind": "url", "reference": "https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/pull/21"},
+    {"kind": "check", "reference": "Three policy regression failures and absent diagnostic detected before repair"},
+    {"kind": "check", "reference": "Four policy tests and seventeen doctor tests passed after repair"},
+    {"kind": "check", "reference": "Full uncached macOS completion passed python-tests and shell-syntax and strict-confer-isolation and public-safety"},
+    {"kind": "check", "reference": "agy 1.2.14 gemini-3.1-pro-high high effort sandboxed plan review with no configured MCP servers resolved all findings"},
+    {"kind": "check", "reference": "PR 21 comment 5989545335 records independent fallback and finding dispositions"}
+  ],
+  "supersedes": []
+}
