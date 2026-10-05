@@ -27,6 +27,51 @@ def install_empty_chain(repo, hooks, runtime):
 
 
 class DoctorContracts(unittest.TestCase):
+    def test_explicit_skill_diagnostics_fail_closed_and_remain_read_only(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            selected = root / 'agent-skills'
+            result = doctor.find_skill_drift(root / 'missing', [selected])
+            self.assertEqual(result[0]['reason'], 'source_skills_unavailable')
+            self.assertEqual(list(root.iterdir()), [])
+            source = root / 'runtime/skills/example'
+            source.mkdir(parents=True)
+            (source / 'SKILL.md').write_text('cd ~\nRead `~/guide.md`')
+            selected.mkdir()
+            (selected / 'example').symlink_to(root / 'missing')
+            self.assertTrue(doctor.find_skill_drift(root / 'runtime', [selected]))
+            (selected / 'example').unlink()
+            (selected / 'example').mkdir()
+            (selected / 'example/SKILL.md').write_text(
+                f'cd {Path.home()}\nRead `{Path.home()}/guide.md`')
+            self.assertEqual(doctor.find_skill_drift(root / 'runtime', [selected]), [])
+            (selected / 'example/SKILL.md').write_text(f'cd {Path.home()}-other')
+            self.assertTrue(doctor.find_skill_drift(root / 'runtime', [selected]))
+            result = doctor.inspect(root, runtime=root / 'runtime', skill_roots=[selected])
+            self.assertIn('installed_skill_drift', result['unresolved'])
+
+    def test_installed_skill_drift_checks_each_copy_and_support_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'runtime/skills/example'
+            source.mkdir(parents=True)
+            (source / 'SKILL.md').write_text('Read ~/strict-mode/methodology.md')
+            (source / 'support.md').write_text('current')
+            copies = [root / 'codex', root / 'agents']
+            for destination in copies:
+                (destination / 'example').mkdir(parents=True)
+                (destination / 'example/SKILL.md').write_text(
+                    f'Read {Path.home()}/strict-mode/methodology.md')
+                (destination / 'example/support.md').write_text('current')
+            self.assertEqual(doctor.find_skill_drift(root / 'runtime', copies), [])
+            (copies[1] / 'example/support.md').write_text('PRIVATE_CANARY')
+            result = doctor.find_skill_drift(root / 'runtime', copies)
+            self.assertEqual(len(result), 1)
+            self.assertEqual(result[0]['file'], 'example/support.md')
+            self.assertNotIn('PRIVATE_CANARY', str(result))
+            (copies[0] / 'example/support.md').unlink()
+            self.assertEqual(len(doctor.find_skill_drift(root / 'runtime', copies)), 2)
+
     def test_deleted_or_blank_owner_policy_fails_health_without_changing_activation(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve(); repo = root / "repo"

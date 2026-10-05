@@ -1,25 +1,14 @@
-# Definition of Done — checklist (strict-mode)
+# Definition of Done — strict-mode
 
-A change is **done** only when every box is true:
+- [ ] Evidence lane is mechanically proven, scoped behavior, or full risk.
+- [ ] Observable behavior contract/abstraction exists where required; no blocking unknowns.
+- [ ] ADR and adversarial design review exist for non-trivial decisions.
+- [ ] Defect-detection evidence proves tests/checks can catch the problem.
+- [ ] Behavioral implementation diff has one independent review: remote preferred, local fallback with unavailability recorded.
+- [ ] Formatting, lint, tests, docs, and real-artifact verification are green for the affected surface.
+- [ ] Full declared matrix passed in authoritative CI, or locally uncached when CI is absent/incomplete.
+- [ ] Named human approval is recorded for every gated area.
+- [ ] Per-change evidence and generated traceability index are current.
+- [ ] `~/strict-mode/bin/strict-green-gate.sh --mode completion` returns `GREEN`.
 
-- [ ] **Abstraction** exists/updated for new behaviour (phase 0), reviewed; no open blockers.
-- [ ] **ADR** recorded for any non-trivial/architectural/language decision; status set.
-- [ ] **Design review** (adversarial, on the ADR) obtained for ADRs + high-risk; verdict logged.
-- [ ] **Implementation review** obtained through a PR before "done" for any change touching
-      behaviour/logic (purely mechanical changes — fmt/rename/comment/generated — are
-      exempt; **when unsure, review**). **Re-review a behaviour-changing fix** by pushing it
-      to the PR and letting review run again; unresolved review deadlock escalates to the
-      human approver. **Evidence is the PR URL plus review checks/comments** — not a
-      self-written verdict or local `strict-confer` transcript.
-- [ ] **Tests first** — a failing test was written and watched fail before the code.
-- [ ] **Property tests + golden replays** cover core-logic invariants.
-- [ ] **Artifact verified, not just tests** — for model-produced / non-deterministic output,
-      the *real artifact* was checked (golden / vision / human) and the pipeline fails fast on
-      the first (anchor) output. (Tests + design review cannot prove a generator rendered correctly.)
-- [ ] **Formatted** and **lint clean at deny** (no warnings).
-- [ ] **All tests pass** (full cross-consumer matrix for core/protocol/rules changes).
-- [ ] **Docs / ADR / traceability** updated; public items doc-commented with the *why*.
-- [ ] **Human sign-off** recorded for any gated area (`OWNERS.md`).
-- [ ] **Provenance** — ADR id cited inline; decision/approver/reviewer in commit metadata.
-- [ ] **Completion gate passes** (`~/strict-mode/bin/strict-green-gate.sh --mode completion`
-      → `GREEN`; a scoped pre-commit `FAST GREEN` is not completion).
+A pre-commit `FAST GREEN` is useful feedback but is never completion.

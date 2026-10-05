@@ -34,6 +34,6 @@ A successful local fallback does not need another remote review when quota reset
 A same-family local audit, empty output, timeout or missing reviewer is not independent
 approval. Do not switch reviewers to escape actionable findings.
 
-Merge only with existing explicit authorization for this exact PR and repository
+Merge only with applicable exact or standing human authorization and repository
 policy permission; verify branch protection and checks. Delete only authorized,
 merged task branches. Review approval is not release/deployment authorization.

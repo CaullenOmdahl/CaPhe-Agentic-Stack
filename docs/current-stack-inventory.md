@@ -57,7 +57,11 @@ The reusable rule is CLI-first, auth-light tool selection:
 
 ## Current Review Policy
 
-Implementation review should happen through pull requests. Local peer review can supplement design work or act as an emergency fallback, but it should not block opening a PR or be represented as completed implementation review.
+Follow [the shared review workflow](review-workflow.md): one independent implementation review,
+remote preferred. A successful independent local fallback after explicit remote failure, unavailability,
+or quota limits satisfies the implementation-review gate. Local self-review and design discussion do
+not. Preserve actual branch protections and human merge/release gates; do not duplicate a completed
+fallback with remote review. This inventory summarizes policy and is not a separate authority.
 
 Focused pre-commit checks provide fast feedback. Completion remains an uncached full declared matrix in
 authoritative CI or locally when CI is missing or incomplete.

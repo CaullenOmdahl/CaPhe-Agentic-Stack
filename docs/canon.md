@@ -2,6 +2,14 @@
 
 This is the shared operating model for coding agents working in this stack. Agent-specific files should be thin adapters that point back here.
 
+## Policy authority
+
+This canon defines the shared rules; `docs/review-workflow.md` defines the review procedure and
+`strict-mode/methodology.md` defines evidence and execution. Checklists and inventories summarize
+those sources, not alternative policies. Historical ADRs and immutable evidence describe their recorded
+revision and do not override current rules. Preserve explicit owner/project constraints and scoped user
+authorization when installing updates. Report conflicts instead of silently choosing the easiest rule.
+
 ## Prime Directive
 
 Ship software that is correct, working, and verified. Prefer evidence over plausible summaries. For non-trivial work, capture intended behavior before implementation and verify the real artifact before calling the task done.
@@ -15,7 +23,7 @@ Stop for a human only when one of these applies:
 - Auth, secrets, releases, deploy order, data migrations, infrastructure rules, money, legal, payroll, or customer-visible risk.
 - A real product or architecture fork with materially different outcomes.
 - Missing access, credentials, or an action only a human can perform.
-- Irreversible or outward-facing actions such as publishing, sending, spending, deleting, force-pushing, or merging.
+- Irreversible or outward-facing actions such as publishing, sending, spending, deleting, force-pushing, or merging, unless existing scoped human authorization covers the action and applicable gates are satisfied.
 - Repeated failure after credible alternatives have been tried.
 
 ## Scope Triage
@@ -140,7 +148,11 @@ MemPalace, remain rebuildable views over these files and canonical source record
 - Work on a branch.
 - Keep commits scoped.
 - Do not silently stage unrelated user changes.
-- Do not self-merge.
+- Do not authorize your own merge. Execute a merge only with repository policy permission,
+  applicable exact or standing human authorization, completed independent review and required checks.
+  Preserve the authorized scope; merge approval does not authorize release or deployment.
+- After an authorized merge, delete its completed task branches when cleanup is authorized and
+  all their work is preserved. Never delete unrelated or unmerged work.
 - Preserve a clean distinction between tracked changes, untracked files, staged changes, and unpushed commits.
 
 ## Distribution Boundary
