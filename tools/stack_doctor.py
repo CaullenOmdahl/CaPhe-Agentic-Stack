@@ -37,6 +37,34 @@ def find_duplicate_skills(roots):
     return {name: locations for name, locations in found.items() if len(locations) > 1}
 
 
+def find_skill_drift(runtime, roots):
+    source = Path(runtime) / "skills"
+    findings = []
+    if not source.is_dir():
+        return findings
+    for skill in sorted(source.iterdir()):
+        if not (skill / "SKILL.md").is_file():
+            continue
+        expected = {path.relative_to(skill): path for path in skill.rglob("*") if path.is_file()}
+        for root in roots:
+            destination = Path(root) / skill.name
+            if not destination.exists():
+                continue
+            actual = {path.relative_to(destination): path for path in destination.rglob("*") if path.is_file()}
+            for relative in sorted(expected.keys() | actual.keys()):
+                try:
+                    wanted = expected[relative].read_bytes()
+                    observed = actual[relative].read_bytes()
+                    if relative.suffix == ".md":
+                        observed = observed.replace(os.fsencode(Path.home()) + b"/", b"~/")
+                    matches = observed == wanted
+                except (KeyError, OSError):
+                    matches = False
+                if not matches:
+                    findings.append({"root": str(root), "file": str(Path(skill.name) / relative)})
+    return findings
+
+
 def _git(repo, *args):
     try:
         result = subprocess.run(["git", "-C", str(repo), *args], text=True, capture_output=True,
@@ -118,7 +146,7 @@ def _chain_status(repo, hookdir, runtime):
         return {"verified": False, "reason": str(error)}
 
 
-def inspect(repo, *, runtime, git_config=None):
+def inspect(repo, *, runtime, git_config=None, skill_roots=()):
     repo, runtime = Path(repo).absolute(), Path(runtime).absolute()
     unresolved = []
     top = _git(repo, "rev-parse", "--show-toplevel")
@@ -183,10 +211,13 @@ def inspect(repo, *, runtime, git_config=None):
         "instructions": instructions,
         "owners": owners,
         "duplicate_skills": find_duplicate_skills([runtime / "skills", repo / ".codex/skills", repo / ".claude/skills"]),
+        "skill_drift": find_skill_drift(runtime, skill_roots),
         "unresolved": unresolved,
     }
     if result["duplicate_skills"]:
         unresolved.append("duplicate_skills")
+    if result["skill_drift"]:
+        unresolved.append("installed_skill_drift")
     return result
 
 
@@ -194,8 +225,9 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", default=".")
     parser.add_argument("--runtime", required=True)
+    parser.add_argument("--skill-root", action="append", type=Path, default=[])
     args = parser.parse_args(argv)
-    result = inspect(args.repo, runtime=args.runtime)
+    result = inspect(args.repo, runtime=args.runtime, skill_roots=args.skill_root)
     print(json.dumps(result, sort_keys=True))
     return 1 if result["unresolved"] else 0
 

@@ -27,6 +27,28 @@ def install_empty_chain(repo, hooks, runtime):
 
 
 class DoctorContracts(unittest.TestCase):
+    def test_installed_skill_drift_checks_each_copy_and_support_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'runtime/skills/example'
+            source.mkdir(parents=True)
+            (source / 'SKILL.md').write_text('Read ~/strict-mode/methodology.md')
+            (source / 'support.md').write_text('current')
+            copies = [root / 'codex', root / 'agents']
+            for destination in copies:
+                (destination / 'example').mkdir(parents=True)
+                (destination / 'example/SKILL.md').write_text(
+                    f'Read {Path.home()}/strict-mode/methodology.md')
+                (destination / 'example/support.md').write_text('current')
+            self.assertEqual(doctor.find_skill_drift(root / 'runtime', copies), [])
+            (copies[1] / 'example/support.md').write_text('PRIVATE_CANARY')
+            result = doctor.find_skill_drift(root / 'runtime', copies)
+            self.assertEqual(len(result), 1)
+            self.assertEqual(result[0]['file'], 'example/support.md')
+            self.assertNotIn('PRIVATE_CANARY', str(result))
+            (copies[0] / 'example/support.md').unlink()
+            self.assertEqual(len(doctor.find_skill_drift(root / 'runtime', copies)), 2)
+
     def test_deleted_or_blank_owner_policy_fails_health_without_changing_activation(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve(); repo = root / "repo"

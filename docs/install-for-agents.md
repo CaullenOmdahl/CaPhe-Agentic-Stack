@@ -122,6 +122,15 @@ The repository is the distribution source. The local machine is the runtime envi
    - Confirm the machine-level canon is readable.
    - Confirm each installed entrypoint points to the machine-level canon.
    - Confirm each installed skill has its supporting files.
+   - Run `python3 <runtime>/tools/stack_doctor.py --repo <project> --runtime <runtime>` with
+     `--skill-root <directory>` for every discovered agent skill root, including both `.codex/skills`
+     and `.agents/skills` when present. The read-only check compares each installed stack skill and
+     its supporting files against the selected runtime, allowing home-path expansion in Markdown.
+     Missing support files, stale identical duplicates, differing copies, and extra files are drift.
+     Uninstalled skills and unrelated skills are not installation requests. Reconcile intentional
+     local customizations explicitly; never overwrite them merely to silence a diagnostic.
+   - Compare the installed canon and methodology against the reviewed source while preserving owner
+     additions. Updating the runtime alone does not update machine-global canons or agent skill copies.
    - Confirm no runtime checkout of this repository is required for normal agent use.
    - Confirm strict-mode source tests and the completion gate pass.
    - Confirm `caphe-memory list` resolves the hub and a project store, and each installed agent's
