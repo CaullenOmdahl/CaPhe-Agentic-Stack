@@ -127,6 +127,9 @@ The repository is the distribution source. The local machine is the runtime envi
      and `.agents/skills` when present. The read-only check compares each installed stack skill and
      its supporting files against the selected runtime, allowing home-path expansion in Markdown.
      Missing support files, stale identical duplicates, differing copies, and extra files are drift.
+     Explicit roots also appear in `installed_duplicate_skills`; identical copies are informational,
+     while differing content fails health through `installed_skill_drift`. An unavailable source skill
+     directory makes the requested comparison fail rather than treating it as a clean comparison.
      Uninstalled skills and unrelated skills are not installation requests. Reconcile intentional
      local customizations explicitly; never overwrite them merely to silence a diagnostic.
    - Compare the installed canon and methodology against the reviewed source while preserving owner

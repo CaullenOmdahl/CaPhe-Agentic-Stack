@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 
@@ -41,14 +42,15 @@ def find_skill_drift(runtime, roots):
     source = Path(runtime) / "skills"
     findings = []
     if not source.is_dir():
-        return findings
+        return [{"root": str(root), "file": "", "reason": "source_skills_unavailable"}
+                for root in roots]
     for skill in sorted(source.iterdir()):
         if not (skill / "SKILL.md").is_file():
             continue
         expected = {path.relative_to(skill): path for path in skill.rglob("*") if path.is_file()}
         for root in roots:
             destination = Path(root) / skill.name
-            if not destination.exists():
+            if not destination.exists() and not destination.is_symlink():
                 continue
             actual = {path.relative_to(destination): path for path in destination.rglob("*") if path.is_file()}
             for relative in sorted(expected.keys() | actual.keys()):
@@ -56,7 +58,8 @@ def find_skill_drift(runtime, roots):
                     wanted = expected[relative].read_bytes()
                     observed = actual[relative].read_bytes()
                     if relative.suffix == ".md":
-                        observed = observed.replace(os.fsencode(Path.home()) + b"/", b"~/")
+                        observed = re.sub(re.escape(os.fsencode(Path.home())) + rb"(?=/|[\s`'\"),;:]|$)",
+                                          b"~", observed)
                     matches = observed == wanted
                 except (KeyError, OSError):
                     matches = False
@@ -212,6 +215,7 @@ def inspect(repo, *, runtime, git_config=None, skill_roots=()):
         "owners": owners,
         "duplicate_skills": find_duplicate_skills([runtime / "skills", repo / ".codex/skills", repo / ".claude/skills"]),
         "skill_drift": find_skill_drift(runtime, skill_roots),
+        "installed_duplicate_skills": find_duplicate_skills(skill_roots),
         "unresolved": unresolved,
     }
     if result["duplicate_skills"]:

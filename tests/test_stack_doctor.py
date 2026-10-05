@@ -27,6 +27,29 @@ def install_empty_chain(repo, hooks, runtime):
 
 
 class DoctorContracts(unittest.TestCase):
+    def test_explicit_skill_diagnostics_fail_closed_and_remain_read_only(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            selected = root / 'agent-skills'
+            result = doctor.find_skill_drift(root / 'missing', [selected])
+            self.assertEqual(result[0]['reason'], 'source_skills_unavailable')
+            self.assertEqual(list(root.iterdir()), [])
+            source = root / 'runtime/skills/example'
+            source.mkdir(parents=True)
+            (source / 'SKILL.md').write_text('cd ~\nRead `~/guide.md`')
+            selected.mkdir()
+            (selected / 'example').symlink_to(root / 'missing')
+            self.assertTrue(doctor.find_skill_drift(root / 'runtime', [selected]))
+            (selected / 'example').unlink()
+            (selected / 'example').mkdir()
+            (selected / 'example/SKILL.md').write_text(
+                f'cd {Path.home()}\nRead `{Path.home()}/guide.md`')
+            self.assertEqual(doctor.find_skill_drift(root / 'runtime', [selected]), [])
+            (selected / 'example/SKILL.md').write_text(f'cd {Path.home()}-other')
+            self.assertTrue(doctor.find_skill_drift(root / 'runtime', [selected]))
+            result = doctor.inspect(root, runtime=root / 'runtime', skill_roots=[selected])
+            self.assertIn('installed_skill_drift', result['unresolved'])
+
     def test_installed_skill_drift_checks_each_copy_and_support_files(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
