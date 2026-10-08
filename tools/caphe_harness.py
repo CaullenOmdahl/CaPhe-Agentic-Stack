@@ -587,20 +587,29 @@ def _prepare_sandbox_mounts(roots):
     if not sys.platform.startswith("linux"):
         return mounts
     for root in roots:
-        for name in (".git", ".codex", ".agents"):
+        # The CLI protects these metadata names beneath writable sandbox roots.
+        # Prepare absent mount points before the source baseline, never exempting
+        # pre-existing paths or accepting arbitrary empty result directories.
+        for name in (".git", ".codex", ".agents", ".aws"):
             path = Path(root) / name
             if path.exists() or path.is_symlink():
                 continue
             path.mkdir(mode=0o755)
-            mounts[str(path)] = stat.S_IMODE(path.stat().st_mode)
+            info = path.lstat()
+            mounts[str(path)] = (stat.S_IMODE(info.st_mode), info.st_dev, info.st_ino)
     return mounts
 
 
 def _sandbox_mounts_unchanged(mounts):
     try:
-        return all(not Path(path).is_symlink() and Path(path).is_dir()
-                   and stat.S_IMODE(Path(path).stat().st_mode) == mode
-                   and not any(Path(path).iterdir()) for path, mode in mounts.items())
+        for path, identity in mounts.items():
+            directory = Path(path)
+            info = directory.lstat()
+            if (not stat.S_ISDIR(info.st_mode)
+                    or (stat.S_IMODE(info.st_mode), info.st_dev, info.st_ino) != identity
+                    or any(directory.iterdir())):
+                return False
+        return True
     except OSError:
         return False
 

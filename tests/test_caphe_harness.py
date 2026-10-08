@@ -47,7 +47,7 @@ class WorkerPermissionTests(unittest.TestCase):
             result.mkdir()
             mounts = harness._prepare_sandbox_mounts([workspace / "allowed", result])
             baseline = harness._tree_manifest(workspace)
-            self.assertEqual(len(mounts), 6)
+            self.assertEqual(len(mounts), 8)
             self.assertTrue(harness._sandbox_mounts_unchanged(mounts))
             self.assertTrue(harness._result_dir_clean(result, result / "out", mounts))
             (workspace / "allowed" / "marker").write_text("ok")
@@ -56,6 +56,77 @@ class WorkerPermissionTests(unittest.TestCase):
             self.assertFalse(harness._sandbox_mounts_unchanged(mounts))
             (result / ".agents" / "injected").write_text("bad")
             self.assertFalse(harness._result_dir_clean(result, result / "out", mounts))
+
+    def test_aws_placeholder_is_baselined_and_empty_only(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(harness.sys, "platform", "linux"):
+            root = Path(tmp)
+            mounts = harness._prepare_sandbox_mounts([root])
+            self.assertIn(str(root / ".aws"), mounts)
+            self.assertTrue(harness._sandbox_mounts_unchanged(mounts))
+            baseline = harness._tree_manifest(root)
+            self.assertEqual(harness._worktree_changes(root, baseline), [])
+            (root / ".aws" / "credentials").write_text("synthetic")
+            self.assertFalse(harness._sandbox_mounts_unchanged(mounts))
+            self.assertFalse(harness._result_dir_clean(root, root / "out", mounts))
+
+    def test_placeholder_identity_mode_and_type_must_survive(self):
+        for mutation in ("replace", "mode", "symlink", "file", "remove"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(harness.sys, "platform", "linux"):
+                root = Path(tmp)
+                mounts = harness._prepare_sandbox_mounts([root])
+                path = root / ".agents"
+                if mutation == "mode":
+                    path.chmod(0o700)
+                elif mutation == "replace":
+                    # Retain the original inode so immediate inode reuse cannot mask replacement.
+                    path.rename(root / "original")
+                    path.mkdir(mode=0o755)
+                else:
+                    path.rmdir()
+                    if mutation == "symlink":
+                        path.symlink_to(root / ".codex", target_is_directory=True)
+                    elif mutation == "file":
+                        path.write_text("")
+                self.assertFalse(harness._sandbox_mounts_unchanged(mounts))
+
+    def test_existing_aws_and_unrecognized_result_entries_are_not_exempt(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(harness.sys, "platform", "linux"):
+            root = Path(tmp)
+            (root / ".aws").mkdir()
+            mounts = harness._prepare_sandbox_mounts([root])
+            self.assertNotIn(str(root / ".aws"), mounts)
+            self.assertFalse(harness._result_dir_clean(root, root / "out", mounts))
+            (root / "unrecognized").mkdir()
+            self.assertFalse(harness._result_dir_clean(root, root / "out", mounts))
+
+    @unittest.skipUnless(sys.platform.startswith("linux") and shutil.which("codex"),
+                         "Linux Codex sandbox is not installed")
+    def test_real_sandbox_preserves_and_protects_prepared_aws_placeholder(self):
+        with tempfile.TemporaryDirectory(prefix="caphe-aws-test-", dir=Path.home()) as tmp:
+            base = Path(tmp).resolve()
+            home = base / "home"
+            home.mkdir()
+            workspace = init_repo(base / "workspace")
+            (workspace / "allowed").mkdir()
+            result = base / "result"
+            result.mkdir()
+            sandbox_tmp = base / "tmp"
+            sandbox_tmp.mkdir()
+            route = dict(sample_config(tmp)["routes"][0], permissions="worktree-write")
+            harness._write_codex_profile(home, route, ("allowed",), "aws-test", result / "out")
+            mounts = harness._prepare_sandbox_mounts([workspace / "allowed", result])
+            self.assertIn(str(result / ".aws"), mounts)
+            env = {**harness._child_env("codex"), "CODEX_HOME": str(home), "TMPDIR": str(sandbox_tmp)}
+            argv = ["codex", "sandbox", "--profile", "aws-test", "--permission-profile",
+                    "caphe-worker", "--cd", str(workspace)]
+            outcome = subprocess.run([*argv, "true"], env=env, capture_output=True, timeout=15)
+            self.assertEqual(outcome.returncode, 0, outcome.stderr.decode())
+            for path in (workspace / "allowed" / ".aws", result / ".aws"):
+                denied = subprocess.run([*argv, "sh", "-c", "printf bad > " + str(path / "injected")],
+                                        env=env, capture_output=True, timeout=15)
+                self.assertNotEqual(denied.returncode, 0)
+            self.assertTrue(harness._sandbox_mounts_unchanged(mounts))
 
     def test_mount_scaffolding_does_not_exempt_existing_or_replaced_paths(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(harness.sys, "platform", "linux"):
