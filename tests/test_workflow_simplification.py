@@ -159,10 +159,10 @@ class InstalledWorkflowTests(unittest.TestCase):
         repo = self.project()
         agent = repo / '.agent'
         agent.mkdir()
-        for relative, digest in initializer.PRIOR_STOCK_POLICY.items():
+        for relative, digests in initializer.PRIOR_STOCK_POLICY.items():
             fixture = 'owners-prior-stock.md' if Path(relative).name == 'OWNERS.md' else 'checklist-prior-stock.md'
             content = (ROOT / 'tests/fixtures' / fixture).read_bytes()
-            self.assertEqual(initializer._sha(content), digest)
+            self.assertIn(initializer._sha(content), digests)
             (repo / relative).write_bytes(content)
         initializer.initialize(ROOT / 'strict-mode', repo)
         for relative in initializer.PRIOR_STOCK_POLICY:
@@ -172,6 +172,33 @@ class InstalledWorkflowTests(unittest.TestCase):
         initializer.initialize(ROOT / 'strict-mode', repo)
         for relative in initializer.PRIOR_STOCK_POLICY:
             self.assertEqual((repo / relative).read_text(), 'Owner custom constraints\n')
+
+    def test_every_released_stock_policy_gets_a_full_template_refresh(self):
+        cases = {
+            '.agent/OWNERS.md': ('owners-legacy.md', 'owners-legacy-review.md',
+                                'owners-native-worker-stock.md', 'owners-prior-stock.md'),
+            '.agent/dod-checklist.md': ('checklist-v2-stock.md', 'checklist-prior-stock.md'),
+        }
+        for relative, fixtures in cases.items():
+            digests = {initializer._sha((ROOT / 'tests/fixtures' / fixture).read_bytes())
+                       for fixture in fixtures}
+            self.assertEqual(digests, initializer.PRIOR_STOCK_POLICY[relative])
+            for fixture in fixtures:
+                with self.subTest(policy=relative, fixture=fixture):
+                    repo = self.root / fixture
+                    repo.mkdir()
+                    subprocess.run(['git', 'init', '-q', str(repo)], check=True)
+                    policy = repo / relative
+                    policy.parent.mkdir()
+                    policy.write_bytes((ROOT / 'tests/fixtures' / fixture).read_bytes())
+                    policy.chmod(0o640)
+                    initializer.initialize(ROOT / 'strict-mode', repo)
+                    self.assertEqual(policy.read_bytes(),
+                                     (ROOT / 'strict-mode/templates' / Path(relative).name).read_bytes())
+                    self.assertEqual(policy.stat().st_mode & 0o777, 0o640)
+                    before = policy.read_bytes()
+                    initializer.initialize(ROOT / 'strict-mode', repo)
+                    self.assertEqual(policy.read_bytes(), before)
 
     def test_refresh_rolls_back_hook_retirement_on_failed_activation(self):
         repo = self.project()

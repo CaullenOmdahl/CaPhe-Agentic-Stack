@@ -296,8 +296,9 @@ remain intact for explicit reconciliation.
 
 Existing projects can retain an older `.agent/OWNERS.md` even after a runtime update. The doctor
 reports `legacy_owner_model_gate` when it recognizes the old blanket model-choice gate. On explicit
-project refresh, `strict-init` updates only byte-identical known stock templates, replacing that gate
-and adding the native-worker exception while preserving existing review wording and file permissions.
+project refresh, `strict-init` replaces all known byte-identical released stock owner/checklist
+templates with current guidance, preserving permissions and consequential human safeguards. Partial
+stock upgrades no longer retain obsolete review or completion wording.
 Customized files are never rewritten: a recognized conflicting gate stops refresh before any writes
 and asks for reconciliation with the approved delegation rules. Use existing task authorization to
 correct inherited generic wording where it applies; retain named approvers, custom gates, and pinned

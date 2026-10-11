@@ -34,21 +34,11 @@ class StrictInitSourceTests(unittest.TestCase):
         with self.assertRaisesRegex(initializer.InitError, "customized legacy model gate"):
             initializer.refresh_owner_gate(content)
 
-    def test_generated_owner_upgrade_replaces_the_matching_legacy_gate(self):
-        prefix = b"# OWNERS\n\nGate:\n"
-        suffix = b"\n\n**Approver(s):** Owner\n"
-        replacement = (b"- architecture, model-policy, language, or platform decisions, including changes to pinned owner or\n"
-                      b"  reviewer routes;")
-        for gate in initializer.LEGACY_MODEL_GATES:
-            with self.subTest(gate=gate):
-                with mock.patch.object(initializer, "owner_route_state", return_value="legacy_generated"):
-                    upgraded = initializer.refresh_owner_gate(prefix + gate + suffix)
-                self.assertNotIn(gate, upgraded)
-                self.assertIn(replacement, upgraded)
-                self.assertIn(initializer.NATIVE_WORKER_EXCEPTION, upgraded)
-                self.assertIn(suffix, upgraded)
+    def test_known_stock_owner_versions_are_in_full_template_migration(self):
+        self.assertTrue(initializer.LEGACY_OWNERS_HASHES <=
+                        initializer.PRIOR_STOCK_POLICY['.agent/OWNERS.md'])
 
-    def test_stock_owners_upgrade_preserves_review_rules_and_is_idempotent(self):
+    def test_stock_owners_upgrade_to_current_guidance_and_keep_safeguards(self):
         for fixture in ("owners-legacy.md", "owners-legacy-review.md"):
             with self.subTest(fixture=fixture), tempfile.TemporaryDirectory() as tmp:
                 repo = self.repo(Path(tmp).resolve())
@@ -59,9 +49,11 @@ class StrictInitSourceTests(unittest.TestCase):
                 initializer.initialize(ROOT / "strict-mode", repo)
                 upgraded = owners.read_bytes()
                 self.assertNotIn(b"- architecture, model, language", upgraded)
-                self.assertIn(b"does not require a new per-worker approval", upgraded)
                 self.assertIn(b"pinned owner or\n  reviewer routes", upgraded)
-                self.assertIn(old[old.index(b"Lower-risk"):], upgraded)
+                self.assertEqual(upgraded, (ROOT / "strict-mode/templates/OWNERS.md").read_bytes())
+                self.assertIn(b"auth, security, secrets", upgraded)
+                self.assertIn(b"**Approver(s):** <name>", upgraded)
+                self.assertNotIn(b"full completion gate", upgraded)
                 self.assertEqual(owners.stat().st_mode & 0o777, 0o640)
                 initializer.initialize(ROOT / "strict-mode", repo)
                 self.assertEqual(owners.read_bytes(), upgraded)

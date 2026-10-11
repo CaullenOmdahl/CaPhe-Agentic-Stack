@@ -31,10 +31,17 @@ LEGACY_OWNERS_HASHES = frozenset({
     "02e4cd348ca81693fe05d0406ffd59751bd445f8fd4eb0536e337470697fdf66",
     "0f21d1ab2f3c3a7256cc7c4b2508f04e3060f21ab56c0086d5ab7004f5339260",
 })
-# Exact stock policy at the last distribution baseline; customized policies stay intact.
+# Pristine released stock policies (all template revisions through the distribution baseline).
+# Only exact bytes migrate; named/custom owner instructions stay intact.
 PRIOR_STOCK_POLICY = {
-    ".agent/OWNERS.md": "2a71796386685f18df625a7b382083e868b854c171367ae19d07564fe0f18674",
-    ".agent/dod-checklist.md": "d6f4595d4e3199f1738628727e2fb5a79dde68db3c175127d1c3644911aef203",
+    ".agent/OWNERS.md": LEGACY_OWNERS_HASHES | frozenset({
+        "2a71796386685f18df625a7b382083e868b854c171367ae19d07564fe0f18674",
+        "851252c752c2482bf926b8150432e0f045594184578c66c1562c06fefafce93d",
+    }),
+    ".agent/dod-checklist.md": frozenset({
+        "d6f4595d4e3199f1738628727e2fb5a79dde68db3c175127d1c3644911aef203",
+        "e9157deb9e71c5dada726ff635c91a85afc9bff4afaf8d47b3c5aea0478ce359",
+    }),
 }
 LEGACY_MODEL_GATES = (
     b"- architecture, model, language, or platform decisions;",
@@ -113,13 +120,8 @@ def refresh_owner_gate(content):
     if state == "legacy_conflict":
         raise InitError(".agent/OWNERS.md has a customized legacy model gate; reconcile it with the "
                         "approved native-worker rules while preserving explicit owner/reviewer constraints")
-    if state == "legacy_generated":
-        for gate in LEGACY_MODEL_GATES:
-            if gate in content:
-                return content.replace(gate,
-                                       b"- architecture, model-policy, language, or platform decisions, including changes to pinned owner or\n"
-                                       b"  reviewer routes;") + b"\n" + NATIVE_WORKER_EXCEPTION
-        raise InitError("known legacy owner policy has no recognized migration gate")
+    # Pristine stock versions are replaced in full by initialize(), not patched
+    # piecemeal here: partial upgrades would retain obsolete workflow requirements.
     return None
 
 
@@ -389,7 +391,7 @@ def initialize(canon, root, *, fail_probe=False, previous_canon=None):
         safe(path)
         if not path.exists():
             writes[path] = text
-        elif name in PRIOR_STOCK_POLICY and _sha(path.read_bytes()) == PRIOR_STOCK_POLICY[name]:
+        elif name in PRIOR_STOCK_POLICY and _sha(path.read_bytes()) in PRIOR_STOCK_POLICY[name]:
             writes[path] = text
         elif name == ".agent/OWNERS.md":
             refreshed = refresh_owner_gate(path.read_bytes())
