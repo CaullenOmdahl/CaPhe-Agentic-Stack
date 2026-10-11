@@ -268,6 +268,69 @@ class WorkerPermissionTests(unittest.TestCase):
             self.assertFalse(harness._worker_permissions_verified(route, effective, workspace, expected, home))
 
 
+    def test_implicit_cwd_requires_exact_canonical_workspace_write(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            workspace = root / "workspace"
+            workspace.mkdir()
+            home = root / "home"
+            home.mkdir()
+            result = root / "result" / "out.txt"
+            route = dict(sample_config(str(root))["routes"][0], permissions="worktree-write")
+            profile = harness._write_codex_profile(home, route, (".",), output_path=result)
+            expected = harness._expected_permission_profile(profile, workspace)
+            effective = {"model": route["model"], "effort": route["effort"],
+                         "cwd": str(workspace), "active_permission_profile": {"id": "caphe-worker"},
+                         "permission_profile": copy.deepcopy(expected),
+                         "sandbox_policy": {"type": "workspace-write", "network_access": False,
+                                            "exclude_tmpdir_env_var": True, "exclude_slash_tmp": True,
+                                            "writable_roots": [str(result.parent)]}}
+            self.assertTrue(harness._worker_permissions_verified(route, effective, workspace, expected, home))
+            explicit = copy.deepcopy(effective)
+            explicit["sandbox_policy"]["writable_roots"].append(str(workspace))
+            self.assertTrue(harness._worker_permissions_verified(route, explicit, workspace, expected, home))
+            mutations = [
+                ("missing_result", lambda v: v["sandbox_policy"].update(writable_roots=[])),
+                ("extra_root", lambda v: v["sandbox_policy"]["writable_roots"].append(str(home))),
+                ("wrong_cwd", lambda v: v.update(cwd=str(home))),
+                ("missing_cwd", lambda v: v.pop("cwd")),
+                ("unresolved_cwd", lambda v: v.update(cwd=str(root / "absent"))),
+                ("network", lambda v: v["sandbox_policy"].update(network_access=True)),
+                ("tmpdir", lambda v: v["sandbox_policy"].update(exclude_tmpdir_env_var=False)),
+                ("slash_tmp", lambda v: v["sandbox_policy"].update(exclude_slash_tmp=False)),
+                ("root_type", lambda v: v["sandbox_policy"].update(writable_roots=[None])),
+                ("model", lambda v: v.update(model="unexpected")),
+                ("effort", lambda v: v.update(effort="unexpected")),
+                ("missing_deny", lambda v: v["permission_profile"]["file_system"]["entries"].remove(
+                    next(e for e in v["permission_profile"]["file_system"]["entries"] if e["access"] == "deny"))),
+            ]
+            for name, mutate in mutations:
+                changed = copy.deepcopy(effective)
+                mutate(changed)
+                with self.subTest(name=name):
+                    self.assertFalse(harness._worker_permissions_verified(route, changed, workspace, expected, home))
+            alias = root / "alias"
+            alias.symlink_to(workspace, target_is_directory=True)
+            for alias_path in (str(alias), str(workspace) + "/."):
+                changed = copy.deepcopy(effective)
+                changed["cwd"] = alias_path
+                self.assertFalse(harness._worker_permissions_verified(route, changed, workspace, expected, home))
+                self.assertFalse(harness._worker_permissions_verified(route, changed, alias_path, expected, home))
+                # Preserve the pre-existing explicit-root resolved-alias behavior.
+                changed["sandbox_policy"]["writable_roots"].append(str(workspace))
+                self.assertTrue(harness._worker_permissions_verified(route, changed, workspace, expected, home))
+            self.assertFalse(harness._worker_permissions_verified(route, effective, alias, expected, home))
+            for permissions, allowed in (("worktree-write", ("allowed",)), ("read-only", ())):
+                narrow_route = dict(route, permissions=permissions)
+                profile = harness._write_codex_profile(home, narrow_route, allowed, output_path=result)
+                narrow = harness._expected_permission_profile(profile, workspace)
+                changed = copy.deepcopy(effective)
+                changed["permission_profile"] = copy.deepcopy(narrow)
+                changed["sandbox_policy"]["writable_roots"] = [str(result.parent)]
+                self.assertEqual(harness._worker_permissions_verified(narrow_route, changed, workspace, narrow, home),
+                                 permissions == "read-only")
+
+
 class HarnessConfigTests(unittest.TestCase):
     def test_signed_update_requires_executable_harness_entrypoint(self):
         with tempfile.TemporaryDirectory(dir=Path.home()) as tmp:

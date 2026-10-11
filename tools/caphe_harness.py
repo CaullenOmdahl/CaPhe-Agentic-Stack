@@ -722,16 +722,34 @@ def _worker_permissions_verified(route, effective, workspace, expected, codex_ho
             or sandbox.get("exclude_slash_tmp") is not True):
         return False
     roots = sandbox.get("writable_roots")
-    if not isinstance(roots, list) or not all(isinstance(root, str) for root in roots) or set(roots) != writes:
+    if not isinstance(roots, list) or not all(isinstance(root, str) for root in roots):
         return False
     if _network_enabled(sandbox) or _network_enabled(profile):
         return False
     if not isinstance(cwd, str):
         return False
     try:
-        return Path(cwd).resolve(strict=True) == Path(workspace).resolve(strict=True)
+        workspace_root = str(Path(workspace).resolve(strict=True))
+        if str(Path(cwd).resolve(strict=True)) != workspace_root:
+            return False
     except (OSError, RuntimeError):
         return False
+    roots_match = set(roots) == writes
+    if not roots_match:
+        # Codex may omit cwd from its legacy additional-root projection. The
+        # exact native profile must explicitly grant this canonical workspace.
+        expected_workspace_write = any(
+            entry["access"] == "write"
+            and entry["path"] == {"type": "path", "path": workspace_root}
+            for entry in expected["file_system"]["entries"]
+        )
+        roots_match = (
+            str(workspace) == workspace_root
+            and cwd == workspace_root
+            and expected_workspace_write
+            and set(roots) == writes - {workspace_root}
+        )
+    return roots_match
 
 
 def _bounded_result(path, max_bytes):
