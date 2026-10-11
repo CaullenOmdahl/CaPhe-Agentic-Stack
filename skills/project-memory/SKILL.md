@@ -1,6 +1,6 @@
 ---
 name: project-memory
-description: Read and write the project's Git-stored memory shared by every agent. Use at the start of project work to load prior decisions, corrections, and environment facts, and whenever you learn something durable that code and Git history do not record.
+description: Read and write the project's Git-stored memory shared by every agent. Use when authorized project memory is relevant to prior decisions, corrections, or environment facts, and whenever you learn something durable that code and Git history do not record.
 ---
 
 # Project Memory
@@ -9,7 +9,7 @@ Every agent working in a project reads and writes the same memory: plain Markdow
 project's private Git repository at `.agent/memory/`. It survives lost sessions, lost context, and a
 lost machine because it is committed and pushed like any other project file.
 
-## Read at the start of project work
+## Read relevant authorized memory
 
 ```bash
 caphe-memory list            # stores for this directory, innermost first, plus the write target
@@ -17,8 +17,9 @@ caphe-memory list --full     # also print each store's index
 caphe-memory search <terms>  # every applicable store at once; all terms must match
 ```
 
-Use `search` for lookups rather than grepping one directory: it covers the parent project and the hub,
-which a single-directory search misses.
+The shared `docs/canon.md` governs workflow and authorized memory scope. Listing/search can include
+parent projects and the hub: use it only when all accessed stores are authorized. Otherwise inspect
+only the authorized project store. Do not bootstrap a hub or widen permissions to start a task.
 
 Stores are listed innermost first: the current repository, each enclosing repository (a nested
 repository also sees its parent project), the owner's hub entry for this project if one exists, and the
@@ -57,7 +58,9 @@ one is allowed. `caphe-memory check` warns about every credential it finds so th
 repositories never hold memory: if a repository is about to become public, move `.agent/memory/` to the
 hub (or gitignore it) first and make `caphe-memory check --fail-on-secrets` pass.
 
-## Commit
+## Commit changed memory
+
+These checks apply when memory changes, not to every code commit.
 
 ```bash
 caphe-memory check      # schema and index freshness; credential warnings

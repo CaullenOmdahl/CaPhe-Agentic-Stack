@@ -209,31 +209,36 @@ class ReviewRouteTests(HomeTest):
         local = {r["reviewer"]: r for r in routes["local"]}
         self.assertEqual(sorted(local), ["claude", "codex"])
         self.assertTrue(local["claude"]["independent"])
-        self.assertFalse(local["codex"]["independent"])
+        self.assertTrue(local["codex"]["independent"])
+        self.assertTrue(local["codex"]["same_family"])
+        self.assertFalse(local["claude"]["same_family"])
+        self.assertEqual(local["codex"]["review_status"], "not_performed")
         self.assertEqual(local["claude"]["model"], "m1")
         self.assertIsNone(local["codex"]["model"])
         self.assertTrue(routes["remote"]["gh_authenticated"])
 
-    def test_catalog_reviewers_report_verification_and_unknown_independence(self):
+    def test_catalog_reviewers_report_verification_without_family_prerequisite(self):
         which = {"opencode": "/bin/opencode", "kimi": "/bin/kimi", "qwen": "/bin/qwen",
                  "copilot": "/bin/copilot", "gh": None}.get
         run = FakeGh([(["/bin/opencode", "--version"], (0, "1.18\n")), (["/bin/kimi", "--version"], (0, "1\n")),
                       (["/bin/qwen", "--version"], (0, "0.9\n")), (["/bin/copilot", "--version"], (0, "1\n"))])
         local = {r["reviewer"]: r for r in setup.review_routes(run, which=which, current="claude")["local"]}
         self.assertEqual(local["opencode"]["verification"], "verified")
-        # Depends on the configured provider: unknown, and conservatively not independent.
-        self.assertEqual((local["opencode"]["independence"], local["opencode"]["independent"]), ("unknown", False))
-        self.assertEqual(local["copilot"]["independence"], "unknown")
+        # Unknown family is metadata, not a blocker to a separately performed review.
+        self.assertEqual((local["opencode"]["independence"], local["opencode"]["independent"]), ("yes", True))
+        self.assertEqual(local["copilot"]["independence"], "yes")
         self.assertEqual((local["qwen"]["independence"], local["qwen"]["independent"]), ("yes", True))
         self.assertEqual(local["qwen"]["verification"], "documented")
         self.assertIn("auto-approves", local["kimi"]["note"])
         self.assertEqual(setup.review_routes(run, which=which, current="claude")["catalog"], "docs/reviewer-catalog.md")
 
-    def test_unknown_author_family_never_makes_a_reviewer_independent(self):
+    def test_unknown_author_family_does_not_block_a_separate_review(self):
         which = {"claude": "/bin/claude"}.get
         run = FakeGh([(["/bin/claude", "--version"], (0, "2\n"))])
         local = setup.review_routes(run, which=which, current="aider")["local"][0]
-        self.assertEqual((local["independence"], local["independent"]), ("unknown", False))
+        self.assertEqual((local["independence"], local["independent"]), ("yes", True))
+        self.assertIsNone(local["same_family"])
+        self.assertEqual(local["review_status"], "not_performed")
         self.assertEqual(setup.main(["review-routes", "--current", "aider"], run=run), 0)
 
     def test_no_reviewers_installed_is_reported_not_raised(self):

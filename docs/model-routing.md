@@ -72,9 +72,9 @@ Each client adapter states how its harness realises these levers. For Claude Cod
 - one leased file owner per wave, and no recursive delegation;
 - the declared repair budget, then escalation to the parent;
 - per-task runtime, output and token budgets;
-- the single independent implementation-review route. A substitute reviewer sharing the
-  coordinating session's client or model family is an author self-check, not independent review,
-  and does not satisfy the review gate.
+- the single separately performed implementation-review route under the canon. A substitute may
+  share the author’s model family; author self-attestation does not satisfy review. Different-family
+  review needs a concrete risk, conflicting evidence, or explicit owner requirement, not a default gate.
 
 The approved substitution belongs in the consuming project's own records, alongside the work it
 governs. Keep project-specific agent inventories, host details and task tables out of this

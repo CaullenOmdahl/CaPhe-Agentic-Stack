@@ -63,13 +63,22 @@ The repository is the distribution source. The local machine is the runtime envi
    - Follow `docs/efficiency-runtime.md`; use `tools/stack_install.py` to plan an explicit payload before applying it.
    - The normal standalone destination is `~/.local/share/caphe/runtime`; it contains tools and required support files, without Git metadata or machine state.
    - Preserve the existing `~/strict-mode` deployment path or intentionally repoint it to the installed strict-mode subtree after verification.
+     Refresh recognizes the exact historical Stop entry at that literal standard path when it was
+     an ordinary directory. Initialization resolves symlinks: before repointing any symlink (including
+     `~/strict-mode`), record its old resolved target and supply that target as
+     `STRICT_MODE_PREVIOUS_CANON` during refresh. Custom old deployment paths likewise require the
+     original resolved absolute strict-mode directory. Do not derive it from the already-repointed
+     symlink. No command from that old path is executed; unrecognized entries remain untouched.
    - Keep plans, rollback journals, and resulting inventory outside Git in owner-only private storage.
    - Treat source hashes and an effective hook probe as activation evidence; a version marker alone is insufficient.
    - Copy the checked-in `strict-mode/` tree to the machine's deployed strict-mode location.
    - Preserve executable modes under `strict-mode/bin/` and `strict-mode/test/`.
    - Run `strict-init.sh` only for repositories whose scaffold is absent, on an older
      `.agent/.strict-version`, or has verified hook/source drift; ordinary skill invocation should not refresh files repeatedly.
-   - Treat `FAST GREEN` as focused feedback. Completion requires `--mode completion`.
+   - Follow the installed canon for proportionate verification. `FAST GREEN` and the explicit
+     full gate are check results, not additional acceptance policies. Do not install a full-matrix Stop hook.
+   - For installer tests, use temporary task-specific HOME and XDG directories plus disposable
+     runtime/project targets. Never update the real executing agent HOME or global policy.
 
 7. Set up shared project memory.
    - Run `python3 tools/stack_setup.py clients` to see which agents are installed; configure every one
@@ -135,7 +144,8 @@ The repository is the distribution source. The local machine is the runtime envi
    - Compare the installed canon and methodology against the reviewed source while preserving owner
      additions. Updating the runtime alone does not update machine-global canons or agent skill copies.
    - Confirm no runtime checkout of this repository is required for normal agent use.
-   - Confirm strict-mode source tests and the completion gate pass.
+   - Check actual installed policy, supporting documents, skills, and effective hooks against source.
+   - Run installer/runtime regression checks; use the full gate when this broad surface warrants it.
    - Confirm `caphe-memory list` resolves the hub and a project store, and each installed agent's
      entrypoint names the hub.
    - Confirm MemPalace indexes, if configured, are outside Git trees, owner-only, and citation-resolvable.

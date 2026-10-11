@@ -6,7 +6,7 @@ Before acting, read `../../docs/canon.md` and treat it as binding unless the use
 
 Codex-specific notes:
 
-- Full filesystem or network access increases responsibility; it does not lower the review bar.
+- Full filesystem or network access preserves the canon’s permission and safety boundaries.
 - Keep going by default when the next step is clear.
 - Use available memory or skills when relevant, but the canon is authoritative over stale local context.
 - Shared project memory is Git-stored `.agent/memory/`; follow the `project-memory` skill. Codex's own memory store is an import source, not the shared record.

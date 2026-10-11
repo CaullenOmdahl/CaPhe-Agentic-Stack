@@ -1,5 +1,8 @@
 # Efficiency runtime: implementation and operation
 
+The [canon](canon.md) is the sole workflow policy. These tools are optional procedures;
+use one implementation executor by default and select helpers only for a concrete distinct need.
+
 Strict Mode v3 turns the [research proposal](efficiency-improvement-plan.md) into reusable tools for
 bounded context, preparation, explicit delegation, and verifiable installation. The target is accepted
 work per total cost, including parent inspection and repairs. A lower token price alone is insufficient.
@@ -22,7 +25,8 @@ work per total cost, including parent inspection and repairs. A lower token pric
 | Distribute and inspect | `tools/stack_install.py`, `tools/stack_doctor.py` | Explicit payload, rollback, effective hook verification; existing project content preserved |
 
 Automatic CI receipt reuse is deliberately unavailable: a candidate workflow cannot certify its own
-manifest, helper scripts, result producer, or isolation. Full local completion remains the fallback.
+manifest, helper scripts, result producer, or isolation. This limitation does not mandate duplicate local
+and remote matrices: use applicable required check results and report their trust limits accurately.
 Consumer dependency graphs also remain unproven until repository-specific verification establishes
 completeness. Installation does not silently shorten their full matrices. Masking defaults off; model
 routes remain unpromoted without the paired evidence described below.
@@ -258,7 +262,8 @@ supersession. The index may retain a validated ADR identifier, but suppresses le
 review text, and extra fields. Older records with unknown fields remain readable without becoming
 writable through this compatibility path.
 
-New public evidence writes use [schema v2](../schemas/public-evidence-v2.json). Record implementation,
+Evidence records are optional unless explicitly required by the project. Preserve historical records;
+evidence-only changes do not restart implementation review. When writing a record, use [schema v2](../schemas/public-evidence-v2.json). Record implementation,
 validation, review, merge, release, and external acceptance separately. Use explicit not-applicable
 reasons; source tests cannot imply device or release success. Artifact claims require matching artifact
 bindings; device claims additionally require semantic acceptance. Update state through a new immutable ID with `supersedes`.
@@ -281,12 +286,19 @@ side-effect-free hook probe. Activation also records and checks the generated ho
 hook target, including forwarded hooks, without executing that chain. These local records detect drift;
 they are not signed attestation. Older records without forwarded-target identities require reconciliation
 through the original hook directory before doctor can verify them.
-Global installation and project activation are distinct results.
+Global installation and project activation are distinct results. Fresh initialization adds no Claude
+full-matrix Stop hook. Explicit refresh removes only the exact historical stack-generated Stop entry
+for the selected strict-mode path or literal former standard `~/strict-mode` directory path.
+Symlink initialization stores the resolved target: before repointing a symlink, including the standard
+path, capture its old resolved target and pass it as `STRICT_MODE_PREVIOUS_CANON` during refresh.
+Custom previous paths also need that explicit selection. Unrelated paths are not inferred as framework-owned. Custom commands and unrelated settings remain intact. Exact known stock owner/checklist files migrate to the current templates; customized files
+remain intact for explicit reconciliation.
 
 Existing projects can retain an older `.agent/OWNERS.md` even after a runtime update. The doctor
 reports `legacy_owner_model_gate` when it recognizes the old blanket model-choice gate. On explicit
-project refresh, `strict-init` updates only byte-identical known stock templates, replacing that gate
-and adding the native-worker exception while preserving existing review wording and file permissions.
+project refresh, `strict-init` replaces all known byte-identical released stock owner/checklist
+templates with current guidance, preserving permissions and consequential human safeguards. Partial
+stock upgrades no longer retain obsolete review or completion wording.
 Customized files are never rewritten: a recognized conflicting gate stops refresh before any writes
 and asks for reconciliation with the approved delegation rules. Use existing task authorization to
 correct inherited generic wording where it applies; retain named approvers, custom gates, and pinned
@@ -312,31 +324,21 @@ A project without a proven affected graph retains its full checks. Do not replac
 manifest with a generated default. A machine update does not claim application release, hardware
 readiness, or a completed production deployment. Keep detailed rollout inventories and exceptions private.
 
-When this repository's defined CI job runs, it retains `tests/`, `test/`, and `strict-mode/test/` from the exact PR base in a
-disposable checkout containing candidate product source. It runs the accepted runner and manifest there.
-A separate phase uses the accepted runner with the candidate manifest against the untouched candidate
-checkout, so newly declared commands and added tests run even when the retained checks fail. Pushes to
-main use the preceding main commit as the accepted baseline; missing baseline policy fails
-closed. Both source checkouts disable persisted credentials. Candidate product files do not replace
-the accepted tests within that assembled harness. The job rejects changed HEAD, index entries/flags, or nonignored source
-state after checks.
-The pull request can replace the workflow itself with successful no-ops under the same check names.
-These jobs therefore provide diagnostic feedback; they do not enforce their own invocation or certify
-completion. GitHub's [PR event semantics](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request)
-and [checkout configuration](https://github.com/actions/checkout) define that boundary.
+Repository Actions is intentionally disabled for cost control. The workflow is a dormant, manual-only
+Linux recipe with no automatic PR/push triggers or multi-platform matrix; enabling/dispatching it is
+not part of installation or rollout. Normal validation uses the prepared development environment.
+The optional recipe runs ordinary Python regressions, shell syntax,
+review-tool isolation regressions, initializer refresh regressions, and public-safety checks. Installer
+checks use disposable HOME/XDG directories. Python runs with inherited path/home overrides cleared and
+loads the stdlib runner before exposing project imports. Each check's failure remains visible; shell and
+security checks still run after a Python failure. Tests must leave the source checkout clean.
 
-Until an independently protected executor is available, use the ADR-0004 procedural completion route:
-an owner-controlled controller outside the candidate pins the execution recipe, accepted baseline,
-runner, and required matrix before execution. A candidate-supplied digest or green status cannot select
-those pins. Reject changed recipes or requirements before launching checks; independently review and
-approve a policy change before accepting a new pin. Run both the retained accepted harness and the
-complete reviewed candidate matrix uncached against the exact candidate revision. Record recipe and
-matrix identities, source stability, command outcomes, and PR review separately. A local rerun of an
-unapproved candidate workflow or manifest cannot restore trust.
+The previous retained accepted-base plus candidate harness duplicated validation and encoded historical
+policy assertions. It has been replaced by ordinary source-controlled validation and focused CI regressions
+for failure propagation, disposable install targets, Python runner isolation, and source cleanliness.
+No product/security regression is waived to satisfy an obsolete policy classification.
 
-Automatic GitHub enforcement and trusted CI receipt reuse remain unavailable in this distribution.
-An external required status must come from a separately controlled provider; GitHub supports
-[binding required checks to a specific App](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets#require-status-checks-to-pass-before-merging).
-Adding that service requires its own approved policy source, isolated execution and publishing
-credentials, repository rules, and verification. Merely calling a reusable workflow from candidate YAML
-does not enforce that the call occurs. Keep independent PR review and named human gates throughout.
+Like ordinary repository CI, this workflow is reviewable source, not tamper-proof certification. Actual
+GitHub-required checks/approvals and owner merge/install/release decisions remain applicable. A separately
+controlled policy executor would need a concrete threat or explicit project requirement; it is not an
+additional default workflow or a prerequisite to this stack's own refactors.

@@ -6,7 +6,7 @@ description: Retrieve prior decisions, procedures, preferences, incidents, or pr
 # Memory Palace Recall
 
 The canonical shared memory is the project's Git-stored `.agent/memory/` (see the `project-memory`
-skill); start there with `caphe-memory list`. Use this skill for deeper recall across historical
+skill); read relevant entries only within the authorized scope under `docs/canon.md`. Use this skill for deeper recall across historical
 transcripts when a MemPalace index is configured.
 
 Search before answering from recollection. Select the current project/client security domain from trusted

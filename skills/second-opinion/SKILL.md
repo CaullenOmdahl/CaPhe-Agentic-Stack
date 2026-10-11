@@ -1,21 +1,19 @@
 ---
 name: second-opinion
-description: Obtain an independent AI assessment for code, architecture, writing, or ship-readiness when the user asks for another model's view or local review preparation is useful.
+description: Obtain an independent assessment when requested or as the selected implementation-review fallback.
 ---
 
 # Second Opinion
 
-Use another model family for independent assessment. In a Codex session, prefer Claude Code for
-correctness-focused code review and agy for Gemini-family product, architecture, or writing review.
-OpenCode with a provider from another family (for example MiniMax) is also independent. Other
-reviewers, remote and local, are listed with their verification status in the stack's
-`docs/reviewer-catalog.md`; use only verified invocations without first testing them.
-Codex is a same-family fallback and must be labeled that way. For implementation review,
-read `~/.local/share/caphe/runtime/docs/review-workflow.md`: prefer one remote PR reviewer;
-use this independent local route only when remote review is unavailable/quota-limited, or the user
-explicitly requests local review. Successful local fallback satisfies the workflow review gate.
-Do not run local preparation review and remote review routinely or repeat remote review after fallback.
-Explicit design/writing second-opinion requests remain in scope.
+Use a separately performed assessment of the actual diff under the shared `docs/canon.md`. The
+reviewer may use the author’s model family; self-attestation by the author is not review. Different-family
+review is optional for concrete risk, conflicting evidence, or an explicit owner requirement, not a
+mandatory discovery or acceptance prerequisite. Choose a working existing capability with suitable
+review quality and verified isolation. No model is assumed error-free.
+
+For implementation review, use `docs/review-workflow.md`: remote preferred, one local fallback only
+when unavailable/quota-limited or explicitly requested. Successful local review satisfies this route;
+do not add a remote or different-family duplicate. Explicit design/writing requests remain separate.
 
 ## Capability check
 
@@ -45,8 +43,8 @@ that service. Never delete or rewrite the user's normal MCP configuration.
 For other reviewer CLIs, verify their current isolation flags or use the existing
 isolated `strict-confer` boundary; do not assume Claude flags are portable. Keep
 model authentication available through the supported client mechanism without
-copying credential files into the review input. Do not disable repository hooks
-or completion gates to speed up review. Claude's broader `--safe-mode` also drops
+copying credential files into the review input. Preserve actual required repository checks and custom hooks; optional CaPhe helpers are not
+review prerequisites. Claude's broader `--safe-mode` also drops
 instructions and hooks, so it is not a substitute for MCP-only isolation in an
 ordinary repository review.
 
@@ -83,8 +81,8 @@ The permission skip is bounded by agy's sandbox and plan mode. Do not remove eit
 
 ### OpenCode (family of its configured provider)
 
-Independent only when its provider's family differs from the current agent's, for example a MiniMax
-model reviewing Codex or Claude work. Run `python3 <runtime>/tools/stack_setup.py review-routes
+A separately performed review is eligible regardless of provider family; confirm model capability
+and isolation rather than requiring family diversity. Run `python3 <runtime>/tools/stack_setup.py review-routes
 --current <agent>` to see which installed reviewers qualify on this machine.
 
 OpenCode has no MCP-isolation flag, so point `XDG_CONFIG_HOME` at an empty directory: that loads no
@@ -105,10 +103,9 @@ XDG_CONFIG_HOME="$empty_config" opencode run --pure --agent plan -m "$opencode_m
 The model uses OpenCode's `provider/model` form. Treat empty output or a non-zero exit as a failed
 review, never approval.
 
-### Codex same-family fallback
+### Codex separate review
 
-Use only when the current agent is not Codex, or after independent families are unavailable and the
-result is explicitly labeled same-family:
+Use as the selected separate local review when appropriate, including for a Codex author:
 
 ```bash
 out=$(mktemp "${TMPDIR:-/tmp}/second-opinion-codex.XXXXXX")
@@ -130,4 +127,4 @@ alone does not justify killing the reviewer or switching routes.
 - Report the reviewer, executable version, resolved model, whether the headless call succeeded, and any
   fallback used.
 - Empty output is failure, not approval.
-- Do not call a Codex-on-Codex result independent review.
+- Require a separately performed actual-diff review; author self-attestation does not qualify.

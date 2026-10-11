@@ -11,7 +11,7 @@ Start from user experience and system behavior before naming implementation file
 
 User instructions and `docs/canon.md` are authoritative.
 
-Use this before implementation planning. If code changes are required after the flow is clear, hand off to the stack's normal implementation-plan workflow.
+Use this before implementation planning. If code changes are required after the flow is clear, continue with a proportionate plan and relevant checks under the shared canon.
 
 ## Workflow
 

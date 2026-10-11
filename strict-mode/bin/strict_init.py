@@ -31,6 +31,18 @@ LEGACY_OWNERS_HASHES = frozenset({
     "02e4cd348ca81693fe05d0406ffd59751bd445f8fd4eb0536e337470697fdf66",
     "0f21d1ab2f3c3a7256cc7c4b2508f04e3060f21ab56c0086d5ab7004f5339260",
 })
+# Pristine released stock policies (all template revisions through the distribution baseline).
+# Only exact bytes migrate; named/custom owner instructions stay intact.
+PRIOR_STOCK_POLICY = {
+    ".agent/OWNERS.md": LEGACY_OWNERS_HASHES | frozenset({
+        "2a71796386685f18df625a7b382083e868b854c171367ae19d07564fe0f18674",
+        "851252c752c2482bf926b8150432e0f045594184578c66c1562c06fefafce93d",
+    }),
+    ".agent/dod-checklist.md": frozenset({
+        "d6f4595d4e3199f1738628727e2fb5a79dde68db3c175127d1c3644911aef203",
+        "e9157deb9e71c5dada726ff635c91a85afc9bff4afaf8d47b3c5aea0478ce359",
+    }),
+}
 LEGACY_MODEL_GATES = (
     b"- architecture, model, language, or platform decisions;",
     b'- The "model"/architecture or language choice (ADR phase 2)',
@@ -108,13 +120,8 @@ def refresh_owner_gate(content):
     if state == "legacy_conflict":
         raise InitError(".agent/OWNERS.md has a customized legacy model gate; reconcile it with the "
                         "approved native-worker rules while preserving explicit owner/reviewer constraints")
-    if state == "legacy_generated":
-        for gate in LEGACY_MODEL_GATES:
-            if gate in content:
-                return content.replace(gate,
-                                       b"- architecture, model-policy, language, or platform decisions, including changes to pinned owner or\n"
-                                       b"  reviewer routes;") + b"\n" + NATIVE_WORKER_EXCEPTION
-        raise InitError("known legacy owner policy has no recognized migration gate")
+    # Pristine stock versions are replaced in full by initialize(), not patched
+    # piecemeal here: partial upgrades would retain obsolete workflow requirements.
     return None
 
 
@@ -244,6 +251,45 @@ def markers(text):
     return starts[0], ends[0]
 
 
+def retire_completion_stop(content, canon, previous_canon=None):
+    """Remove only the exact historical stack hook; preserve custom settings/hooks."""
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("ambiguous settings")
+            result[key] = value
+        return result
+
+    try:
+        data = json.loads(content, object_pairs_hook=unique_object)
+        hooks = data.get("hooks", {})
+        stops = hooks.get("Stop", [])
+    except (ValueError, AttributeError):
+        return None
+    if not isinstance(stops, list):
+        return None
+    # Recognize the former literal standard directory. Previous symlink targets
+    # and custom deployments must be selected explicitly before repointing; never
+    # infer arbitrary command paths as framework-owned.
+    roots = {Path(canon), Path.home() / "strict-mode"}
+    if previous_canon is not None:
+        roots.add(Path(previous_canon).expanduser().absolute())
+    legacy = [{"hooks": [{"type": "command", "command":
+        shlex.quote(str(root / "bin/strict-green-gate.sh")) + " --mode completion || true"}]}
+        for root in roots]
+    retained = [stop for stop in stops if stop not in legacy]
+    if len(retained) == len(stops):
+        return None
+    if retained:
+        hooks["Stop"] = retained
+    else:
+        del hooks["Stop"]
+    if not hooks:
+        del data["hooks"]
+    return json.dumps(data, indent=2) + "\n"
+
+
 class Transaction:
     def __init__(self):
         self.before = {}
@@ -294,7 +340,7 @@ class Transaction:
                 pass
 
 
-def initialize(canon, root, *, fail_probe=False):
+def initialize(canon, root, *, fail_probe=False, previous_canon=None):
     canon, root = Path(canon).resolve(), Path(root).resolve()
     top = _repository_root(root)
     is_git = top is not None
@@ -339,17 +385,24 @@ def initialize(canon, root, *, fail_probe=False):
         ".agent/dod-checklist.md": sources[3].read_text(),
         ".agent/abstraction/TEMPLATE.md": sources[4].read_text(),
         ".agent/traceability.md": "# Traceability\n\n> Generated from `.agent/evidence/*.json`.\n",
-        ".claude/settings.json": json.dumps({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": shlex.quote(str(canon / "bin/strict-green-gate.sh")) + " --mode completion || true"}]}]}}, indent=2) + "\n",
     }
     for name, text in defaults.items():
         path = root / name
         safe(path)
         if not path.exists():
             writes[path] = text
+        elif name in PRIOR_STOCK_POLICY and _sha(path.read_bytes()) in PRIOR_STOCK_POLICY[name]:
+            writes[path] = text
         elif name == ".agent/OWNERS.md":
             refreshed = refresh_owner_gate(path.read_bytes())
             if refreshed is not None:
                 writes[path] = refreshed
+    settings = root / ".claude/settings.json"
+    safe(settings)
+    if settings.exists():
+        refreshed = retire_completion_stop(settings.read_text(), canon, previous_canon)
+        if refreshed is not None:
+            writes[settings] = refreshed
     manifest = root / ".agent/strict-gate.json"
     safe(manifest)
     if is_git and not manifest.exists():
@@ -470,12 +523,13 @@ def initialize(canon, root, *, fail_probe=False):
     except BaseException:
         transaction.rollback()
         raise
-    print("done. STRICT MODE active. Pre-commit gives FAST GREEN; completion requires --mode completion.")
+    print("done. Workflow active. Pre-commit gives FAST GREEN; follow the shared canon for completion.")
 
 
 def main():
     try:
-        initialize(os.environ.get("STRICT_MODE_CANON", str(Path.home() / "strict-mode")), Path.cwd())
+        initialize(os.environ.get("STRICT_MODE_CANON", str(Path.home() / "strict-mode")), Path.cwd(),
+                   previous_canon=os.environ.get("STRICT_MODE_PREVIOUS_CANON"))
     except (InitError, OSError, ValueError) as error:
         print("strict-mode init: " + str(error), file=sys.stderr)
         return 1

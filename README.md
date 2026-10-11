@@ -14,7 +14,7 @@ This repository provides:
 - reusable skills for intended behavior, review, branch orientation, and UX-first planning;
 - a pull-request-centered review workflow;
 - a CLI worker harness with versioned task routes, bounded briefs, isolated source snapshots, and per-run usage records;
-- evidence-preserving Strict Mode v3 with bounded context, explicit model/effort routing, preparation receipts, and full completion gates;
+- proportionate workflow guidance with relevant checks, optional runtime helpers, and scoped human gates;
 - a local MemPalace-derived memory adapter that preserves source citations and security-domain isolation;
 - CLI-first tool-selection rules that prefer the developer's existing environment over auth-dependent integrations;
 - an agent-facing install route for copying prompts, entrypoints, and skills into normal local config locations;
@@ -131,14 +131,15 @@ The `skills/` directory contains reusable public workflow skills:
 - [`skills/memory-palace-recall`](skills/memory-palace-recall/SKILL.md): retrieve scoped prior context through sanitized, source-linked local evidence.
 - [`skills/project-memory`](skills/project-memory/SKILL.md): read and write the Git-stored project memory that every agent shares.
 - [`skills/prepare-branch-context`](skills/prepare-branch-context/SKILL.md): build read-only context for a branch or PR before follow-up work.
-- [`skills/strict-mode`](skills/strict-mode/SKILL.md): apply evidence-preserving work lanes, human gates, PR review, and full completion checks.
+- [`skills/strict-mode`](skills/strict-mode/SKILL.md): apply the shared proportionate workflow and relevant verification tools.
 - [`skills/ux-flow-plan`](skills/ux-flow-plan/SKILL.md): map current and desired product flows before attaching implementation files.
 
 These skills preserve tests and artifact verification while selecting one independent review route.
 
 ## Review Model
 
-Use one independent implementation-review route: remote PR review preferred, local fallback when remote is unavailable or quota-limited.
+When review is useful or required, choose one separately performed diff review: remote preferred, local
+fallback when unavailable or requested. Same-family review is allowed; self-attestation is not review.
 
 The default route is:
 
@@ -154,8 +155,9 @@ The default route is:
 See [`docs/review-workflow.md`](docs/review-workflow.md) for the detailed route. [`docs/reviewer-catalog.md`](docs/reviewer-catalog.md) lists every remote and local reviewer the
 route can use, including options for machines that have only one agent installed.
 
-Successful independent local fallback satisfies the workflow review gate; do not routinely run both.
-Persistent UTC cooldowns and atomic request reservations prevent duplicate requests across tasks.
+Successful separate local review satisfies an applicable review expectation; do not routinely run both.
+Optional UTC cooldowns and request reservations can coordinate concurrent requests; they are not
+prerequisites for ordinary repository work.
 Provider reset times are distinguished from estimated recheck times. Required branch protections remain binding.
 
 ## Public Safety

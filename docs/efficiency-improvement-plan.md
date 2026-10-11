@@ -1,5 +1,8 @@
 # Efficiency improvement plan
 
+Historical research proposal. The current `docs/canon.md` supersedes workflow requirements here;
+this plan is not an additional acceptance gate.
+
 Status: proposed; research and implementation instructions, not an activated policy.
 Research checked: 2026-09-12. Repository baseline: `4e9c057866ec3bf9e3dcd1985d2586cc4ccc341a`.
 
