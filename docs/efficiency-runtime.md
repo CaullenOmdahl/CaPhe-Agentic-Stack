@@ -320,29 +320,18 @@ A project without a proven affected graph retains its full checks. Do not replac
 manifest with a generated default. A machine update does not claim application release, hardware
 readiness, or a completed production deployment. Keep detailed rollout inventories and exceptions private.
 
-When this repository's defined CI job runs, it retains `tests/`, `test/`, and `strict-mode/test/` from the exact PR base in a
-disposable checkout containing candidate product source. It runs the accepted runner and manifest there.
-A separate phase uses the accepted runner with the candidate manifest against the untouched candidate
-checkout, so newly declared commands and added tests run even when the retained checks fail. Pushes to
-main use the preceding main commit as the accepted baseline; missing baseline policy fails
-closed. Both source checkouts disable persisted credentials. Candidate product files do not replace
-the accepted tests within that assembled harness. The job rejects changed HEAD, index entries/flags, or nonignored source
-state after checks.
-The pull request can replace the workflow itself with successful no-ops under the same check names.
-These jobs therefore provide diagnostic feedback; they do not enforce their own invocation or certify
-completion. GitHub's [PR event semantics](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request)
-and [checkout configuration](https://github.com/actions/checkout) define that boundary.
+Repository CI runs one ordinary validation matrix on Linux and macOS: Python regressions, shell syntax,
+review-tool isolation regressions, initializer refresh regressions, and public-safety checks. Installer
+checks use disposable HOME/XDG directories. Python runs with inherited path/home overrides cleared and
+loads the stdlib runner before exposing project imports. Each check's failure remains visible; shell and
+security checks still run after a Python failure. Tests must leave the source checkout clean.
 
-Preserve these existing CI checks. When an accepted-base assertion conflicts with an explicitly
-authorized policy replacement, surface the exact failing assertion and proposed replacement to the
-owner; do not silently bypass or disable it. This repository's workflow alone cannot make its recipe
-tamper-proof. The historical ADR-0004 external-controller procedure is not a routine completion gate.
-Additional independently controlled execution is appropriate only for a distinct threat or explicit
-project requirement under the canon, not as a duplicate local-plus-CI ritual.
+The previous retained accepted-base plus candidate harness duplicated validation and encoded historical
+policy assertions. It has been replaced by ordinary source-controlled validation and focused CI regressions
+for failure propagation, disposable install targets, Python runner isolation, and source cleanliness.
+No product/security regression is waived to satisfy an obsolete policy classification.
 
-Automatic GitHub enforcement and trusted CI receipt reuse remain unavailable in this distribution.
-An external required status must come from a separately controlled provider; GitHub supports
-[binding required checks to a specific App](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets#require-status-checks-to-pass-before-merging).
-Adding that service requires its own approved policy source, isolated execution and publishing
-credentials, repository rules, and verification. Merely calling a reusable workflow from candidate YAML
-does not enforce that the call occurs. Keep independent PR review and named human gates throughout.
+Like ordinary repository CI, this workflow is reviewable source, not tamper-proof certification. Actual
+GitHub-required checks/approvals and owner merge/install/release decisions remain applicable. A separately
+controlled policy executor would need a concrete threat or explicit project requirement; it is not an
+additional default workflow or a prerequisite to this stack's own refactors.
