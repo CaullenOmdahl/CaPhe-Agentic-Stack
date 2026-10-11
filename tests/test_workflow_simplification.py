@@ -115,6 +115,24 @@ class InstalledWorkflowTests(unittest.TestCase):
         initializer.initialize(canon, repo)
         self.assertEqual(settings.read_bytes(), before)
 
+    def test_repointed_runtime_retires_standard_and_explicit_prior_paths(self):
+        for old in (self.task_home / 'strict-mode', self.task_home / 'custom-old-runtime'):
+            with self.subTest(old=old):
+                command = shlex.quote(str(old / 'bin/strict-green-gate.sh')) + ' --mode completion || true'
+                content = json.dumps({'permissions': {'deny': ['Write(private/**)']},
+                    'hooks': {'Stop': [{'hooks': [{'type': 'command', 'command': command}]}]}})
+                selected = ROOT / 'strict-mode'
+                if old.name != 'strict-mode':
+                    self.assertIsNone(initializer.retire_completion_stop(content, selected))
+                migrated = initializer.retire_completion_stop(content, selected, previous_canon=old)
+                self.assertEqual(json.loads(migrated), {'permissions': {'deny': ['Write(private/**)']}})
+        repo = self.project()
+        settings = repo / '.claude/settings.json'
+        settings.parent.mkdir()
+        settings.write_text(content)
+        initializer.initialize(ROOT / 'strict-mode', repo, previous_canon=old)
+        self.assertNotIn('hooks', json.loads(settings.read_text()))
+
     def test_known_stock_policy_refreshes_but_custom_policy_stays_intact(self):
         repo = self.project()
         agent = repo / '.agent'

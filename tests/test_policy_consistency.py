@@ -45,3 +45,11 @@ class PolicyConsistencyTests(unittest.TestCase):
                     self.assertNotIn(retired, text)
                 self.assertIn('family', text)
                 self.assertTrue('separate' in text or 'separately' in text)
+
+    def test_optional_review_guides_do_not_reintroduce_a_blanket_gate(self):
+        catalog = (ROOT / 'docs/reviewer-catalog.md').read_text()
+        runtime = (ROOT / 'strict-mode/README.md').read_text()
+        self.assertNotIn('implementation review required by', catalog)
+        self.assertNotIn('satisfies the fallback gate', runtime)
+        self.assertIn('when useful or required', catalog)
+        self.assertIn('no mandatory review gate', runtime)

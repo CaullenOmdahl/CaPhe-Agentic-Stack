@@ -98,9 +98,13 @@ class RepositoryValidationTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('OK', result.stderr)
 
-    def test_workflow_keeps_platforms_and_read_only_github_credentials(self):
+    def test_workflow_is_manual_only_single_platform_with_read_only_credentials(self):
         text = (ROOT / '.github/workflows/quality.yml').read_text()
-        self.assertIn('os: [ubuntu-latest, macos-latest]', text)
+        self.assertIn('runs-on: ubuntu-latest', text)
+        self.assertIn('workflow_dispatch:', text)
+        self.assertNotIn('pull_request:', text)
+        self.assertNotIn('push:', text)
+        self.assertNotIn('matrix:', text)
         self.assertIn('contents: read', text)
         self.assertIn('persist-credentials: false', text)
         self.assertNotIn('required-policy', text)

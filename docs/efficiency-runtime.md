@@ -288,7 +288,9 @@ they are not signed attestation. Older records without forwarded-target identiti
 through the original hook directory before doctor can verify them.
 Global installation and project activation are distinct results. Fresh initialization adds no Claude
 full-matrix Stop hook. Explicit refresh removes only the exact historical stack-generated Stop entry
-for the selected strict-mode path; custom commands and unrelated settings remain intact. Exact known stock owner/checklist files migrate to the current templates; customized files
+for the selected strict-mode path or former standard `~/strict-mode` path. For a custom old path,
+select it with `STRICT_MODE_PREVIOUS_CANON` during refresh; unrelated command paths are not inferred
+as framework-owned. Custom commands and unrelated settings remain intact. Exact known stock owner/checklist files migrate to the current templates; customized files
 remain intact for explicit reconciliation.
 
 Existing projects can retain an older `.agent/OWNERS.md` even after a runtime update. The doctor
@@ -320,7 +322,10 @@ A project without a proven affected graph retains its full checks. Do not replac
 manifest with a generated default. A machine update does not claim application release, hardware
 readiness, or a completed production deployment. Keep detailed rollout inventories and exceptions private.
 
-Repository CI runs one ordinary validation matrix on Linux and macOS: Python regressions, shell syntax,
+Repository Actions is intentionally disabled for cost control. The workflow is a dormant, manual-only
+Linux recipe with no automatic PR/push triggers or multi-platform matrix; enabling/dispatching it is
+not part of installation or rollout. Normal validation uses the prepared development environment.
+The optional recipe runs ordinary Python regressions, shell syntax,
 review-tool isolation regressions, initializer refresh regressions, and public-safety checks. Installer
 checks use disposable HOME/XDG directories. Python runs with inherited path/home overrides cleared and
 loads the stdlib runner before exposing project imports. Each check's failure remains visible; shell and

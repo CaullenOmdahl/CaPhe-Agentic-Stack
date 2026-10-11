@@ -249,7 +249,7 @@ def markers(text):
     return starts[0], ends[0]
 
 
-def retire_completion_stop(content, canon):
+def retire_completion_stop(content, canon, previous_canon=None):
     """Remove only the exact historical stack hook; preserve custom settings/hooks."""
     def unique_object(pairs):
         result = {}
@@ -267,9 +267,15 @@ def retire_completion_stop(content, canon):
         return None
     if not isinstance(stops, list):
         return None
-    legacy = {"hooks": [{"type": "command", "command":
-        shlex.quote(str(canon / "bin/strict-green-gate.sh")) + " --mode completion || true"}]}
-    retained = [stop for stop in stops if stop != legacy]
+    # The former standard deployment path is known. A custom old deployment must
+    # be selected explicitly; never infer arbitrary command paths as framework-owned.
+    roots = {Path(canon), Path.home() / "strict-mode"}
+    if previous_canon is not None:
+        roots.add(Path(previous_canon).expanduser().absolute())
+    legacy = [{"hooks": [{"type": "command", "command":
+        shlex.quote(str(root / "bin/strict-green-gate.sh")) + " --mode completion || true"}]}
+        for root in roots]
+    retained = [stop for stop in stops if stop not in legacy]
     if len(retained) == len(stops):
         return None
     if retained:
@@ -331,7 +337,7 @@ class Transaction:
                 pass
 
 
-def initialize(canon, root, *, fail_probe=False):
+def initialize(canon, root, *, fail_probe=False, previous_canon=None):
     canon, root = Path(canon).resolve(), Path(root).resolve()
     top = _repository_root(root)
     is_git = top is not None
@@ -391,7 +397,7 @@ def initialize(canon, root, *, fail_probe=False):
     settings = root / ".claude/settings.json"
     safe(settings)
     if settings.exists():
-        refreshed = retire_completion_stop(settings.read_text(), canon)
+        refreshed = retire_completion_stop(settings.read_text(), canon, previous_canon)
         if refreshed is not None:
             writes[settings] = refreshed
     manifest = root / ".agent/strict-gate.json"
@@ -519,7 +525,8 @@ def initialize(canon, root, *, fail_probe=False):
 
 def main():
     try:
-        initialize(os.environ.get("STRICT_MODE_CANON", str(Path.home() / "strict-mode")), Path.cwd())
+        initialize(os.environ.get("STRICT_MODE_CANON", str(Path.home() / "strict-mode")), Path.cwd(),
+                   previous_canon=os.environ.get("STRICT_MODE_PREVIOUS_CANON"))
     except (InitError, OSError, ValueError) as error:
         print("strict-mode init: " + str(error), file=sys.stderr)
         return 1

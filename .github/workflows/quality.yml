@@ -1,19 +1,16 @@
 name: quality
 
+# Dormant opt-in recipe: Actions is intentionally disabled to control cost.
+# No automatic PR/push workload; do not enable or dispatch without owner authorization.
 on:
-  pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   verify:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4

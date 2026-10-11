@@ -63,6 +63,9 @@ The repository is the distribution source. The local machine is the runtime envi
    - Follow `docs/efficiency-runtime.md`; use `tools/stack_install.py` to plan an explicit payload before applying it.
    - The normal standalone destination is `~/.local/share/caphe/runtime`; it contains tools and required support files, without Git metadata or machine state.
    - Preserve the existing `~/strict-mode` deployment path or intentionally repoint it to the installed strict-mode subtree after verification.
+     Refresh recognizes the exact historical Stop entry at that standard path. When repointing a
+     custom old deployment, set `STRICT_MODE_PREVIOUS_CANON` to its original expanded absolute
+     strict-mode directory for the refresh; no command from that old path is executed.
    - Keep plans, rollback journals, and resulting inventory outside Git in owner-only private storage.
    - Treat source hashes and an effective hook probe as activation evidence; a version marker alone is insufficient.
    - Copy the checked-in `strict-mode/` tree to the machine's deployed strict-mode location.

@@ -1,7 +1,7 @@
 # Reviewer catalog
 
-Routes that can provide the single independent implementation review required by
-[`review-workflow.md`](review-workflow.md), on any machine and any mix of installed agents.
+Routes for a separately performed implementation review when useful or required under the
+[canon](canon.md); [`review-workflow.md`](review-workflow.md) supplies practical guidance.
 Choose one route per change; this catalog only widens the set of routes to choose from.
 
 Researched 2026-09-30. Vendor features, prices, and flags change often: check the source before
