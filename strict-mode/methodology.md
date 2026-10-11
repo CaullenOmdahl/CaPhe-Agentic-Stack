@@ -1,154 +1,50 @@
-# Strict Mode v3 — evidence-preserving efficiency
+# Verification runtime
 
-## Prime directive
+The [shared canon](../docs/canon.md) is the sole workflow policy. This document describes optional
+runtime procedures; it adds no acceptance gates. Apply the canon's guidance with judgment; avoid automatic planning, review, or evidence ceremony. Preserve explicit project-required checks.
 
-Ship correct, working, independently reviewed software. Match evidence to risk; do not spend tokens or
-time reproducing evidence that cannot change acceptance.
+## Relevant checks
 
-## Evidence lanes
+`strict-green-gate.sh --mode affected` runs affected checks and reports `FAST GREEN`.
+`--mode plan` inspects selection. `--mode completion` (or `full`) explicitly runs the complete declared
+matrix uncached. The legacy mode name is retained for CLI compatibility; `GREEN` certifies only that
+matrix, not independent review, human approval, defect closure, or release readiness. Full verification
+is appropriate for broad installer/policy/runtime changes or a real project requirement. Do not routinely
+duplicate authoritative CI locally. Initialization does not add a full-matrix Stop hook.
 
-### Mechanically proven
+Manifest coverage remains fail-closed. Uncovered paths block; unproven dependency completeness falls
+back to full checks. Checks include staged, unstaged, and non-ignored untracked files. Source mutation
+during execution fails verification. Cache is default-off and never used for full verification.
+Commands run in declared order unless `parallel_safe: true`; dependencies wait for prerequisites and
+failed preparation blocks dependents. Use explicit timeouts. Command and probe working directories
+must resolve inside the repository. Nested project discovery avoids ancestor test duplication.
+`--report` writes private diagnostics outside Git; reports cannot certify their own authority.
 
-Allowed only when a deterministic check proves one of:
+## Actual results and review
 
-- byte-identical rename;
-- declared documentation-only path;
-- validated generated output tied to its source;
-- source transformation with a declared semantic-equivalence verifier.
+Inspect the actual relevant artifact, especially installer output, visual/device/document results, and
+nondeterministic generation. For dependent generation, verify the anchor before later stages.
+Use [review-workflow.md](../docs/review-workflow.md) for one implementation-review route and scoped
+repairs. Extra design review requires a concrete distinct reason under the canon.
 
-Anything uncertain is scoped behavior. An agent cannot self-attest a mechanical exemption.
+The existing `strict-confer` fallback snapshots stage-0 regular Git blobs only, omitting unstaged bytes,
+symlinks, gitlinks, and arbitrary untracked state. Stage deliberate inputs and verify the reviewed diff.
+It uses a default-deny host filesystem boundary, scrubbed environment, and ephemeral home. Never copy
+host authentication files, histories, or token caches. If authentication or isolation fails, the route is
+unavailable. Models and provider consent remain explicit. A successful separate review may use the
+author’s model family; self-attestation is not review. Diversity needs a concrete distinct reason.
 
-### Scoped behavior
+## Optional records and execution helpers
 
-Capture the observable contract or delta, demonstrate that a test/check detects the old defect, run
-affected local checks, put the behavioral diff through independent implementation review, and obtain the complete
-uncached verification matrix before completion.
+Preserve immutable historical `.agent/evidence/` records. `strict_evidence.py` can record separate
+implementation, validation, review, merge, release, and external acceptance phases when a project needs
+that record. Do not create evidence-only churn or require traceability regeneration for routine closure.
+Keep private continuation/scoped authorization outside Git; do not copy transcripts or private memory.
 
-### Full risk
+Context, preparation, status, benchmark, and isolated harness tools remain available when relevant;
+see [efficiency-runtime.md](../docs/efficiency-runtime.md). They are not workflow prerequisites. Do not
+bootstrap delegation, external memory, or integrations just to implement a change. Preserve the existing
+provider, permission, secret, and source-isolation boundaries whenever those tools are selected.
 
-Use for architecture/platform choices and named human gates. Write an abstraction, optimize/audit it,
-record an ADR with alternatives, obtain adversarial design review, record human acceptance, implement
-with defect-detection evidence, verify the real artifact, obtain independent implementation review, and run the
-complete matrix.
-
-## Human gates
-
-Stop for explicit approval on security/auth/secrets, domain invariants, schemas and migrations, release
-or deploy order, architecture/language/model-policy choices, money/legal/payroll, production-readiness claims,
-irreversible actions, or a real unresolved fork. Nothing self-merges past a gate.
-Harness-managed worker routes come from the reviewed, versioned route table. Keep routes disabled until
-the provider account, effective route, and filesystem boundary are verified. Changing a pinned owner
-policy or canonical reviewer route still requires its named approval.
-
-## Verification
-
-Start with the smallest source-bound context that can decide the next action. The installed runtime's
-`tools/stack_context.py` collects bounded Git state; retrieve sanitized historical excerpts only for a
-specific unresolved question. Keep full histories canonical and outside this public distribution.
-
-`strict-green-gate.sh --mode affected` is fast feedback. It may use a manifest-proven dependency graph,
-parallel commands, and explicitly safe cache entries. It reports `FAST GREEN`, never completion.
-
-`strict-green-gate.sh --mode completion` is the DoD gate. It runs the complete declared matrix uncached.
-When authoritative CI provides that evidence, record the CI URL/checks in the per-change evidence record;
-absence or incomplete CI falls back to the complete local matrix.
-
-Manifest coverage is fail-closed. Uncovered paths block; unproven dependency completeness escalates local
-feedback to full. Cache is default-off and never participates in completion.
-Checks cover staged, unstaged, and non-ignored untracked working files. A changed source snapshot during
-execution is not green. Commands run in declared order within each component unless `parallel_safe: true`
-explicitly declares independence; selected dependent components wait for their prerequisites. Failed
-preparation blocks dependent checks. Use explicit timeouts for commands that can stall.
-Check and toolchain-probe working directories must resolve inside the repository. Custom dependency
-verifiers use `dependency_verification.timeout_seconds` (default 10); timeout leaves the dependency
-claim unproven and falls back to full checks.
-`--report` writes a private diagnostic outside Git. Candidate-produced reports cannot certify their own
-authority; automatic CI evidence reuse remains unavailable without an independently trusted executor.
-Run the uncached full local matrix when that independently verified CI evidence is absent.
-Generated default manifests assign Python test signals to their nearest declared project. Declared nested
-projects run independently and ancestor pytest/unittest commands exclude them before collection,
-preventing duplicate imports and execution.
-Pytest configuration or dependencies in PEP 621, standardized groups, Poetry tables, or requirements
-select `python -m pytest`; otherwise the project uses unittest discovery. Dart, Node, Cargo, and Go roots
-remain independently discovered.
-
-## Review
-
-Implementation review uses one route on the actual diff: prefer remote PR review; fall back to one
-independent local reviewer when remote explicitly fails, is unavailable or quota-limited. Successful
-local fallback satisfies this workflow gate; required GitHub checks and human gates remain binding.
-Do not routinely run both routes or demand remote review after a successful fallback. Review design
-and implementation separately when risk requires design review; design review alone is not approval
-of code. Follow `docs/review-workflow.md` in the runtime for persistent cooldowns, retired reviewers,
-atomic request reservations, source-bound evidence and concise reporting. Continue actionable repairs
-and review until clean, without fixed duration or review-round caps. Pending/running reviews may take
-as long as needed. Escalate genuine ambiguity, missing access, or demonstrated non-progress after
-credible alternatives; elapsed time and iteration count alone never require human reauthorization.
-
-When a defect repeats across entrypoints, inspect sibling implementations for that same defect before
-pushing the repair. Bound this search to the defect class and add regressions at the affected boundaries.
-
-The packaged `strict-confer` peers are Claude Code, agy (Gemini-family), and Codex; direct Gemini CLI is
-not assumed equivalent. Reviewer models come from an owner-only per-machine configuration: agy requires a
-Gemini Pro High tier, Codex a non-lightweight current GPT tier, and Claude Sonnet or Opus. Overrides require
-a successful compatibility probe with that same client. Reviewer availability is machine-local and requires
-a successful authenticated headless invocation with recorded client version and resolved model. Confer snapshots include
-stage-0 regular blobs from the Git index only; they omit unstaged worktree bytes, symlinks, gitlinks,
-arbitrary untracked state, and the live source-root environment, and refuse non-Git or unmerged roots.
-The peer process also runs behind a fail-closed, default-deny host filesystem boundary with a scrubbed
-environment and an ephemeral home containing only non-secret onboarding preferences. Host authentication
-files and token caches are never copied; a peer that cannot authenticate without them is unavailable. macOS
-masks host data roots and reopens selected runtime paths through `sandbox-exec`; Linux constructs a selective
-Bubblewrap namespace with a private PID namespace. If a peer cannot run within that boundary, the review
-does not run.
-
-## Artifact verification
-
-Tests do not prove nondeterministic, visual, device, document, or generated output. Inspect the real
-artifact. Multi-stage generation is anchor-first: verify the first dependent artifact within its retry cap
-before spending on later stages.
-
-## Traceability
-
-Write immutable v2 JSON snapshots under `.agent/evidence/`, bound to the source examined. Record
-implementation, validation, review, merge, release, and external acceptance separately. A new state gets
-a new ID and explicitly supersedes its predecessor; legacy records remain unbound history. Generate
-`.agent/traceability.md`. A declaration is not independent proof of its own claims.
-
-Store task continuation and the user's original scoped authorization in the installed runtime's
-`tools/stack_state.py` private store outside all Git worktrees. Preserve next action, subject source,
-remaining checks, and source coordinates; do not duplicate raw transcripts or modify canonical memory.
-Consult existing authorization before asking again. Deployment approval does not imply merge approval.
-
-## Delegation and preparation
-
-Treat model, effort, service tier, and context size as one route. Harness-managed workers are separate
-CLI processes launched with `harness worker` and a task route from the versioned TOML file. Never use
-Codex `spawn_agent` for this delegation path or select the model in prompt prose. The harness pins model,
-effort, context budget, billing, permission profile, timeout, and output limits. Workers get a fresh bounded
-brief and tracked-only source snapshot, not the coordinator's conversation. Writes are restricted to
-explicitly listed paths and validated before integration. If doctor or runtime route evidence is incomplete,
-keep the work with the coordinator. Non-Codex providers remain disabled until their account, billing,
-effective-route evidence, and isolation adapter are implemented and reviewed.
-
-Use `tools/stack_route.py` only for a trusted evaluated owner policy; its incumbent and promotion rules
-remain separate from the local CLI route table. Remote registry dispatch retains its separate pilot,
-capability, and isolation requirements. The coordinator retains architecture, ambiguous acceptance,
-integration, and escalation. Do not recursively delegate. Record parent, retries, and every worker's
-categorized usage when evaluating savings; do not restart completed workers just to change models.
-
-After a failed bounded repair, escalate the task or tighten its acceptance contract. Count that repair,
-parent inspection, and all children when evaluating savings. Independent canonical PR review stays on its
-approved reviewer route. A cheaper model is not promoted from a successful demonstration alone.
-
-For declared generation recipes, use `tools/stack_prepare.py`: probe toolchain, compare recipe/input/output
-identities, and rerun missing or stale preparation before focused checks. Receipts are private freshness
-metadata, never completion evidence. Use `tools/stack_watch.py` for bounded read-only JSON status queries;
-unchanged polling should not wake a model. Display masking is opt-in and preserves source bindings.
-
-See the installed `docs/efficiency-runtime.md` for commands, schema migration, benchmarks, and rollout.
-
-## Relaxation
-
-`STRICT_MODE=prototype` may relax one affected-mode command and must report that it did so. Completion is
-never relaxed. Persistent disable remains interactive and user-only.
+`STRICT_MODE=prototype` can make affected-mode failures advisory with disclosure, but cannot relax
+explicit full verification or required checks. Persistent disable remains interactive and user-only.

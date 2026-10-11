@@ -1,34 +1,23 @@
 ---
 name: strict-mode
-description: Govern non-trivial or high-risk repository work with evidence-preserving lanes, human gates, test evidence, PR review, and full completion verification. Use when the user says strict mode or when a repository declares it.
+description: Read the shared development guidance and select relevant verification tools without adding acceptance gates.
 ---
 
-# Strict Mode
+# Development and verification
 
-Read `~/strict-mode/methodology.md`. Check `.agent/.strict-version`; run
-`~/strict-mode/bin/strict-init.sh` only when scaffolding is absent, its version changed, or the effective
-hook/source probe shows drift. A version marker alone does not prove activation. Preserve custom hooks,
-project instructions, dirty work, and explicit user disable.
+The shared `docs/canon.md` in the source checkout or installed runtime is the workflow authority.
+Apply judgment: implement a coherent change, run relevant checks, inspect the actual result, and add
+regression coverage where it protects behavior. A short plan or separate diff review helps substantial
+or risky work; neither calls for an elaborate framework. A separately performed same-family review is
+allowed. Different-family review is optional for concrete risk, conflicting evidence, or an owner rule.
 
-Classify from deterministic evidence:
+Use `strict-mode/methodology.md` for runner commands only when helpful. It adds no acceptance gates.
+Optional QA does not hold a resolved defect open. Extra tests/reviews need a distinct reason. Preserve
+real GitHub requirements and safeguards for secrets, destructive actions, releases, private memory,
+and permission isolation. Reuse existing scoped authorization and valid results for unchanged material.
 
-- mechanically proven;
-- scoped behavior;
-- full risk.
-
-Never self-attest a mechanical exemption. Pause at `.agent/OWNERS.md` gates. Use failing regression or
-equivalent defect-detection evidence before production behavior changes. Implementation review uses one route on the actual diff: remote PR review preferred,
-independent local fallback when remote is unavailable. Follow the review policy at
-`~/.local/share/caphe/runtime/docs/review-workflow.md` for failure cooldowns and continued remediation;
-do not require both routes or all reviewer integrations. Keep source identity in evidence.
-
-Pre-commit `FAST GREEN` is focused feedback only. Before completion, run
-`~/strict-mode/bin/strict-green-gate.sh --mode completion`, verify the real artifact when tests cannot,
-and write immutable v2 `.agent/evidence/` snapshots with the PR evidence. Keep continuation and scoped
-authorization private outside Git. Use the installed runtime tools for bounded context, declared
-preparation, status polling, and explicit model/effort routing; read `~/.local/share/caphe/runtime/docs/efficiency-runtime.md` in that
-runtime only when those operations are needed. Harness-managed workers use the versioned `harness`
-route table and subprocess adapter, never native `spawn_agent`. If `harness doctor` reports a route is
-not ready, keep work with the coordinator; do not bypass the route guard. Workers get fresh bounded
-briefs and isolated source scopes. Preserve pinned owner policies and the independent reviewer route;
-include parent, retry, and child usage in any measured comparison.
+Do not initialize/update an installed workflow just because this skill or repository declares it.
+Only perform an authorized installation/refresh, preserve custom hooks/instructions/dirty work and
+explicit disable, and inspect actual installed artifacts. Installer tests use temporary task-specific
+HOME and XDG directories and disposable targets, never the executing agent's real HOME.
+This stack is a product to evaluate; its refactors do not need to bootstrap its own review/runtime rules.

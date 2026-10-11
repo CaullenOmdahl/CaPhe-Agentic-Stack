@@ -29,3 +29,19 @@ class PolicyConsistencyTests(unittest.TestCase):
                 for obsolete in ('At most two revise-and-re-review', 'up to seven minutes',
                                  'two consecutive bounded waits'):
                     self.assertNotIn(obsolete, text)
+
+    def test_active_review_surfaces_allow_separate_same_family_review(self):
+        for name in ('docs/canon.md', 'docs/review-workflow.md', 'docs/reviewer-catalog.md',
+                     'docs/model-routing.md', 'strict-mode/methodology.md',
+                     'skills/codex-review/SKILL.md', 'skills/second-opinion/SKILL.md',
+                     'skills/gh-review-certify-loop/SKILL.md', 'skills/strict-mode/SKILL.md'):
+            with self.subTest(path=name):
+                text = (ROOT / name).read_text()
+                for retired in ('same-family review is not independent',
+                                'Codex-on-Codex remains a same-family audit, not independent',
+                                'Independent only when its provider',
+                                'independent only when its model family differs',
+                                'Do not call a Codex-on-Codex result independent'):
+                    self.assertNotIn(retired, text)
+                self.assertIn('family', text)
+                self.assertTrue('separate' in text or 'separately' in text)

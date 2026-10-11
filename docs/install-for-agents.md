@@ -69,7 +69,10 @@ The repository is the distribution source. The local machine is the runtime envi
    - Preserve executable modes under `strict-mode/bin/` and `strict-mode/test/`.
    - Run `strict-init.sh` only for repositories whose scaffold is absent, on an older
      `.agent/.strict-version`, or has verified hook/source drift; ordinary skill invocation should not refresh files repeatedly.
-   - Treat `FAST GREEN` as focused feedback. Completion requires `--mode completion`.
+   - Follow the installed canon for proportionate verification. `FAST GREEN` and the explicit
+     full gate are check results, not additional acceptance policies. Do not install a full-matrix Stop hook.
+   - For installer tests, use temporary task-specific HOME and XDG directories plus disposable
+     runtime/project targets. Never update the real executing agent HOME or global policy.
 
 7. Set up shared project memory.
    - Run `python3 tools/stack_setup.py clients` to see which agents are installed; configure every one
@@ -135,7 +138,8 @@ The repository is the distribution source. The local machine is the runtime envi
    - Compare the installed canon and methodology against the reviewed source while preserving owner
      additions. Updating the runtime alone does not update machine-global canons or agent skill copies.
    - Confirm no runtime checkout of this repository is required for normal agent use.
-   - Confirm strict-mode source tests and the completion gate pass.
+   - Check actual installed policy, supporting documents, skills, and effective hooks against source.
+   - Run installer/runtime regression checks; use the full gate when this broad surface warrants it.
    - Confirm `caphe-memory list` resolves the hub and a project store, and each installed agent's
      entrypoint names the hub.
    - Confirm MemPalace indexes, if configured, are outside Git trees, owner-only, and citation-resolvable.

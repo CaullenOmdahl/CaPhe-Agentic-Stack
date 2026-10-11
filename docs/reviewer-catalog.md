@@ -11,15 +11,15 @@ relying on an entry, and prefer entries marked **verified**.
 - **documented**: taken from vendor documentation; test it on the machine, then promote it.
 
 Run `python3 <runtime>/tools/stack_setup.py review-routes --current <agent>` to see which local
-reviewers a machine has, their model family, and whether each is independent of the current agent.
+reviewers a machine has, their model family as optional metadata, and discovery status. Discovery is not completed review.
 
 ## Independence
 
-A reviewer is independent when its model family differs from the author's. Same-family review is
-never independent fallback. "Configured-provider" tools (OpenCode, Copilot CLI, Cursor CLI, PR-Agent)
-take the family of the model you configure, so confirm the model before counting them as independent.
-Hosted review services run the vendor's own model mix; treat them as independent of a local author
-only when the owner policy accepts vendor-managed reviewers.
+Independence means a separately performed actual-diff review, not author self-attestation. The
+reviewer may use the same model family as the author. Different-family review is optional when
+concrete risk, conflicting evidence, or an explicit owner requirement makes it useful. Choose one
+working route; do not add a second review solely for family diversity. Model family is informational,
+not proof of quality, and no model is error-free. Hosted services require owner consent.
 
 ## Who pays for the compute
 
@@ -72,14 +72,13 @@ Aider and similar edit-first agents are not listed: they have no read-only revie
 
 ## Choosing a route by machine
 
-Remote review stays preferred. When it is unavailable, pick the first independent local reviewer:
+Remote review stays preferred. When it is unavailable, pick one working, isolated local review capability:
 
 | Author | Machine has | Suggested fallback |
 |---|---|---|
-| Codex | Claude or agy | Claude for correctness, agy for design; OpenCode with a non-OpenAI provider |
-| Claude | Codex or agy | agy or Codex; OpenCode with a non-Anthropic provider |
-| Either | only its own client | PR-Agent's CLI run locally with a model from another family that the operator already pays for (for example a MiniMax plan); for Claude-authored work, Codex review under an existing ChatGPT plan also qualifies. Actions-based reviewers only with the repository owner's opt-in |
-| Any | nothing independent | Report the review blocker; never treat missing review as approval |
+| Any | Codex, Claude, agy, or another verified CLI | One separately performed diff review using a suitable available capability; the author's family is allowed |
+| Any | only its own client | A separate actual-diff review invocation is eligible; do not bootstrap another family solely for diversity |
+| Any | no working review capability | Report the missing route; do not treat missing review as approval |
 
 To promote a **documented** entry: run its read-only invocation on a real diff, confirm it cannot
 write or reach unrelated tool servers, confirm non-empty output on success and a non-zero exit on

@@ -1,14 +1,12 @@
-# Definition of Done — strict-mode
+# Completion reminders
 
-- [ ] Evidence lane is mechanically proven, scoped behavior, or full risk.
-- [ ] Observable behavior contract/abstraction exists where required; no blocking unknowns.
-- [ ] ADR and adversarial design review exist for non-trivial decisions.
-- [ ] Defect-detection evidence proves tests/checks can catch the problem.
-- [ ] Behavioral implementation diff has one independent review: remote preferred, local fallback with unavailability recorded.
-- [ ] Formatting, lint, tests, docs, and real-artifact verification are green for the affected surface.
-- [ ] Full declared matrix passed in authoritative CI, or locally uncached when CI is absent/incomplete.
-- [ ] Named human approval is recorded for every gated area.
-- [ ] Per-change evidence and generated traceability index are current.
-- [ ] `~/strict-mode/bin/strict-green-gate.sh --mode completion` returns `GREEN`.
+Follow the shared `docs/canon.md` in the source checkout or installed runtime. This list adds no gates.
 
-A pre-commit `FAST GREEN` is useful feedback but is never completion.
+- Relevant checks and inspection establish the actual result.
+- Regression coverage and a separate diff review protect substantial or risky behavior where useful.
+- Actual required GitHub checks/approvals remain visible; consequential actions need scoped authorization.
+- Optional QA is separate from defect closure; extra work answers a concrete unresolved question.
+- Secrets, private memory, histories, and machine details stay out of public artifacts.
+
+Preserve historical evidence. Ordinary work does not require new evidence files, an ADR, a traceability
+refresh, model-family diversity, or a duplicate full local matrix.

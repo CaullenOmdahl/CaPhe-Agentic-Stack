@@ -5,7 +5,8 @@ description: Safely resolve and dispatch bounded remote-model work using the CaP
 
 # Orchestrate
 
-This skill governs registry-based remote dispatch. Local delegation uses `harness worker` as specified in
+The shared `docs/canon.md` governs workflow. Use one implementation executor by default; this optional
+skill is only for explicitly requested or distinctly justified delegation. It governs registry-based remote dispatch. Local delegation uses `harness worker` as specified in
 the versioned route table; do not use the built-in `spawn_agent` for harness-managed delegation. The
 harness binds client, model, effort, context budget, and permissions outside prompt text. If its route is
 disabled or reports an isolation blocker, keep the work with the coordinator. Do not bypass the guard by

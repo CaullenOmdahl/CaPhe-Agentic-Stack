@@ -14,9 +14,10 @@ Link the abstraction and the forces that require a decision.
 State the decision and meaningful tradeoffs. Score new platform/language choices on target platform,
 performance, determinism, portability, ecosystem, and security.
 
-## Second opinion
+## Additional review (only with a distinct reason)
 
-Record adversarial objections, revisions, reviewers, verdict, and evidence path.
+Record the reason and any relevant objections or findings. An ADR is useful for a consequential
+decision; it is not mandatory for every meaningful behavior change. Follow the shared canon.
 
 ## Consequences
 

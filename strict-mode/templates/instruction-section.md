@@ -1,12 +1,9 @@
 <!-- STRICT-MODE:BEGIN (managed by strict-mode; edit the canon, not this marker) -->
-## Strict Mode
+## Workflow policy
 
-Read `~/strict-mode/methodology.md` for evidence lanes and the workflow runtime.
-Keep `.agent/OWNERS.md` human gates, defect-detection evidence, one independent implementation review, and real-artifact
-verification. Uncertain changes are behavioral. Pre-commit `FAST GREEN` is feedback; completion requires
-`~/strict-mode/bin/strict-green-gate.sh --mode completion` and review evidence.
-Prefer remote PR review; use independent local fallback on unavailability, with persistent cooldowns
-and continued remediation until clean per the runtime `docs/review-workflow.md`. Do not routinely run both routes.
-Keep immutable public evidence under `.agent/evidence/`, private continuation outside Git, and resolve
-model plus effort explicitly. Prototype mode never relaxes completion; persistent disable remains user-only.
+Follow the shared `docs/canon.md` in the source checkout or installed CaPhe runtime.
+Use judgment for relevant checks, optional QA, useful review, and scoped human approval; this marker adds no gates.
+Use `.agent/OWNERS.md` for project-specific approvers and constraints. Preserve existing scoped authorization.
+`FAST GREEN` reports affected checks; an explicit full gate reports matrix results, not task completion.
+Runtime commands are documented in `strict-mode/methodology.md`; they add no acceptance gates.
 <!-- STRICT-MODE:END -->

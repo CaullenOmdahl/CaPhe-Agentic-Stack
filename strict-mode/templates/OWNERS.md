@@ -11,7 +11,7 @@ Record project-specific approvers. Explicit human acceptance is required for:
 - production, hardware, financial, legal, payroll, or external-readiness claims;
 - irreversible or outward-facing actions.
 
-Lower-risk behavioral work may proceed after one independent implementation review and the full completion gate.
+Use relevant checks and actual-result verification, plus a separate diff review when useful or required.
 Prefer remote PR review; successful independent local fallback is sufficient when remote is unavailable.
 Do not require both routes; preserve actual repository branch protection requirements.
 Nothing self-merges past a named gate.
@@ -21,3 +21,7 @@ Nothing self-merges past a named gate.
 Harness-managed worker routes come from the reviewed versioned route table. Keep a route disabled until
 its provider account, effective model/effort evidence, and filesystem boundary are verified. Explicit
 owner route constraints always apply.
+
+Workflow classification and closure follow the shared `docs/canon.md`; this file names project gates.
+Routine small reversible changes need implementation and relevant checks. Optional QA does not block
+a resolved defect. Existing scoped human authorization satisfies only the decision/action it covers.

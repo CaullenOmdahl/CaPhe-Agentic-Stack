@@ -33,14 +33,14 @@ Only generic, reusable, public-safe skills should be promoted into this reposito
 ## Public Skills In This Repository
 
 - `skills/code-refactor-review`: local review lens for reuse, consistency, composition, and slop detection.
-- `skills/codex-review`: capability-probed Codex CLI review for non-Codex authors or explicitly labeled
-  same-family audits, without treating it as independent PR evidence.
+- `skills/codex-review`: separately performed, capability-probed Codex diff review for any author;
+  model-family diversity is optional, while self-attestation cannot satisfy review.
 - `skills/gh-review-certify-loop`: active-reviewer discovery plus thread-aware pull-request certification.
 - `skills/intended-behavior`: behavior-contract workflow for inferring product behavior, UI placement, recurrence, and ask-versus-infer thresholds before implementation.
 - `skills/prepare-branch-context`: read-only branch and PR orientation before follow-up work.
-- `skills/second-opinion`: machine-local, live-probed routing to Claude Code, agy, or a labeled same-family
-  fallback without stale model pins.
-- `skills/strict-mode`: evidence-preserving work lanes, named gates, PR review, and full completion checks.
+- `skills/second-opinion`: machine-local, live-probed routing to one working separate reviewer
+  without mandatory family diversity or stale model pins.
+- `skills/strict-mode`: canon-linked workflow guidance and relevant verification tools.
 - `skills/memory-palace-recall`: scoped local recall with sanitized exact-source evidence.
 - `skills/ux-flow-plan`: UX-first flow mapping before implementation planning.
 
@@ -57,14 +57,14 @@ The reusable rule is CLI-first, auth-light tool selection:
 
 ## Current Review Policy
 
-Follow [the shared review workflow](review-workflow.md): one independent implementation review,
-remote preferred. A successful independent local fallback after explicit remote failure, unavailability,
-or quota limits satisfies the implementation-review gate. Local self-review and design discussion do
+Follow the canon and [practical review guidance](review-workflow.md): use one separate review when
+useful or required, remote preferred. When a review requirement applies, successful separate local
+review satisfies the implementation-review gate. Local self-review and design discussion do
 not. Preserve actual branch protections and human merge/release gates; do not duplicate a completed
 fallback with remote review. This inventory summarizes policy and is not a separate authority.
 
-Focused pre-commit checks provide fast feedback. Completion remains an uncached full declared matrix in
-authoritative CI or locally when CI is missing or incomplete.
+The canon defines proportionate checks and closure. Full matrix execution is explicit and relevant for
+broad changes or project requirements; optional QA and new evidence files do not block resolved defects.
 
 ## Current Worktree Policy
 

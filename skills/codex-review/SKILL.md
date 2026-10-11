@@ -1,15 +1,15 @@
 ---
 name: codex-review
-description: Run Codex CLI review for a non-Codex author, or an explicitly requested same-family Codex audit, without mistaking it for independent PR review.
+description: Run a separately performed Codex CLI diff review as the selected local fallback or an explicitly requested assessment.
 ---
 
 # Codex Review
 
-Codex reviewing Codex is not an independent audit gate. Do not auto-run this after ordinary Codex
-implementation work. Use it for a non-Codex author or when the user explicitly requests a same-family
-audit, and label the result accurately. For a non-Codex author it may satisfy the independent
-local fallback under `~/.local/share/caphe/runtime/docs/review-workflow.md` when remote review
-is unavailable. Codex-on-Codex remains a same-family audit, not independent fallback.
+Follow the shared `docs/canon.md` and `docs/review-workflow.md`. A separately performed Codex review
+can satisfy the selected implementation-review route for any author, including Codex. The author
+merely asserting its own work is reviewed does not qualify. Prefer remote review; use this route when
+remote is unavailable or local review is explicitly requested. Do not routinely duplicate remote review.
+Different-family review is optional for concrete risk, conflicting evidence, or an explicit owner rule.
 
 ## Capability check
 

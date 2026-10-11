@@ -1,5 +1,8 @@
 # Efficiency runtime: implementation and operation
 
+The [canon](canon.md) is the sole workflow policy. These tools are optional procedures;
+use one implementation executor by default and select helpers only for a concrete distinct need.
+
 Strict Mode v3 turns the [research proposal](efficiency-improvement-plan.md) into reusable tools for
 bounded context, preparation, explicit delegation, and verifiable installation. The target is accepted
 work per total cost, including parent inspection and repairs. A lower token price alone is insufficient.
@@ -22,7 +25,8 @@ work per total cost, including parent inspection and repairs. A lower token pric
 | Distribute and inspect | `tools/stack_install.py`, `tools/stack_doctor.py` | Explicit payload, rollback, effective hook verification; existing project content preserved |
 
 Automatic CI receipt reuse is deliberately unavailable: a candidate workflow cannot certify its own
-manifest, helper scripts, result producer, or isolation. Full local completion remains the fallback.
+manifest, helper scripts, result producer, or isolation. This limitation does not mandate duplicate local
+and remote matrices: use applicable required check results and report their trust limits accurately.
 Consumer dependency graphs also remain unproven until repository-specific verification establishes
 completeness. Installation does not silently shorten their full matrices. Masking defaults off; model
 routes remain unpromoted without the paired evidence described below.
@@ -258,7 +262,8 @@ supersession. The index may retain a validated ADR identifier, but suppresses le
 review text, and extra fields. Older records with unknown fields remain readable without becoming
 writable through this compatibility path.
 
-New public evidence writes use [schema v2](../schemas/public-evidence-v2.json). Record implementation,
+Evidence records are optional unless explicitly required by the project. Preserve historical records;
+evidence-only changes do not restart implementation review. When writing a record, use [schema v2](../schemas/public-evidence-v2.json). Record implementation,
 validation, review, merge, release, and external acceptance separately. Use explicit not-applicable
 reasons; source tests cannot imply device or release success. Artifact claims require matching artifact
 bindings; device claims additionally require semantic acceptance. Update state through a new immutable ID with `supersedes`.
@@ -281,7 +286,10 @@ side-effect-free hook probe. Activation also records and checks the generated ho
 hook target, including forwarded hooks, without executing that chain. These local records detect drift;
 they are not signed attestation. Older records without forwarded-target identities require reconciliation
 through the original hook directory before doctor can verify them.
-Global installation and project activation are distinct results.
+Global installation and project activation are distinct results. Fresh initialization adds no Claude
+full-matrix Stop hook. Explicit refresh removes only the exact historical stack-generated Stop entry
+for the selected strict-mode path; custom commands and unrelated settings remain intact. Exact known stock owner/checklist files migrate to the current templates; customized files
+remain intact for explicit reconciliation.
 
 Existing projects can retain an older `.agent/OWNERS.md` even after a runtime update. The doctor
 reports `legacy_owner_model_gate` when it recognizes the old blanket model-choice gate. On explicit
@@ -325,14 +333,12 @@ These jobs therefore provide diagnostic feedback; they do not enforce their own 
 completion. GitHub's [PR event semantics](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request)
 and [checkout configuration](https://github.com/actions/checkout) define that boundary.
 
-Until an independently protected executor is available, use the ADR-0004 procedural completion route:
-an owner-controlled controller outside the candidate pins the execution recipe, accepted baseline,
-runner, and required matrix before execution. A candidate-supplied digest or green status cannot select
-those pins. Reject changed recipes or requirements before launching checks; independently review and
-approve a policy change before accepting a new pin. Run both the retained accepted harness and the
-complete reviewed candidate matrix uncached against the exact candidate revision. Record recipe and
-matrix identities, source stability, command outcomes, and PR review separately. A local rerun of an
-unapproved candidate workflow or manifest cannot restore trust.
+Preserve these existing CI checks. When an accepted-base assertion conflicts with an explicitly
+authorized policy replacement, surface the exact failing assertion and proposed replacement to the
+owner; do not silently bypass or disable it. This repository's workflow alone cannot make its recipe
+tamper-proof. The historical ADR-0004 external-controller procedure is not a routine completion gate.
+Additional independently controlled execution is appropriate only for a distinct threat or explicit
+project requirement under the canon, not as a duplicate local-plus-CI ritual.
 
 Automatic GitHub enforcement and trusted CI receipt reuse remain unavailable in this distribution.
 An external required status must come from a separately controlled provider; GitHub supports
