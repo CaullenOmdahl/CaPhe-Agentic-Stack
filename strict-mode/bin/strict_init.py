@@ -267,8 +267,9 @@ def retire_completion_stop(content, canon, previous_canon=None):
         return None
     if not isinstance(stops, list):
         return None
-    # The former standard deployment path is known. A custom old deployment must
-    # be selected explicitly; never infer arbitrary command paths as framework-owned.
+    # Recognize the former literal standard directory. Previous symlink targets
+    # and custom deployments must be selected explicitly before repointing; never
+    # infer arbitrary command paths as framework-owned.
     roots = {Path(canon), Path.home() / "strict-mode"}
     if previous_canon is not None:
         roots.add(Path(previous_canon).expanduser().absolute())

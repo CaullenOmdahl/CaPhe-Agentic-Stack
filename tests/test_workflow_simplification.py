@@ -133,6 +133,28 @@ class InstalledWorkflowTests(unittest.TestCase):
         initializer.initialize(ROOT / 'strict-mode', repo, previous_canon=old)
         self.assertNotIn('hooks', json.loads(settings.read_text()))
 
+    def test_standard_symlink_repoint_requires_captured_previous_target(self):
+        old = self.task_home / 'runtime-a' / 'strict-mode'
+        old.mkdir(parents=True)
+        alias = self.task_home / 'strict-mode'
+        alias.symlink_to(old, target_is_directory=True)
+        previous = alias.resolve()
+        command = shlex.quote(str(previous / 'bin/strict-green-gate.sh')) + ' --mode completion || true'
+        alias.unlink()
+        alias.symlink_to(ROOT / 'strict-mode', target_is_directory=True)
+        repo = self.project()
+        settings = repo / '.claude/settings.json'
+        settings.parent.mkdir()
+        content = json.dumps({'hooks': {'Stop': [{'hooks': [{'type': 'command', 'command': command}]}]}})
+        settings.write_text(content)
+        initializer.initialize(alias, repo)
+        self.assertEqual(settings.read_text(), content)
+        initializer.initialize(alias, repo, previous_canon=previous)
+        self.assertEqual(json.loads(settings.read_text()), {})
+        guidance = (ROOT / 'docs/install-for-agents.md').read_text()
+        self.assertIn('before repointing any symlink', guidance)
+        self.assertIn('record its old resolved target', guidance)
+
     def test_known_stock_policy_refreshes_but_custom_policy_stays_intact(self):
         repo = self.project()
         agent = repo / '.agent'

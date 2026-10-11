@@ -288,9 +288,10 @@ they are not signed attestation. Older records without forwarded-target identiti
 through the original hook directory before doctor can verify them.
 Global installation and project activation are distinct results. Fresh initialization adds no Claude
 full-matrix Stop hook. Explicit refresh removes only the exact historical stack-generated Stop entry
-for the selected strict-mode path or former standard `~/strict-mode` path. For a custom old path,
-select it with `STRICT_MODE_PREVIOUS_CANON` during refresh; unrelated command paths are not inferred
-as framework-owned. Custom commands and unrelated settings remain intact. Exact known stock owner/checklist files migrate to the current templates; customized files
+for the selected strict-mode path or literal former standard `~/strict-mode` directory path.
+Symlink initialization stores the resolved target: before repointing a symlink, including the standard
+path, capture its old resolved target and pass it as `STRICT_MODE_PREVIOUS_CANON` during refresh.
+Custom previous paths also need that explicit selection. Unrelated paths are not inferred as framework-owned. Custom commands and unrelated settings remain intact. Exact known stock owner/checklist files migrate to the current templates; customized files
 remain intact for explicit reconciliation.
 
 Existing projects can retain an older `.agent/OWNERS.md` even after a runtime update. The doctor

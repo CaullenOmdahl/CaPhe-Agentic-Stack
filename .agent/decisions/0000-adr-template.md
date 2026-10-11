@@ -2,23 +2,27 @@
 
 - **Status:** proposed | accepted | superseded by ADR-XXXX
 - **Date:** YYYY-MM-DD
-- **Approver:** <name from OWNERS.md> (required if this touches a gated area)
-- **Deciders / reviewers:** <author> ; adversarial review by <the other two agents>
+- **Approver:** <required for a named gate>
+- **Deciders / reviewers:** <author and independent reviewers>
 
 ## Context
-What forces are at play; what triggered this. Link the abstraction spec / prior ADRs.
+
+Link the abstraction and the forces that require a decision.
 
 ## Decision
-What we are doing, stated plainly. For a language/platform choice, score the options on:
-platform target, performance, determinism, portability (one core ↔ many runtimes),
-ecosystem, security — and name the runners-up and why they lost.
 
-## Second opinion (adversarial)
-Summary of the other two agents' attempts to reject this, and how the decision survived or
-was revised (v1 → v2). Reviewers + verdict.
+State the decision and meaningful tradeoffs. Score new platform/language choices on target platform,
+performance, determinism, portability, ecosystem, and security.
+
+## Additional review (only with a distinct reason)
+
+Record the reason and any relevant objections or findings. An ADR is useful for a consequential
+decision; it is not mandatory for every meaningful behavior change. Follow the shared canon.
 
 ## Consequences
-Easier / harder / constrained; new seams; migration or rollback; honest residual risks.
+
+State benefits, costs, migration/rollback, and residual risks.
 
 ## Alternatives considered
-What else was on the table and why it lost.
+
+Name credible runners-up and why they lost.
