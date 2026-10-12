@@ -12,11 +12,18 @@ Never commit:
 - local cache, telemetry, session, prompt-history, browser, or task-state files;
 - generated artifacts that may contain private context.
 
-Before pushing, run a content scan for obvious leaks:
+Before pushing, run the enforced scan. It reports affected filenames without echoing credential values:
 
 ```bash
-rg --hidden --no-ignore --glob '!.git' -n 'token|secret|password|api[_-]?key|private[_-]?key|BEGIN .*KEY|ssh-rsa|ghp_|gho_|ghu_|ghs_|ghr_|github_pat|\bsk[_-]' .
-rg --hidden --no-ignore --glob '!.git' -n '/Users/|/home/|[A-Za-z]:\\Users\\|\.env|ddns|localhost:[0-9]+|[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' .
+bash test/public-safety-test.sh
+```
+
+For supplementary manual inspection, list matching filenames rather than printing matched content.
+These broad searches include harmless detector definitions and examples; assess findings locally:
+
+```bash
+rg --hidden --no-ignore --glob '!.git' -l 'token|secret|password|api[_-]?key|private[_-]?key|BEGIN .*KEY|ssh-rsa|ghp_|gho_|ghu_|ghs_|ghr_|github_pat|\bsk[_-]' .
+rg --hidden --no-ignore --glob '!.git' -l '/Users/|/home/|[A-Za-z]:\\Users\\|\.env|ddns|localhost:[0-9]+|[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' .
 find . -path ./.git -prune -o -type f \( -name '.env' -o -name '.env.*' -o -name '.npmrc' -o -name '*credential*' -o -name '*secret*' \) -print
 ```
 

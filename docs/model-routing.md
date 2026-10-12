@@ -1,5 +1,9 @@
 # Model routing proof of concept
 
+This guide describes optional registry-based remote dispatch. It is separate from the CLI worker
+harness documented in [the runtime guide](efficiency-runtime.md#model-effort-and-delegation).
+The [canon](canon.md) defines current workflow policy; route constraints here apply when this tool is selected.
+
 The proof of concept routes only remote models. `registry/models.json` is public catalog metadata; an
 owner-only overlay records a machine's actual authenticated capabilities. A policy is also owner-only.
 Neither a catalog entry nor an installed executable makes a model routable.
@@ -56,7 +60,7 @@ session must then either:
   domain is needed at, or
 - record effort as an inherited default and treat it as unresolved.
 
-Canon requires model and effort to be resolved explicitly, so an unresolved effort is a recorded gap
+This routing contract requires model and effort to be resolved explicitly, so an unresolved effort is a recorded gap
 that bounds which lanes the substitution may serve. It must not be reported as a resolved value.
 Definitions that pin a model also silently override a requested tier unless the dispatcher passes
 the tier on every call; a dispatcher that cannot override them has not achieved the substitution it
@@ -64,7 +68,8 @@ claims.
 
 Each client adapter states how its harness realises these levers. For Claude Code, see
 `adapters/claude/ROUTING.md`; the registry keys `claude-fable`, `claude-opus`, `claude-sonnet` and
-`claude-haiku` are the routable Claude tiers (ADR-0006).
+`claude-haiku` describe catalog tiers ([route-realisation ADR](adr/ADR-0006-claude-code-route-realisation.md));
+actual routability still requires the private capability and policy checks above.
 
 ### What survives a substitution unchanged
 

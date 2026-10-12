@@ -43,7 +43,7 @@ The stack uses protected source records plus rebuildable local retrieval indexes
 The local pilot pins MemPalace 3.9.0 and forbids remote embeddings. Sanitizer v8 starts a fresh index
 generation and redacts standalone OpenAI API keys, fine-grained GitHub tokens, and explicitly named
 credentials even when their unquoted values are short. Adoption requires the privacy,
-isolation, injection, citation, correctness, recall, latency, storage, and token benchmarks in ADR-0002.
+isolation, injection, citation, correctness, recall, latency, storage, and token benchmarks in [the original memory ADR](../.agent/decisions/0002-mempalace-derived-memory-index.md).
 MemPalace subprocesses run with an explicit allowlist of runtime, temporary-directory, locale, certificate,
 cache, and local-model-path variables. They do not inherit unrelated host credential or service-token
 variables.
@@ -58,7 +58,7 @@ not create an active pointer—so stale drawers are removed from historical and 
 When a domain remains non-empty after a partial deletion or reassignment, every initialized retained
 generation is also reconciled against the surviving export set.
 
-The 2026-09-02 private five-case BlackSheep v12 pilot retained 5/5 answer and recall-at-5 results while
+A historical 2026-09-02 private five-case v12 pilot retained 5/5 answer and recall-at-5 results while
 reducing observed retrieval input from 9,820 to 3,775 approximate tokens (61.6%). The harness measured
 the slowest end-to-end candidate case at 66,165.74 ms against a 180,000 ms cap and the benchmarked
 owner-only palace at 105,904,659 bytes against a 268,435,456-byte cap. The full local v12 generation
@@ -88,8 +88,8 @@ byte cap. The reported storage value is the largest benchmarked palace, not a su
 unrelated mapped domains do not consume a case set's per-palace budget. These measurements are
 derived by the harness and cannot be asserted by candidate result files. Baseline and candidate result IDs
 must each exactly match the benchmark case IDs before scoring.
-The formatter also exercises a closing-delimiter self-test. Other domains still require their own
-anchor-first run.
+The formatter also exercises a closing-delimiter self-test. These historical measurements describe
+one private pilot, not general performance or current revision certification. Other domains require their own adoption evaluation.
 
 Use `memory/export_codex_memory.py` to create sanitized per-domain exports. Private mapping files, pilot
 fixtures, palaces, and benchmark results stay outside this public repository.

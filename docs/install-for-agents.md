@@ -21,6 +21,26 @@ The goal is to make the stack available from the locations each agent already re
 
 The repository is the distribution source. The local machine is the runtime environment.
 
+## Choose the scope first
+
+Instruction-only adoption needs the canon, relevant adapters, and selected skills. Runtime installation,
+project hook activation, shared-memory setup, and MemPalace retrieval are separate choices. Do not treat
+every step below as mandatory or create a private hub merely to start using the instructions.
+
+Use Python 3.11 or newer for the full runtime (the harness uses `tomllib`), Git, and Bash on macOS or Linux.
+Native Windows process execution is unsupported by several helpers; use Linux/WSL. Agent binaries,
+authentication, provider accounts, and optional MemPalace dependencies are supplied separately.
+
+To preview a runtime install from a source checkout without applying it:
+
+```bash
+python3 tools/stack_install.py --source .
+```
+
+This prints an install plan and does not copy files. Review the selected destination and payload before
+adding `--apply`; runtime installation does not merge global instructions or activate project hooks.
+Preserve existing customized destinations and reconcile conflicts rather than overwriting them.
+
 ## Steps
 
 1. Inspect the destination machine.
@@ -80,7 +100,7 @@ The repository is the distribution source. The local machine is the runtime envi
    - For installer tests, use temporary task-specific HOME and XDG directories plus disposable
      runtime/project targets. Never update the real executing agent HOME or global policy.
 
-7. Set up shared project memory.
+7. Set up shared project memory only when selected and authorized.
    - Run `python3 tools/stack_setup.py clients` to see which agents are installed; configure every one
      that is present and skip the rest.
    - Run `python3 tools/stack_setup.py memory-hub`. It requires an authenticated `gh` whose account has
@@ -94,8 +114,8 @@ The repository is the distribution source. The local machine is the runtime envi
    - Project memories live in each private project repository at `.agent/memory/`; see the
      `project-memory` skill. Never place memory in a public repository.
 
-8. Keep the stack current.
-   - Agents run `python3 <runtime>/tools/stack_setup.py update-check` at session start. It contacts the
+8. Check for updates when maintaining an installed stack.
+   - Optionally run `python3 <runtime>/tools/stack_setup.py update-check`. It contacts the
      public repository at most once per interval (default two days), records the last check in
      `~/.local/state/caphe/`, outside Git, and reports when `main` has moved past the installed version.
    - When an update is reported, rerun this install (plan, apply, verify); the applied version is
@@ -146,7 +166,7 @@ The repository is the distribution source. The local machine is the runtime envi
    - Confirm no runtime checkout of this repository is required for normal agent use.
    - Check actual installed policy, supporting documents, skills, and effective hooks against source.
    - Run installer/runtime regression checks; use the full gate when this broad surface warrants it.
-   - Confirm `caphe-memory list` resolves the hub and a project store, and each installed agent's
+   - If memory was selected, confirm `caphe-memory list` resolves the intended private stores, and each installed agent's
      entrypoint names the hub.
    - Confirm MemPalace indexes, if configured, are outside Git trees, owner-only, and citation-resolvable.
 
