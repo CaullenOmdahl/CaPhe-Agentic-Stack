@@ -4,7 +4,7 @@ This is a public-safe inventory of the repository's distribution shape. It inten
 
 ## Agent Entrypoints
 
-The current local setup uses one shared global canon with thin agent-specific adapters:
+The distribution provides one shared canon with thin agent-specific adapters:
 
 - Root tool files: detected by each agent and point to the adapter plus canon.
 - Codex adapter: points to the shared canon and adds sandbox, memory, and offload cautions.
@@ -17,32 +17,32 @@ Machine-global installs should use the agents' normal config locations rather th
 
 ## Skill Categories
 
-Current skills fall into these public-safe categories:
+The shipped skills cover process and verification, product/UX planning, branch orientation,
+diff review, shared private memory, derived recall, and optional model orchestration.
 
-- process discipline: intended behavior, strict-mode variants, verification, second opinion;
-- local memory: sanitized source-linked recall over physically isolated derived indexes;
-- review and PR support: code review, GitHub publishing, review follow-up, CI debugging;
-- UI and product planning: frontend design, UX flow, product context;
-- document and data utilities: spreadsheets, documents, PDF handling;
-- browser and computer control: browser testing, local UI inspection, device automation;
-- cloud and deployment helpers: provider-specific release or infrastructure workflows;
-- domain-specific private workflows: excluded from this public repo.
-
+Provider deployment, document creation, browser control, device automation, and client-specific release
+skills may exist on an operator's machine. They are not bundled here and are not prerequisites.
 Only generic, reusable, public-safe skills should be promoted into this repository.
 
 ## Public Skills In This Repository
 
-- `skills/code-refactor-review`: local review lens for reuse, consistency, composition, and slop detection.
-- `skills/codex-review`: separately performed, capability-probed Codex diff review for any author;
-  model-family diversity is optional, while self-attestation cannot satisfy review.
-- `skills/gh-review-certify-loop`: active-reviewer discovery plus thread-aware pull-request certification.
-- `skills/intended-behavior`: behavior-contract workflow for inferring product behavior, UI placement, recurrence, and ask-versus-infer thresholds before implementation.
-- `skills/prepare-branch-context`: read-only branch and PR orientation before follow-up work.
-- `skills/second-opinion`: machine-local, live-probed routing to one working separate reviewer
-  without mandatory family diversity or stale model pins.
-- `skills/strict-mode`: canon-linked workflow guidance and relevant verification tools.
-- `skills/memory-palace-recall`: scoped local recall with sanitized exact-source evidence.
-- `skills/ux-flow-plan`: UX-first flow mapping before implementation planning.
+| Skill | Purpose |
+| --- | --- |
+| [code-refactor-review](../skills/code-refactor-review/SKILL.md) | Assess reuse, consistency, composition, unnecessary indirection, and avoidable churn |
+| [codex-review](../skills/codex-review/SKILL.md) | Run a separately performed, capability-probed Codex CLI diff review |
+| [gh-review-certify-loop](../skills/gh-review-certify-loop/SKILL.md) | Discover active reviewers and follow relevant PR findings |
+| [intended-behavior](../skills/intended-behavior/SKILL.md) | Establish observable behavior before implementation |
+| [memory-palace-recall](../skills/memory-palace-recall/SKILL.md) | Retrieve scoped, sanitized, source-linked local evidence |
+| [orchestrate](../skills/orchestrate/SKILL.md) | Resolve bounded remote work using capability and owner-policy constraints |
+| [prepare-branch-context](../skills/prepare-branch-context/SKILL.md) | Orient to a branch or PR without changing it |
+| [project-memory](../skills/project-memory/SKILL.md) | Read and maintain durable memory in private project Git or a private hub |
+| [route-review](../skills/route-review/SKILL.md) | Recommend route changes from private telemetry without editing policy |
+| [second-opinion](../skills/second-opinion/SKILL.md) | Select and probe an available separate assessment route |
+| [strict-mode](../skills/strict-mode/SKILL.md) | Apply the canon and relevant verification procedures |
+| [ux-flow-plan](../skills/ux-flow-plan/SKILL.md) | Map current and desired product flows before implementation planning |
+
+Skills are instruction packages. Tool-dependent skills need their referenced runtime components and
+machine-local capabilities; copying `SKILL.md` alone does not install those dependencies.
 
 ## Tooling Policy
 

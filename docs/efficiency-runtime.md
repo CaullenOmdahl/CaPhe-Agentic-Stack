@@ -244,9 +244,9 @@ candidate, at multiple repetitions, under the same acceptance checks. Include pa
 repairs, rejection rate, escaped defects, external wait, cached input, output, and reasoning. Predeclare
 quality tolerances and the minimum sample; retain the incumbent when evidence is inconclusive.
 
-Fast mode is a separate cost decision from effort. Current official pricing lists a 2.5× standard-credit
-multiplier for Astra Fast and GPT-5.6 Fast; API Priority has separate rates. Recheck the applicable card
-rather than mapping a service label to a guessed multiplier. [OpenAI pricing](https://learn.chatgpt.com/docs/pricing),
+Fast mode is a separate cost decision from effort. Subscription credits and API service-tier rates
+are different billing surfaces. Check the current applicable card rather than mapping a service label
+to a fixed or guessed multiplier. [OpenAI pricing](https://learn.chatgpt.com/docs/pricing),
 [Speed configuration](https://learn.chatgpt.com/docs/agent-configuration/speed).
 
 ## Evidence and rollout

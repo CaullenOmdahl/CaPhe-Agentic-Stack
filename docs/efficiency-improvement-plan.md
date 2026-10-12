@@ -113,7 +113,7 @@ The following are starting hypotheses for evaluation, not approved global defaul
 | Architecture, difficult debugging, adversarial synthesis | Astra high; xhigh only when justified by evaluation | Preserve named approval and independent implementation review |
 | Canonical PR review | Existing approved reviewer route | Worker routing does not downgrade reviewers or make parent review independent |
 
-Current [Codex pricing](https://learn.chatgpt.com/docs/pricing), checked 2026-09-12, gives these standard
+Historical [Codex pricing](https://learn.chatgpt.com/docs/pricing), checked 2026-09-12, gives these standard
 credits per million tokens. Rates are a dated input to the experiment, not a quote for a completed task.
 Sol's listed rate is promotional at least through 2026-11-21; some enterprise agreements use other rates.
 

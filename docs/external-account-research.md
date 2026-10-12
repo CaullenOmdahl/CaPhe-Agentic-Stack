@@ -1,6 +1,8 @@
 # External Account Research
 
-This note tracks public GitHub accounts and repositories worth monitoring for agentic development workflow ideas.
+This research watchlist records public sources considered for agentic development workflow ideas.
+It is not a compatibility inventory of supported integrations. Entries and proposed follow-ups describe
+research context; current shipped components are listed in [the stack inventory](current-stack-inventory.md).
 
 The filter for this repository is strict:
 
@@ -78,10 +80,10 @@ Why it matters:
 - Directly aligned with this repository's purpose: agent-agnostic repo conventions, shared skills, symlinks, and private local skills.
 - Specifically useful for deciding whether `.agents/skills/` should become the canonical skill source instead of `skills/`.
 
-Candidate follow-up:
+Current status:
 
-- Compare `.agents/skills/` against the current `skills/` layout.
-- Decide whether this repo should support generated symlinks or stay documentation-only.
+- `skills/` remains the distribution source. Machine installation and path rewriting are documented in
+  [Install for agents](install-for-agents.md); this repository is no longer documentation-only.
 
 ### bradfeld
 
@@ -132,7 +134,7 @@ Sources:
 Why it matters:
 
 - Strong material on multi-agent coordination, work queues, file reservations, and agent mail.
-- Relevant if we later support multiple agents working the same repo at the same time.
+- Relevant to coordination research; the current optional CLI harness uses bounded isolated worker contexts.
 
 Risk:
 
@@ -141,7 +143,7 @@ Risk:
 Candidate follow-up:
 
 - Record coordination principles first.
-- Defer service or MCP adoption until we have a concrete multi-agent collision problem.
+- The shipped harness does not adopt these coordination services. Any service or MCP adoption needs a concrete problem.
 
 ### wshobson
 
@@ -204,11 +206,11 @@ Source:
 Why it matters:
 
 - Cross-agent skill sharing and symlink setup across local tool directories.
-- Relevant only if we decide to support local installation automation.
+- Historical input for cross-agent installation; the stack now includes runtime installation tooling.
 
 Candidate follow-up:
 
-- Keep as reference if local symlink automation becomes a priority.
+- Keep as a reference for packaging comparisons; use the shipped install guide for current procedures.
 
 ### littlebearapps
 
@@ -225,9 +227,9 @@ Candidate follow-up:
 
 - Evaluate contextdocs structure if we design multi-agent context templates.
 
-## Immediate Recommendation
+## Recorded research recommendation
 
-Next research PR should inspect `vercel-labs/agent-skills`, `vercel-labs/skills`, and the `davidgibsonp` agent-agnostic repo guide together.
+A candidate future research PR could inspect `vercel-labs/agent-skills`, `vercel-labs/skills`, and the `davidgibsonp` agent-agnostic repo guide together.
 
 Reason:
 

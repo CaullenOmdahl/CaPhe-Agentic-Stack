@@ -1,260 +1,158 @@
 # CaPhe Agentic Stack
 
-CaPhe Agentic Stack is a public-safe, agent-agnostic distribution bundle for teams or solo developers using multiple coding agents in the same codebase.
+**One shared workflow for coding agents. Clear expectations, useful verification, and continuity across tools.**
 
-It is not an app framework, prompt dump, private machine backup, or runtime state store. It is a small set of shared operating rules, agent entrypoints, reusable workflow skills, and install documentation designed to seed Codex, Claude, Gemini / Antigravity, and adjacent tools on a developer machine.
+CaPhe helps solo developers and teams use Codex, Claude Code, and Gemini / Antigravity in the same
+codebase without maintaining three competing sets of instructions. A shared operating canon tells
+agents how to work; small adapters make it readable by each tool. Reusable skills and optional CLI
+helpers support planning, review, verification, delegation, and private project memory.
 
-## What This Repository Does
+Start with the instructions. Add tools when they solve a concrete problem.
 
-This repository provides:
+[Get started](#get-started) · [Documentation](docs/README.md) · [Workflow examples](docs/workflow-examples.md) · [Contribute](CONTRIBUTING.md)
 
-- one shared canon for how coding agents should work;
-- root-level entrypoint files that common agent tools can auto-detect;
-- thin agent-specific adapters for Codex, Claude, and Gemini / Antigravity;
-- reusable skills for intended behavior, review, branch orientation, and UX-first planning;
-- a pull-request-centered review workflow;
-- a CLI worker harness with versioned task routes, bounded briefs, isolated source snapshots, and per-run usage records;
-- proportionate workflow guidance with relevant checks, optional runtime helpers, and scoped human gates;
-- a local MemPalace-derived memory adapter that preserves source citations and security-domain isolation;
-- CLI-first tool-selection rules that prefer the developer's existing environment over auth-dependent integrations;
-- an agent-facing install route for copying prompts, entrypoints, and skills into normal local config locations;
-- public-safety rules for keeping private machine and client details out of public docs;
-- a research index of outside public accounts and repositories worth monitoring.
+## Why CaPhe?
 
-The main design goal is to prevent drift. Instead of maintaining unrelated `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md` files with subtly different rules, each tool gets a thin entrypoint that points back to the same canon.
+The difficult part of using several coding agents is keeping their work consistent: what counts as
+done, which decisions need a human, where project knowledge lives, and how a new session picks up.
+CaPhe makes those expectations explicit and portable.
 
-The intended direction is one-way: install from this repository onto a machine. Local agents may inventory tools, paths, accounts, repositories, and environment quirks in private local notes, but that runtime inventory does not flow back into this public repository.
+| Common friction | What CaPhe provides | Why it helps |
+| --- | --- | --- |
+| Different agents follow different rules | One [canon](docs/canon.md), with thin tool adapters | Change shared policy in one place and reconcile installed copies |
+| A plausible answer gets mistaken for finished work | Relevant checks, actual-result inspection, and separate diff review when useful or required | Assess the result using evidence |
+| Small tasks accumulate process overhead | Proportionate workflow; one executor by default; optional helpers | Match effort to the change and its risk |
+| Sessions lose project decisions | Shared [private project memory](docs/memory-architecture.md), accessible across agents | Carry durable knowledge forward without tying it to one client |
+| Delegation obscures the model, permissions, or cost | Explicit CLI worker routes, bounded briefs, isolated source snapshots, and usage records | Inspect what ran and under which constraints |
+| Public workflow docs collect private machine details | One-way installation and explicit [public/private boundaries](docs/public-safety.md) | Share reusable practices while keeping operational state private |
 
-## What This Is Not
+These are design benefits, not a claim of measured productivity or cost savings. Historical experiments
+have narrow scopes; use your own tasks and acceptance criteria to evaluate the stack.
 
-This repository intentionally does not include:
+## Get started
 
-- credentials, tokens, cookies, signing keys, service accounts, or `.env` files;
-- local cache, telemetry, browser state, session history, or task-state files;
-- private hostnames, IP addresses, SSH aliases, VPN details, or network topology;
-- client-specific release procedures, customer data, or private project history;
-- a replacement for independent pull-request review.
+### Explore without installing
 
-If a workflow depends on private operational details, document the shape of the workflow here and keep the private values in an ignored local file or a private repository.
+You need Git to clone the repository. For the CLI examples, use Python 3.11 or newer on macOS or Linux
+(including a Linux environment such as WSL). The worker harness uses Python's `tomllib`.
 
-## Repository Layout
-
-```text
-.
-├── AGENTS.md
-├── CLAUDE.md
-├── GEMINI.md
-├── adapters/
-│   ├── claude/CLAUDE.md
-│   ├── codex/AGENTS.md
-│   ├── codex/CODEX.md
-│   └── gemini/GEMINI.md
-├── docs/
-│   ├── canon.md
-│   ├── current-stack-inventory.md
-│   ├── external-account-research.md
-│   ├── external-workflow-integrations.md
-│   ├── install-for-agents.md
-│   ├── public-safety.md
-│   ├── review-workflow.md
-│   └── reviewer-catalog.md
-├── memory/
-│   ├── benchmark_memory.py
-│   ├── export_codex_memory.py
-│   ├── mempalace_adapter.py
-│   ├── project_memory.py
-│   ├── resolve_codex_memory.py
-│   └── sync_mempalace.py
-├── strict-mode/
-│   ├── bin/
-│   ├── templates/
-│   └── test/
-├── bin/
-│   └── harness
-├── tools/
-│   └── caphe_harness.py
-└── skills/
-    ├── code-refactor-review/SKILL.md
-    ├── gh-review-certify-loop/SKILL.md
-    ├── intended-behavior/SKILL.md
-    ├── prepare-branch-context/SKILL.md
-    ├── memory-palace-recall/SKILL.md
-    ├── strict-mode/SKILL.md
-    └── ux-flow-plan/SKILL.md
+```bash
+git clone https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack.git
+cd CaPhe-Agentic-Stack
+python3 tools/stack_context.py --repo . --max-bytes 4096
 ```
 
-## Core Concepts
+The context command reports bounded repository state; it does not install the stack or launch a model.
+Then read the [canon](docs/canon.md) and [workflow examples](docs/workflow-examples.md).
+Agent clients, authentication, and provider subscriptions are supplied separately by the operator.
 
-### Shared Canon
+### Use the instructions in a project
 
-[`docs/canon.md`](docs/canon.md) is the central operating model. It defines:
+1. Read the canon and reconcile it with your project's existing requirements.
+2. Merge the root entrypoint your agent reads: [`AGENTS.md`](AGENTS.md), [`CLAUDE.md`](CLAUDE.md),
+   or [`GEMINI.md`](GEMINI.md). Preserve existing project instructions.
+3. Keep `docs/canon.md` and the corresponding `adapters/` files at the referenced relative paths,
+   or rewrite those references to your chosen locations.
+4. Install selected complete `skills/<name>/` directories into the skill locations your client reads.
+   Keep supporting files and update references to the canon and any required runtime tools.
+5. Ask the agent to read the entrypoint and describe the applicable workflow before its first change.
 
-- autonomy and when agents should keep going;
-- when to stop for a human;
-- how to handle non-trivial behavior changes;
-- how to choose local CLI tools before auth-dependent integrations;
-- how to use non-code analysis artifacts before code;
-- the expected build and verification discipline;
-- the pull-request review rule;
-- public/private environment boundaries.
+Instruction-only adoption does not require the worker harness, memory hub, hooks, or a new hosted service.
+For machine-global installation, path rewriting, runtime verification, and upgrades, follow
+[Install for agents](docs/install-for-agents.md). The installer manages the runtime payload;
+merging global instructions and activating a project are separate steps.
 
-Agent-specific files should not reinvent those rules. They should point back to the canon and add only tool-specific notes.
+An installation request you can give your agent:
 
-### Root Entrypoints
+> Read `docs/install-for-agents.md`. Inspect my existing agent configuration, propose a scoped install,
+> and preserve my instructions. Install only the components I select. Keep private machine state outside
+> the public repository and verify the resulting entrypoints, skills, and runtime references.
 
-The root files are designed for agent auto-detection:
+## What a task looks like
 
-- [`AGENTS.md`](AGENTS.md) for Codex-style agents;
-- [`CLAUDE.md`](CLAUDE.md) for Claude-based tools;
-- [`GEMINI.md`](GEMINI.md) for Gemini / Antigravity.
+For a substantial bug fix, the workflow is straightforward:
 
-These files are intentionally short. They direct the agent to the relevant adapter and the shared canon.
+1. Establish the intended behavior and inspect the relevant code.
+2. Implement the smallest coherent fix on a branch.
+3. Add a regression when it protects the behavior, run relevant checks, and inspect the result.
+4. Obtain one separate diff review when useful or required; address real findings.
+5. Report what changed, what passed, and any remaining limitations. Preserve required GitHub checks
+   and human approval for consequential actions.
 
-### Agent Adapters
+A wording correction can simply be edited and inspected. A release, secret-handling change, or data
+migration needs its applicable safeguards and scoped authorization. Optional QA remains separate from
+closing a verified defect. See [concrete examples](docs/workflow-examples.md).
 
-The `adapters/` directory contains tool-specific instructions:
+## Choose your components
 
-- [`adapters/codex/AGENTS.md`](adapters/codex/AGENTS.md): Codex-native adapter-local entrypoint that forwards to `CODEX.md`.
-- [`adapters/codex/CODEX.md`](adapters/codex/CODEX.md): Codex-specific notes around filesystem/network access, memory, and offload boundaries.
-- [`adapters/claude/CLAUDE.md`](adapters/claude/CLAUDE.md): Claude-specific skill and review reminders.
-- [`adapters/gemini/GEMINI.md`](adapters/gemini/GEMINI.md): Gemini / Antigravity-specific model-effort and offload reminders.
+| Component | Use it for | Start here |
+| --- | --- | --- |
+| Shared canon and adapters | Consistent instructions across agents | [Canon](docs/canon.md), [adapters](adapters/) |
+| Workflow skills | Behavior discovery, UX planning, branch context, and review | [Skill inventory](docs/current-stack-inventory.md#public-skills-in-this-repository) |
+| Verification runtime (`strict-mode/`) | Affected checks, optional full matrices, and project hook integration | [Runtime overview](strict-mode/README.md) |
+| Context, preparation, and status tools | Bounded discovery, generated-file freshness, and deterministic waiting | [Efficiency runtime](docs/efficiency-runtime.md) |
+| CLI worker harness | Explicit task routes and isolated delegated work | [Harness operation](docs/efficiency-runtime.md#model-effort-and-delegation) |
+| Shared project memory | Durable facts in private project Git or a private hub | [Memory architecture](docs/memory-architecture.md) |
+| MemPalace adapter | Optional local retrieval over sanitized, source-linked records | [Derived retrieval](docs/memory-architecture.md#derived-retrieval-index) |
+| Model-routing proof of concept | Capability-gated remote dispatch and route evaluation | [Routing scope](docs/model-routing.md) |
 
-Adapters should stay small. If a rule applies to every agent, put it in `docs/canon.md`.
+### Compatibility and current limits
 
-### Skills
+- **Instructions:** dedicated entrypoints and adapters for Codex, Claude Code, and Gemini / Antigravity.
+  Other clients can adapt the canon; verify their instruction and skill discovery rather than assuming it.
+- **Runtime:** process execution targets macOS and Linux. Native Windows execution of the verification,
+  preparation, and process-watching helpers is unsupported; use Linux/WSL.
+- **CLI workers:** Codex is the implemented worker adapter. Non-Codex harness adapters remain disabled.
+  Instruction support for a client does not imply worker support.
+- **Model routing:** the public registry is catalog metadata, not proof of authenticated availability.
+  Remote dispatch is a proof of concept requiring private capability and owner-policy configuration.
+- **Updates:** the harness updater requires signed tagged releases and separately established signing
+  trust. A source checkout or installable payload does not imply a signed release is available.
+- **Review:** use one suitable, separately performed review when useful or required. The same model
+  family is eligible; author self-attestation is not review. Actual repository requirements still apply.
+- **CI:** GitHub Actions is disabled for cost control. The checked-in workflow is a manual opt-in recipe;
+  there is no automatic CI badge or implied hosted check coverage.
 
-The `skills/` directory contains reusable public workflow skills:
+## Privacy and trust
 
-- [`skills/code-refactor-review`](skills/code-refactor-review/SKILL.md): review diffs for reuse, composition, codebase consistency, unnecessary indirection, React/frontend state slop, and avoidable churn.
-- [`skills/gh-review-certify-loop`](skills/gh-review-certify-loop/SKILL.md): discover currently active GitHub reviewers and drive thread-aware PR review without waiting on retired integrations.
-- [`skills/intended-behavior`](skills/intended-behavior/SKILL.md): infer product behavior, UI placement, recurrence, and ask-versus-infer thresholds before implementation.
-- [`skills/memory-palace-recall`](skills/memory-palace-recall/SKILL.md): retrieve scoped prior context through sanitized, source-linked local evidence.
-- [`skills/project-memory`](skills/project-memory/SKILL.md): read and write the Git-stored project memory that every agent shares.
-- [`skills/prepare-branch-context`](skills/prepare-branch-context/SKILL.md): build read-only context for a branch or PR before follow-up work.
-- [`skills/strict-mode`](skills/strict-mode/SKILL.md): apply the shared proportionate workflow and relevant verification tools.
-- [`skills/ux-flow-plan`](skills/ux-flow-plan/SKILL.md): map current and desired product flows before attaching implementation files.
+Installation flows from this repository to local agent configuration. Private machine inventories,
+credentials, histories, caches, task state, and client operations do not flow back into this repository.
+Private project memory lives in private Git or a private hub; public repositories never receive it.
+MemPalace indexes are optional, local, rebuildable, and separated by security domain.
 
-These skills preserve tests and artifact verification while selecting one independent review route.
+The worker harness limits source access through its snapshot and permission boundaries. These controls
+have explicit failure modes and prerequisites; a model name, installed binary, or successful process exit
+alone does not prove a task was safely completed. See [runtime boundaries](docs/efficiency-runtime.md)
+and [public-safety rules](docs/public-safety.md).
 
-## Review Model
+## Documentation and source map
 
-When review is useful or required, choose one separately performed diff review: remote preferred, local
-fallback when unavailable or requested. Same-family review is allowed; self-attestation is not review.
+The [documentation index](docs/README.md) separates getting started, operating guides, and historical research.
+The [canon](docs/canon.md) is the sole shared workflow policy authority; other pages explain its use.
 
-The default route is:
+```text
+AGENTS.md / CLAUDE.md / GEMINI.md   Agent entrypoints
+adapters/                         Tool-specific instructions
+skills/                           Reusable workflow skills and references
+bin/harness                       CLI worker harness entrypoint
+tools/                            Install, context, routing, and lifecycle helpers
+strict-mode/                      Verification runner, hooks, templates, and tests
+memory/                           Shared-memory and derived-retrieval tools
+registry/ / schemas/              Model catalog and validation contracts
+docs/                             Guides, research, and design decisions
+tests/ / test/                    Python regressions and public-safety checks
+```
 
-1. Work on a branch.
-2. Inspect the actual diff before staging.
-3. Commit only intended files.
-4. Run relevant verification.
-5. Push and open a pull request.
-6. Trigger or wait for independent agent review where available.
-7. Address actionable findings.
-8. Leave merge approval to a human maintainer.
+## Contributing and feedback
 
-See [`docs/review-workflow.md`](docs/review-workflow.md) for the detailed route. [`docs/reviewer-catalog.md`](docs/reviewer-catalog.md) lists every remote and local reviewer the
-route can use, including options for machines that have only one agent installed.
+Use [GitHub issues](https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack/issues) for reproducible bugs,
+confusing documentation, and focused proposals. Include public-safe examples, the component involved,
+and expected versus observed behavior. Keep credentials and private operational details out of issues.
 
-Successful separate local review satisfies an applicable review expectation; do not routinely run both.
-Optional UTC cooldowns and request reservations can coordinate concurrent requests; they are not
-prerequisites for ordinary repository work.
-Provider reset times are distinguished from estimated recheck times. Required branch protections remain binding.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for local checks and the PR workflow. Small improvements to
+instructions and examples are welcome; policy changes should update the canon and affected procedures together.
 
-## Public Safety
+## License
 
-This repository is meant to be public. Before pushing, use the checks in [`docs/public-safety.md`](docs/public-safety.md), including scans for:
-
-- secrets and token-like strings;
-- local user paths;
-- hostnames and IP-like strings;
-- sensitive filenames such as `.env`, `.npmrc`, and credential/secret files.
-
-The public-safety rule is conservative by design: if a workflow needs private details, keep them outside this repository and document only the reusable structure here.
-
-## Stack Inventory
-
-[`docs/current-stack-inventory.md`](docs/current-stack-inventory.md) describes the current public-safe shape of the stack: entrypoints, adapter roles, skill categories, review policy, worktree policy, and the boundary between reusable public workflow and private operational details.
-
-[`docs/install-for-agents.md`](docs/install-for-agents.md) gives agents the one-way installation procedure for copying this stack into normal local config locations.
-
-## External Workflow Research
-
-The stack includes these research documents:
-
-- [`docs/external-workflow-integrations.md`](docs/external-workflow-integrations.md): records external workflow ideas already integrated or rejected, including the jnsahaj gists that motivated the first skills.
-- [`docs/external-account-research.md`](docs/external-account-research.md): tracks public GitHub accounts and repositories worth monitoring, such as Vercel Labs agent-skill work, agent-agnostic repository guides, and multi-agent coordination catalogs.
-- [`docs/efficiency-improvement-plan.md`](docs/efficiency-improvement-plan.md): evaluates published efficiency results and proposes measured context, verification, and model-and-effort improvements with implementation instructions.
-
-[`docs/efficiency-runtime.md`](docs/efficiency-runtime.md) documents the implemented tools, conservative defaults, and installation steps.
-
-Research notes are not automatically adopted rules. Changes to the stack should still go through a focused PR.
-
-## How To Use This Stack
-
-### In A Repository
-
-For a repo that should follow this stack:
-
-1. Copy or symlink the root entrypoint files your tools need:
-   - `AGENTS.md`
-   - `CLAUDE.md`
-   - `GEMINI.md`
-2. Keep `docs/canon.md` and the corresponding `adapters/` files available at the relative paths referenced by those entrypoints, or adjust the paths after copying.
-3. Copy only the skills that are relevant to that repo.
-4. Keep private local overrides outside the public repository.
-
-### Globally On A Machine
-
-For machine-global use, install the stack into each tool's normal config locations. Do not keep a runtime checkout of this repository on every machine just so agents can read it.
-
-The checked-in entrypoints are repository templates and use repo-relative paths such as `docs/canon.md` and `../../docs/canon.md`. For global installation:
-
-1. Copy the canon to the machine-level canon location, usually `~/AGENTS_GLOBAL.md`.
-2. Merge or copy the relevant adapter instructions into each tool's global entrypoint.
-3. Rewrite repo-relative canon references so global entrypoints read the machine-level canon.
-4. Rewrite any other repo-relative support references in copied adapters, such as review workflow docs, or remove those links if the supporting docs are not installed.
-5. Install only the skill directories, including any subdirectories, the machine needs into that tool's normal skill directories.
-6. Update installed skills so their canon reference points to the machine-level canon.
-7. Leave active installed files and the minimal verified runtime payload in normal config locations. Remove temporary install staging after verification; normal use does not require a source checkout.
-8. Store machine inventory and private operational notes only in local files outside this repository.
-
-Typical target roles are:
-
-- `~/AGENTS_GLOBAL.md` as the shared machine-level canon;
-- `~/.codex/AGENTS.md` as the Codex global entrypoint;
-- `~/.claude/CLAUDE.md` as the Claude global entrypoint;
-- `~/.gemini/GEMINI.md` as the Gemini / Antigravity global entrypoint;
-- `~/.codex/skills/<skill-name>/` for Codex-readable reusable skills;
-- `~/.claude/skills/<skill-name>/` for Claude-readable reusable skills;
-- `~/.gemini/skills/<skill-name>/` for Gemini-readable reusable skills when supported;
-- `~/.agents/skills/<skill-name>/` as a shared compatibility location for tools that read common agent skills.
-
-Do not commit machine-global install outputs, private paths, hostnames, usernames, account names, or local infrastructure details here. Local install notes may contain those details when useful; they just belong outside this public repository.
-
-## How To Change This Stack
-
-Use the same workflow this stack recommends:
-
-1. Create a branch.
-2. Keep the change scoped.
-3. Update docs and skills together when their behavior changes.
-4. Run public-safety checks.
-5. Open a pull request.
-6. Address agent and human review.
-7. Merge only after review is satisfactory.
-
-For new skills, keep `SKILL.md` concise and public-safe. Put detailed reference material in a linked `references/` directory only when needed.
-
-## Current Status
-
-The current stack includes:
-
-- shared canon and root entrypoints;
-- Codex, Claude, and Gemini / Antigravity adapters;
-- seven workflow skills, including active-review discovery, strict-mode governance, and scoped memory recall;
-- Strict Mode v3 source, templates, tests, and completion tooling;
-- a pinned, local-only MemPalace export/sync/benchmark adapter;
-- PR-review and public-safety documentation;
-- external workflow and account research notes.
-
-Private project skills, local credentials, cache state, and client-specific operations are deliberately outside this repository.
+This repository currently has no license file. Public visibility does not provide an explicit
+open-source license. License selection remains a maintainer decision.

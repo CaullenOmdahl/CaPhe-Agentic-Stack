@@ -4,8 +4,9 @@ Routes for a separately performed implementation review when useful or required 
 [canon](canon.md); [`review-workflow.md`](review-workflow.md) supplies practical guidance.
 Choose one route per change; this catalog only widens the set of routes to choose from.
 
-Researched 2026-09-30. Vendor features, prices, and flags change often: check the source before
-relying on an entry, and prefer entries marked **verified**.
+CLI observations were researched 2026-09-30. Hosted pricing links were refreshed 2026-10-12.
+Vendor features, prices, and flags change often: check the source before relying on an entry.
+**Verified** records a past invocation, not current machine availability or an endorsement.
 
 - **verified**: invocation tested on a stack machine; exact commands live in the `second-opinion` skill.
 - **documented**: taken from vendor documentation; test it on the machine, then promote it.
@@ -43,9 +44,9 @@ into one of four groups:
 |---|---|---|---|---|---|
 | Codex code review (ChatGPT Codex connector) | `@codex review` comment, or automatic reviews | OpenAI | Subscription (OpenAI) | Included on ChatGPT plans; subject to Codex usage limits | Replies with a quota message when limits are reached; record that as unavailability. |
 | PR-Agent run locally (`The-PR-Agent/pr-agent`, open source) | CLI `pr-agent --pr_url <url> review` from any machine | Any LiteLLM model (OpenAI, Anthropic, Gemini, MiniMax, DeepSeek, OpenRouter, local) | Your machine | The model provider only | Posts to the PR without Actions. One completion over the diff, no tools. A portable independent route using whichever provider key the operator already has. |
-| CodeRabbit | Automatic on PRs after installing the app | Vendor-managed | Third-party service | Free plan, rate-limited (about 4 PR reviews an hour) | Opt-in only. Also has a CLI (below). |
-| Greptile | Automatic on PRs after installing the app | Vendor-managed | Third-party service | Free tier of 50 reviews a month; then per-review billing | Opt-in only. GitHub and GitLab only. |
-| Cursor Bugbot | Automatic or on demand from Cursor | Vendor-managed | Third-party service | Usage-billed, roughly $1 to $1.50 per run | Opt-in only. |
+| CodeRabbit | Automatic on PRs after installing the app | Vendor-managed | Third-party service | [Current plans and limits](https://www.coderabbit.ai/pricing) | Opt-in only. Also has a CLI (below). |
+| Greptile | Automatic on PRs after installing the app | Vendor-managed | Third-party service | [Current plans and limits](https://www.greptile.com/pricing) | Opt-in only. GitHub and GitLab only. |
+| Cursor Bugbot | Automatic or on demand from Cursor | Vendor-managed | Third-party service | [Current billing terms](https://cursor.com/docs/bugbot) | Opt-in only. |
 | GitHub Copilot code review | `gh pr edit <n> --add-reviewer @copilot` | GitHub-selected models | **Repository Actions minutes** on private repos (since 2026-06-01), plus Copilot usage | Copilot plan with code review | Explicit owner opt-in only. |
 | Claude Code GitHub Action (`anthropics/claude-code-action`) | Workflow on `pull_request` or an `@claude` comment | Anthropic | **Repository Actions minutes** | `ANTHROPIC_API_KEY`, or a Pro/Max subscription via `CLAUDE_CODE_OAUTH_TOKEN` | Explicit owner opt-in only. |
 | PR-Agent as a GitHub Action | Workflow on `pull_request` | Any LiteLLM model | **Repository Actions minutes** | Model provider plus Actions | Explicit owner opt-in only; prefer running the CLI locally. |
@@ -66,7 +67,7 @@ disabled, and treat empty output or a non-zero exit as a failed review.
 | Cursor CLI | `cursor-agent` | Configured model | documented | `cursor-agent -p --mode ask "<prompt>"`; print mode proposes but does not apply changes unless `--force`. |
 | Qwen Code | `qwen` | Alibaba (Qwen) by default | documented | `qwen -p "<prompt>" --approval-mode plan`, restricting MCP with `--allowed-mcp-server-names`. |
 | Kimi Code CLI | `kimi` | Moonshot | documented, **unsafe headless** | `--print` auto-approves every tool call; use only inside an external sandbox such as a read-only container. |
-| CodeRabbit CLI | `coderabbit` | Vendor-managed | documented | `coderabbit review` (plain, agent JSON, or interactive modes); sends the diff to CodeRabbit; free tier about 3 reviews an hour. |
+| CodeRabbit CLI | `coderabbit` | Vendor-managed | documented | `coderabbit review` (plain, agent JSON, or interactive modes); sends the diff to CodeRabbit; check [current plans and limits](https://www.coderabbit.ai/pricing). |
 
 Aider and similar edit-first agents are not listed: they have no read-only review mode.
 
@@ -90,13 +91,13 @@ failure, then add the exact command to `second-opinion` and mark it verified her
 - [Copilot code review consumes Actions minutes from 2026-06-01](https://github.blog/changelog/2026-04-27-github-copilot-code-review-will-start-consuming-github-actions-minutes-on-june-1-2026/)
 - [Request Copilot code review from GitHub CLI](https://github.blog/changelog/2026-03-11-request-copilot-code-review-from-github-cli/)
 - [Copilot CLI agentic code review](https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/agentic-code-review)
-- [Copilot CLI headless mode](https://www.devleader.ca/2026/07/27/running-github-copilot-cli-in-scripts-and-cicd-pipelines-headless-mode)
+- [Copilot CLI automation](https://docs.github.com/en/copilot/how-tos/copilot-cli/automate-copilot-cli/automate-with-actions)
 - [Claude Code GitHub Actions](https://code.claude.com/docs/en/github-actions)
 - [claude-code-action setup](https://github.com/anthropics/claude-code-action/blob/main/docs/setup.md)
 - [PR-Agent](https://github.com/The-PR-Agent/pr-agent) and [changing its model](https://docs.pr-agent.ai/usage-guide/changing_a_model/)
 - [LiteLLM MiniMax provider](https://docs.litellm.ai/docs/providers/minimax)
-- [CodeRabbit CLI](https://www.coderabbit.ai/cli)
-- [Greptile pricing (2026)](https://gitautoreview.com/compare/greptile-alternative)
+- [CodeRabbit CLI](https://www.coderabbit.ai/cli) and [pricing](https://www.coderabbit.ai/pricing)
+- [Greptile pricing](https://www.greptile.com/pricing)
 - [Cursor Bugbot](https://cursor.com/docs/bugbot) and [2026 pricing change](https://cursor.com/blog/may-2026-bugbot-changes)
 - [Gemini Code Assist consumer sunset](https://developers.google.com/gemini-code-assist/docs/deprecations/consumer-code-review)
 - [Codex code review on GitHub](https://learn.chatgpt.com/docs/third-party/github)
