@@ -14,6 +14,7 @@ Detect the repo's real toolchain (`package.json`, `pyproject.toml`, `Cargo.toml`
 2. **Lint / format check** (`eslint`, `biome`, `ruff`, `clippy`)
 3. **Targeted tests** covering the changed module(s) and regression cases
 4. **Build / smoke check** (full test suite before production deploys, schema changes, or shared-core edits)
+5. **Mandatory CVE check (non-discretionary):** Run `caphe-cve-check` (with `--if-stale 24` during routine work; forced before any deploy or lockfile update). Flag any High/Critical CVEs prominently—do not leave CVE checks to user discretion.
 
 If a check fails, inspect the exact error output, fix the root cause (never weaken tests or silence warnings to force green), and re-run.
 

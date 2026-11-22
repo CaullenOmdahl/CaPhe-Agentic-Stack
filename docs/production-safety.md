@@ -13,6 +13,17 @@ Every production repository should declare its exact check commands in its root 
 2. **Lint** (`eslint` / `biome` / `ruff` / `cargo clippy`).
 3. **Tests** (targeted tests during iteration; full suite before production deploy or shared-core changes).
 4. **Build / smoke check** (confirm production bundle compiles and starts cleanly).
+5. **Non-discretionary CVE check (`caphe-cve-check`)**: Runs automatically on lockfile changes, pre-push, and before deploys—never left to user discretion.
+
+## Behind-the-Scenes CVE Scanning (Zero LLM Tokens)
+`install.sh` installs `caphe-cve-check` to `~/.local/bin/caphe-cve-check`. It uses `osv-scanner` (universal: JS/TS, Python, PHP, Java/Maven/Gradle, Go, Rust, Dart, Ruby) or `trivy` when installed, falling back to native ecosystem audits (`pnpm`/`npm`/`composer`/`pip-audit`/`cargo-audit`/`govulncheck`).
+
+- **Fast caching:** `--if-stale 24` skips repeat scans within 24 hours unless a lockfile changed.
+- **Background schedule (optional):** Run a lightweight daily cron or `systemd --user` timer across active project directories so open CVEs are flagged even between coding sessions:
+  ```bash
+  # Example daily background sweep (zero AI tokens; alerts only on findings)
+  for d in ~/Projects/*/.git; do caphe-cve-check --repo "$(dirname "$d")" --if-stale 24 --quiet-ok; done
+  ```
 
 ## Compounding Engineering Rule
 When a production defect or framework misuse slips through:

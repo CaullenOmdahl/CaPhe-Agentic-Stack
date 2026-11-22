@@ -83,10 +83,12 @@ for sdir in "${SKILL_DIRS[@]}"; do
   done
 done
 
-# 4. Install tiered subagent definitions (explorer / worker / reviewer)
-mkdir -p "$HOME/.claude/agents" "$HOME/.codex/agents"
+# 4. Install tiered subagent definitions (explorer / worker / reviewer) & non-discretionary CVE checker
+mkdir -p "$HOME/.claude/agents" "$HOME/.codex/agents" "$HOME/.local/bin"
 cp "$SRC"/templates/claude/agents/*.md "$HOME/.claude/agents/"
 cp "$SRC"/templates/codex/agents/*.toml "$HOME/.codex/agents/"
+cp "$SRC/hooks/cve-check.sh" "$HOME/.local/bin/caphe-cve-check"
+chmod +x "$HOME/.local/bin/caphe-cve-check"
 
 # 5. Optional: merge non-destructive tiered settings into Claude & Codex configs
 if [ "$APPLY_SETTINGS" -eq 1 ]; then

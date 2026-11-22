@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 echo "1. Checking shell syntax..."
-bash -n install.sh hooks/pre-push-check.sh tests/test_v2.sh
+bash -n install.sh hooks/pre-push-check.sh hooks/cve-check.sh tests/test_v2.sh
 
 echo "2. Validating JSON, TOML, and skill frontmatter..."
 python3 - <<'PY'
@@ -62,6 +62,7 @@ test -f "$TMP/.claude/skills/git-github/SKILL.md"
 test -f "$TMP/.claude/agents/worker.md"
 test -f "$TMP/.codex/agents/explorer.toml"
 test -f "$TMP/.gemini/config/skills/ponytail/SKILL.md"
+test -x "$TMP/.local/bin/caphe-cve-check"
 
 python3 - "$TMP/.claude/settings.json" "$TMP/.codex/config.toml" <<'PY'
 import json, pathlib, tomllib, sys
@@ -77,9 +78,9 @@ assert ct["agents"]["max_concurrent_threads_per_session"] == 6
 print("OK: sandbox install + idempotency + non-destructive merge verified")
 PY
 
-echo "4. Testing pre-push hook with .caphe.toml..."
+echo "4. Testing pre-push hook & non-discretionary CVE check..."
 REPO_TMP="$TMP/repo"
-mkdir -p "$REPO_TMP"
+mkdir -p "$REPO_TMP" "$TMP/mockbin"
 git -C "$REPO_TMP" init -q
 cat > "$REPO_TMP/.caphe.toml" <<'EOF'
 [verify]
@@ -87,7 +88,25 @@ test = "echo pre-push-ran-ok"
 EOF
 OUT="$(cd "$REPO_TMP" && bash "$ROOT/hooks/pre-push-check.sh")"
 echo "$OUT" | grep -q "pre-push-ran-ok"
-echo "OK: pre-push hook verified"
+
+# Test CVE checker with a mocked osv-scanner binary (clean -> cached -> flagged)
+printf '{"lockfileVersion": 3}\n' > "$REPO_TMP/package-lock.json"
+cat > "$TMP/mockbin/osv-scanner" <<'EOF'
+#!/usr/bin/env bash
+if [ "${MOCK_CVE_FAIL:-0}" = "1" ]; then
+  echo "CVE-2026-99999 CRITICAL example-pkg 1.0.0 -> fix 1.0.1"
+  exit 1
+fi
+exit 0
+EOF
+chmod +x "$TMP/mockbin/osv-scanner"
+PATH="$TMP/mockbin:$PATH" XDG_CACHE_HOME="$TMP/cache" bash "$ROOT/hooks/cve-check.sh" --repo "$REPO_TMP" --if-stale 24 | grep -q "OK"
+PATH="$TMP/mockbin:$PATH" XDG_CACHE_HOME="$TMP/cache" bash "$ROOT/hooks/cve-check.sh" --repo "$REPO_TMP" --if-stale 24 | grep -q "cached"
+if PATH="$TMP/mockbin:$PATH" XDG_CACHE_HOME="$TMP/cache" MOCK_CVE_FAIL=1 bash "$ROOT/hooks/cve-check.sh" --repo "$REPO_TMP" >/dev/null 2>&1; then
+  echo "expected cve-check to fail when CVE is present" >&2
+  exit 1
+fi
+echo "OK: pre-push hook & CVE check verified"
 
 echo "5. Running public-safety scan..."
 failed=0

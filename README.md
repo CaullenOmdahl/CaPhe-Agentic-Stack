@@ -17,7 +17,7 @@ Modern frontier models absorb heavy orchestration glue natively. v2 strips ~10,5
   - [`intended-behavior`](skills/intended-behavior/SKILL.md) — brief UX/API contract before non-trivial user-facing work
   - [`session-hygiene`](skills/session-hygiene/SKILL.md) — tiered subagents, `/clear` handoffs, and zero frontier polling
 - **Native model tiering** (`templates/`): Ready-to-use configs and `explorer` / `worker` / `reviewer` agent profiles so frontier orchestrators stop spawning frontier subagents.
-- **Zero `Stop` hooks, minimal MCPs**: Deterministic verification runs via native commands and opt-in [`hooks/pre-push-check.sh`](hooks/pre-push-check.sh)—never blocking every turn.
+- **Zero `Stop` hooks, minimal MCPs**: Deterministic verification runs via native commands, non-discretionary CVE scanning ([`hooks/cve-check.sh`](hooks/cve-check.sh) installed as `caphe-cve-check`), and opt-in [`hooks/pre-push-check.sh`](hooks/pre-push-check.sh)—never blocking every turn.
 - **Ecosystem-ready** ([docs/token-stack.md](docs/token-stack.md)): Pairs cleanly with **Ponytail**, **RTK**, and optional **Caveman**.
 
 ## Quick Install (Machine-Global)

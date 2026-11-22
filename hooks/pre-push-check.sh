@@ -11,6 +11,13 @@ if [ "${CAPHE_SKIP_PRE_PUSH:-0}" = "1" ]; then
   exit 0
 fi
 
+# Non-discretionary CVE check (cached 24h when lockfiles are unchanged; instant re-scan on lockfile edit)
+if command -v caphe-cve-check >/dev/null 2>&1; then
+  caphe-cve-check --if-stale 24
+elif [ -x "$(dirname "$0")/cve-check.sh" ]; then
+  "$(dirname "$0")/cve-check.sh" --if-stale 24
+fi
+
 if [ -f ".caphe.toml" ] || [ -f ".caphe.local.toml" ]; then
   if command -v python3 >/dev/null 2>&1; then
     mapfile -t CMDS < <(python3 - <<'PY'

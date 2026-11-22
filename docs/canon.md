@@ -15,6 +15,7 @@ Single always-loaded rule set (~55 lines). Keep this file static for prompt cach
 
 ## 3. Production Verification
 - **Oracles over prose:** Never claim a fix works from reading code alone. Run the repo's real checks in order: **typecheck -> lint -> targeted tests -> build/smoke check** (full suite before prod deploy or shared-core changes).
+- **Mandatory CVE check (non-discretionary):** Run `caphe-cve-check --if-stale 24` (or forced on lockfile changes and before any production deploy). Automatically flag any High/Critical CVEs to the user—never skip or silently deploy past open CVEs.
 - **Check real artifacts:** For UI, API, or CLI behavior changes, inspect the rendered output or live response once before closing.
 - **Diff audit before ship:** Inspect `git diff` for config/env drift, missing migrations, auth/secret leaks, error-path gaps, and accidental deletions.
 
