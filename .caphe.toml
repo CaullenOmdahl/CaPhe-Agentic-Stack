@@ -1,0 +1,29 @@
+# CaPhe Agentic Stack v2 — repo-specific settings
+schema_version = 2
+
+[repo]
+visibility = "public"
+production_tier = "standard"
+
+[git]
+push_policy = "ask"
+pr_policy = "ask"
+allow_merge = false
+github_actions = "manual_only"
+
+[verify]
+package_manager = ""
+typecheck = ""
+lint = ""
+test = "bash tests/test_v2.sh"
+build = ""
+require_diff_review = true
+
+[features]
+ponytail = true
+verify_ship = true
+git_github = true
+intended_behavior = false
+session_hygiene = true
+caveman_terse_output = false
+pre_push_hook = false

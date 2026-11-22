@@ -1,0 +1,4 @@
+name = "reviewer"
+description = "Read-only production-risk, security, and edge-case diff audit."
+reasoning_effort = "high"
+sandbox_mode = "read-only"

@@ -1,4 +1,0 @@
-interface:
-  display_name: "GitHub Review Certify Loop"
-  short_description: "Remote-first review with cooldown and local fallback"
-  default_prompt: "Use $gh-review-certify-loop for one remote-first review with recorded cooldowns and local fallback; merge only when explicitly authorized."

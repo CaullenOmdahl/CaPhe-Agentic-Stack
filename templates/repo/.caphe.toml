@@ -1,0 +1,30 @@
+# Per-repo CaPhe Agentic Stack settings (committed; safe for public repos).
+# Optional personal/machine overrides go in gitignored `.caphe.local.toml`.
+schema_version = 2
+
+[repo]
+visibility = "private"          # "public" | "private"
+production_tier = "strict"      # "strict" | "standard" | "prototype"
+
+[git]
+push_policy = "ask"             # "ask" | "branch_auto" | "manual_only"
+pr_policy = "ask"               # "ask" | "auto_draft" | "manual_only"
+allow_merge = false             # keep false unless repo explicitly authorizes agent merges
+github_actions = "disabled"     # "disabled" (no paid CI) | "manual_only" | "auto"
+
+[verify]
+package_manager = ""            # e.g. "pnpm" | "bun" | "uv" | "cargo" | "flutter"
+typecheck = ""                  # e.g. "pnpm typecheck"
+lint = ""                       # e.g. "pnpm lint"
+test = ""                       # e.g. "pnpm test"
+build = ""                      # e.g. "pnpm build"
+require_diff_review = true      # run read-only frontier reviewer before ship on risky/prod diffs
+
+[features]
+ponytail = true                 # framework-first minimalism ladder
+verify_ship = true              # automated verification gate
+git_github = true               # git/gh CLI workflow rules
+intended_behavior = true        # compact UX/API contract on non-trivial user-facing changes
+session_hygiene = true          # tiered subagents + fresh handoffs + no frontier polling
+caveman_terse_output = false    # ultra-terse replies (default: concise peer tone)
+pre_push_hook = false           # opt-in local git pre-push verification hook
