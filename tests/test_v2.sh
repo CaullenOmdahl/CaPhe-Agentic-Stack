@@ -9,7 +9,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-unset XDG_CONFIG_HOME XDG_STATE_HOME XDG_CACHE_HOME ANTHROPIC_API_KEY OPENAI_API_KEY GEMINI_API_KEY GOOGLE_API_KEY CAPHE_ANTHROPIC_BASE_URL CAPHE_OPENAI_BASE_URL CAPHE_GEMINI_BASE_URL
+unset XDG_CONFIG_HOME XDG_STATE_HOME XDG_CACHE_HOME ANTHROPIC_API_KEY OPENAI_API_KEY GEMINI_API_KEY GOOGLE_API_KEY CAPHE_CATALOG_URL CAPHE_ANTHROPIC_BASE_URL CAPHE_OPENAI_BASE_URL CAPHE_GEMINI_BASE_URL
 
 echo "1. Checking shell syntax..."
 bash -n install.sh hooks/pre-push-check.sh hooks/cve-check.sh tests/test_v2.sh
@@ -166,6 +166,34 @@ class H(http.server.BaseHTTPRequestHandler):
             if q.get("pageToken") == ["p2"]:
                 return self.reply(200, {"models": GEMINI[2:]})
             return self.reply(200, {"models": GEMINI[:2], "nextPageToken": "p2"})
+        if url.path == "/catalog/api.json":
+            if self.headers.get("Authorization") or self.headers.get("x-api-key"):
+                return self.reply(400, {"error": "catalog must be fetched without credentials"})
+            if self.headers.get("User-Agent", "").startswith("Python-urllib"):
+                return self.reply(403, {"error": "default Python user agent blocked (as the real catalog does)"})
+            text = {"output": ["text"]}
+            return self.reply(200, {
+                "anthropic": {"models": {
+                    "cat-anth-1": {"id": "cat-anth-1", "name": "Cat Anth 1", "tool_call": True, "modalities": text, "release_date": "2026-01-01"},
+                    "cat-anth-old": {"id": "cat-anth-old", "name": "Old", "tool_call": True, "modalities": text, "status": "deprecated"},
+                }},
+                "openai": {"models": {
+                    "cat-oai-1": {"id": "cat-oai-1", "name": "Cat OAI", "tool_call": True, "modalities": text},
+                    "cat-oai-image": {"id": "cat-oai-image", "name": "Img", "tool_call": False, "modalities": {"output": ["image"]}},
+                }},
+                "moonshotai": {"models": {
+                    "cat-kimi-1": {"id": "cat-kimi-1", "name": "Cat Kimi", "tool_call": True, "modalities": text},
+                    "cat-kimi-chat": {"id": "cat-kimi-chat", "name": "No tools", "tool_call": False, "modalities": text},
+                }},
+                "acme": {"models": {
+                    "acme-1": {"id": "acme-1", "name": "Acme\u001b[31m\nEvil", "tool_call": True, "modalities": text, "release_date": 20260101},
+                    "acme-str-mod": {"id": "acme-str-mod", "tool_call": True, "modalities": {"output": "text"}},
+                    "acme-bad-id": {"id": "bad id; rm -rf", "tool_call": True, "modalities": text},
+                    "acme-notdict": "garbage",
+                    "acme-truthy": {"id": "acme-truthy", "tool_call": "yes", "modalities": text},
+                }},
+                "broken": {"models": ["not", "a", "dict"]},
+            })
         self.reply(404, {"error": "not found"})
 
 srv = http.server.HTTPServer(("127.0.0.1", 0), H)
@@ -179,20 +207,41 @@ for _ in $(seq 50); do [ -s "$MT/port" ] && break; read -r -t 0.1 <> <(:) || tru
 PORT="$(cat "$MT/port")"
 
 export XDG_CONFIG_HOME="$MT/config" XDG_STATE_HOME="$MT/state"
-export CAPHE_ANTHROPIC_BASE_URL="http://127.0.0.1:$PORT/anthropic" CAPHE_OPENAI_BASE_URL="http://127.0.0.1:$PORT/openai" CAPHE_GEMINI_BASE_URL="http://127.0.0.1:$PORT/gemini"
+export CAPHE_CATALOG_URL="http://127.0.0.1:$PORT/catalog/api.json" CAPHE_ANTHROPIC_BASE_URL="http://127.0.0.1:$PORT/anthropic" CAPHE_OPENAI_BASE_URL="http://127.0.0.1:$PORT/openai" CAPHE_GEMINI_BASE_URL="http://127.0.0.1:$PORT/gemini"
 CM=(python3 "$ROOT/bin/caphe-models")
 
-# No keys -> every provider skipped, nothing stored, exit 0
-OUT="$("${CM[@]}" fetch)"
-test "$(grep -c 'skipped' <<<"$OUT")" -eq 3
-test ! -e "$MT/state/caphe/models"
+# No keys -> keyless catalog fallback (best effort), filtered; providers absent from the catalog fail;
+# unknown clients need --catalog-provider. Uses its own state dir so later tests start clean.
+XDG_STATE_HOME="$MT/catstate" "${CM[@]}" fetch > "$MT/out" 2>&1   # exit 0: absent providers are skipped
+grep -q "claude: 1 models from models.dev catalog (best effort)" "$MT/out"
+grep -q "kimi: 1 models from models.dev catalog" "$MT/out"
+grep -q "gemini: skipped (.*not in catalog" "$MT/out"
+python3 - "$MT/catstate/caphe/models" <<'PY'
+import json, pathlib, sys
+d = pathlib.Path(sys.argv[1])
+rec = lambda c: json.loads((d / f"{c}.json").read_text())
+assert [m["id"] for m in rec("claude")["models"]] == ["cat-anth-1"] and rec("claude")["best_effort"] is True
+assert [m["id"] for m in rec("codex")["models"]] == ["cat-oai-1"]
+assert [m["id"] for m in rec("kimi")["models"]] == ["cat-kimi-1"]
+PY
+XDG_STATE_HOME="$MT/catstate" "${CM[@]}" fetch myharness | grep -q "skipped (no catalog provider known"
+XDG_STATE_HOME="$MT/catstate" "${CM[@]}" fetch myharness --catalog-provider acme | grep -q "myharness: 1 models"
+XDG_STATE_HOME="$MT/catstate" "${CM[@]}" list myharness > "$MT/out"
+grep -q "acme-1  (Acme" "$MT/out"
+if LC_ALL=C grep -q $'\x1b' "$MT/out"; then echo "control characters from catalog reached list output" >&2; exit 1; fi
+test "$(grep -c '^  ' "$MT/out")" -eq 1   # string modalities, bad id, non-dict, truthy tool_call all skipped
+XDG_STATE_HOME="$MT/catstate" "${CM[@]}" fetch odd --catalog-provider broken | grep -q "odd: 0 models"
+rc=0; XDG_STATE_HOME="$MT/catstate" "${CM[@]}" fetch odd --catalog-provider acme --source api > /dev/null 2>&1 || rc=$?; test "$rc" -eq 2
+XDG_STATE_HOME="$MT/catstate" "${CM[@]}" list claude | grep -q "cat-anth-1  (Cat Anth 1, 2026-01-01)"
+# A key wins over the catalog
+ANTHROPIC_API_KEY=test-anth XDG_STATE_HOME="$MT/catstate" "${CM[@]}" fetch claude | grep -q "3 models from Anthropic API"
 
 # Wrong key -> FAILED, exit 1, nothing stored
 rc=0; ANTHROPIC_API_KEY=wrong "${CM[@]}" fetch claude > "$MT/out" 2>&1 || rc=$?
 test "$rc" -eq 1; grep -q "claude: FAILED" "$MT/out"; test ! -e "$MT/state/caphe/models/claude.json"
 
 # Real fetch: pagination followed, deprecated/non-generative filtered, Gemini prefix stripped, keys never stored
-ANTHROPIC_API_KEY=test-anth OPENAI_API_KEY=test-oai GEMINI_API_KEY=test-gem "${CM[@]}" fetch > "$MT/out"
+ANTHROPIC_API_KEY=test-anth OPENAI_API_KEY=test-oai GEMINI_API_KEY=test-gem "${CM[@]}" fetch claude codex gemini > "$MT/out"
 python3 - "$MT/state/caphe/models" <<'PY'
 import json, pathlib, sys
 d = pathlib.Path(sys.argv[1])
@@ -217,9 +266,42 @@ test -z "$("${CM[@]}" get gemini fast)"
 "${CM[@]}" set kimi fast kimi-alias > /dev/null 2> "$MT/err"; grep -q "normal on a subscription" "$MT/err"
 test "$("${CM[@]}" get kimi fast)" = "kimi-alias"
 "${CM[@]}" show | grep -qE '^kimi +fast +kimi-alias'
-"${CM[@]}" fetch kimi | grep -q "no model-list API built in"
+"${CM[@]}" fetch --source api kimi | grep -q "skipped (no API key set"
 rc=0; "${CM[@]}" set 'Bad Name' fast x > "$MT/out" 2>&1 || rc=$?; test "$rc" -eq 2
 test "$("${CM[@]}" get claude fast)" = "anth-a"   # other clients' tiers survive the rewrite
+
+# Account access: mark-unavailable hides the model, clears tiers naming it, blocks set, and wins over repo overrides
+UNREPO="$MT/unrepo"; mkdir -p "$UNREPO"
+printf '[models.claude]\nstandard = "anth-c"\n' > "$UNREPO/.caphe.toml"
+"${CM[@]}" set claude frontier anth-c >/dev/null 2>&1
+"${CM[@]}" mark-unavailable claude anth-c --reason "404 not_found_error: model not available" --repo "$UNREPO" > "$MT/out"
+grep -q "cleared tier(s) frontier" "$MT/out"; grep -q "still names it" "$MT/out"
+test -z "$("${CM[@]}" get claude frontier)"
+test -z "$("${CM[@]}" get claude standard --repo "$UNREPO")"          # repo override ignored while unavailable
+"${CM[@]}" show --repo "$UNREPO" | grep -E '^claude +standard' | grep -q "unavailable (anth-c"
+if "${CM[@]}" list claude | grep -qE '^  anth-c '; then echo "unavailable model still listed as usable" >&2; exit 1; fi
+"${CM[@]}" list claude | grep -q "x anth-c  (unavailable to this account: 404 not_found_error"
+rc=0; "${CM[@]}" set claude frontier anth-c > "$MT/out" 2>&1 || rc=$?; test "$rc" -eq 2; grep -q "mark-available" "$MT/out"
+ANTHROPIC_API_KEY=test-anth "${CM[@]}" fetch claude | grep -q "1 marked unavailable, hidden"   # re-fetch doesn't resurrect it
+"${CM[@]}" mark-available claude anth-c | grep -q "available again"
+# Damaged unavailable.json never breaks get/show (or installs); wrong nested types are ignored, not substring-matched
+UJ="$MT/state/caphe/models/unavailable.json"; cp "$UJ" "$MT/unavail.bak"
+printf '{"claude": {"anth-c": {' > "$UJ"
+test "$("${CM[@]}" get claude fast 2>"$MT/err")" = "anth-a"; grep -q "ignoring unreadable" "$MT/err"
+printf '{"claude": "xx-anth-a-long", "codex": ["oai-x"], "kimi": {"x": "notdict"}}' > "$UJ"
+test "$("${CM[@]}" get claude fast)" = "anth-a"   # a string value must not substring-match the tier
+"${CM[@]}" show >/dev/null; "${CM[@]}" list claude >/dev/null
+cp "$MT/unavail.bak" "$UJ"
+"${CM[@]}" mark-unavailable codex oai-y --reason $'403\nline two\x1b[0m' > /dev/null
+python3 - "$UJ" <<'PY'
+import json, sys
+r = json.load(open(sys.argv[1]))["codex"]["oai-y"]["reason"]
+assert "\n" not in r and "\x1b" not in r and r.startswith("403"), r
+PY
+"${CM[@]}" mark-available codex oai-y > /dev/null
+
+"${CM[@]}" set claude frontier anth-c >/dev/null 2>&1
+test "$("${CM[@]}" get claude frontier)" = "anth-c"
 
 # Precedence: .caphe.local.toml > .caphe.toml > global
 RP="$MT/repo"; mkdir -p "$RP"
@@ -287,7 +369,7 @@ test ! -d "$MT/state/caphe/backups"
 
 kill "$MOCK_PID" 2>/dev/null || true
 trap 'rm -rf "$TMP"' EXIT
-unset XDG_CONFIG_HOME XDG_STATE_HOME CAPHE_ANTHROPIC_BASE_URL CAPHE_OPENAI_BASE_URL CAPHE_GEMINI_BASE_URL
+unset XDG_CONFIG_HOME XDG_STATE_HOME CAPHE_CATALOG_URL CAPHE_ANTHROPIC_BASE_URL CAPHE_OPENAI_BASE_URL CAPHE_GEMINI_BASE_URL
 echo "OK: model lists fetched & filtered, tier precedence, rendering with tiers set/unset, re-render on change"
 
 echo "4. Testing pre-push hook & non-discretionary CVE check..."

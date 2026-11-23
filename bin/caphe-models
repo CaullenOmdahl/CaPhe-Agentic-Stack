@@ -3,14 +3,17 @@
 
 The stack never names models. Agent roles map to three tiers (fast, standard,
 frontier); you map each tier to a model per client, and the installer renders it
-into the agent profiles. No API key is needed: on a subscription, set tiers to the
-model aliases or IDs your client accepts. A key only adds `fetch` for exact IDs.
+into the agent profiles. No API key is needed: `fetch` uses the public models.dev
+catalog (best effort) unless a provider key is set, and aliases always work too.
 
   caphe-models set <client> <tier> <value>  map a tier to a model alias or ID
   caphe-models get <client> <tier>          print the resolved value (empty if unset)
   caphe-models show                         table of every client x tier and its source
-  caphe-models fetch [client...]            optional: live model lists for clients with an API key
-  caphe-models list [client]                show fetched model IDs
+  caphe-models fetch [client...]            model lists: provider API with a key, else models.dev catalog
+  caphe-models list [client]                show fetched model IDs (and ones marked unavailable)
+  caphe-models mark-unavailable <client> <model> [--reason TEXT]
+                                            this account can't use it: hide it, clear tiers naming it
+  caphe-models mark-available <client> <model>  undo mark-unavailable
   caphe-models render <client> <template>   fill {{tier:NAME}} placeholders (installer use)
 
 Clients: claude, codex, gemini are built in (gemini also covers Antigravity); any other
@@ -27,6 +30,7 @@ import json
 import os
 import pathlib
 import re
+import shlex
 import sys
 import tomllib
 import urllib.error
@@ -50,6 +54,19 @@ def xdg(var: str, default: str) -> pathlib.Path:
 
 CONFIG = xdg("XDG_CONFIG_HOME", ".config") / "caphe" / "models.toml"
 STATE = xdg("XDG_STATE_HOME", ".local/state") / "caphe" / "models"
+
+
+def atomic_write(path: pathlib.Path, text: str) -> None:
+    """Write via temp file + rename, so concurrent agents never leave a torn file behind."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def clean(value, limit: int = 100) -> str:
+    """Untrusted text (catalog fields, error messages): printable, single line, bounded."""
+    return "".join(ch if ch.isprintable() else " " for ch in str(value or "")).strip()[:limit]
 
 
 def die(msg: str, code: int = 2) -> None:
@@ -110,6 +127,8 @@ def resolve(client: str, tier: str, repo: str | None) -> tuple[str, str]:
             override = checked(table(models, client, path).get(tier), f"{path} [models.{client}].{tier}")
             if override:
                 value, source = str(override), str(path)
+    if value and value in unavailable().get(client, {}):
+        return "", f"unavailable ({value}, from {source})"
     return value, (source if value else "unset")
 
 
@@ -123,8 +142,7 @@ def write_config(tiers: dict) -> None:
         lines.append(f"\n[{client}]")
         for tier in TIERS:
             lines.append(f"{tier} = {json.dumps(tiers[client][tier])}")
-    CONFIG.parent.mkdir(parents=True, exist_ok=True)
-    CONFIG.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    atomic_write(CONFIG, "\n".join(lines) + "\n")
 
 
 # ---------------------------------------------------------------- fetch
@@ -140,7 +158,8 @@ OPENER = urllib.request.build_opener(NoRedirect)
 
 
 def http_json(url: str, headers: dict) -> dict:
-    req = urllib.request.Request(url, headers={"Accept": "application/json", **headers})
+    # Generic client name only (no user details); some hosts reject Python's default User-Agent.
+    req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "caphe-models/2", **headers})
     with OPENER.open(req, timeout=30) as resp:
         return json.load(resp)
 
@@ -190,66 +209,155 @@ def fetch_gemini(key: str) -> list[dict]:
 
 
 PROVIDERS = {
-    "claude": ("Anthropic", ("ANTHROPIC_API_KEY",), fetch_claude),
-    "codex": ("OpenAI", ("OPENAI_API_KEY",), fetch_codex),
-    "gemini": ("Google Gemini", ("GEMINI_API_KEY", "GOOGLE_API_KEY"), fetch_gemini),
+    "claude": ("Anthropic API", ("ANTHROPIC_API_KEY",), fetch_claude),
+    "codex": ("OpenAI API", ("OPENAI_API_KEY",), fetch_codex),
+    "gemini": ("Gemini API", ("GEMINI_API_KEY", "GOOGLE_API_KEY"), fetch_gemini),
 }
+
+# Keyless fallback: the public models.dev catalog. Best effort: it lists what a provider offers, not what
+# your account or subscription can use; mark-unavailable records what the account actually can't use.
+CATALOG_URL = os.environ.get("CAPHE_CATALOG_URL", "https://models.dev/api.json")
+CATALOG_SOURCE = "models.dev catalog (best effort)"
+CATALOG_PROVIDER = {"claude": "anthropic", "codex": "openai", "gemini": "google",
+                    "deepseek": "deepseek", "kimi": "moonshotai", "minimax": "minimax"}
+_catalog: dict | Exception | None = None
+
+
+def catalog() -> dict:
+    """Download the catalog once per run; a failure is remembered rather than retried for every client."""
+    global _catalog
+    if _catalog is None:
+        try:
+            data = http_json(CATALOG_URL, {})
+            _catalog = data if isinstance(data, dict) else ValueError("catalog is not a JSON object")
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            _catalog = exc
+    if isinstance(_catalog, Exception):
+        raise _catalog
+    return _catalog
+
+
+def fetch_catalog(provider: str) -> list[dict]:
+    entry = catalog().get(provider)
+    if not isinstance(entry, dict):
+        raise LookupError(f"provider {provider!r} not in catalog")
+    raw = entry.get("models")
+    models = []
+    for mid, m in (raw.items() if isinstance(raw, dict) else ()):
+        if not isinstance(m, dict):
+            continue
+        output = (m.get("modalities") or {}).get("output") if isinstance(m.get("modalities"), dict) else None
+        # Coding agents need tool calls and text output; skip deprecated entries.
+        if m.get("status") == "deprecated" or m.get("tool_call") is not True:
+            continue
+        if not isinstance(output, list) or "text" not in output:
+            continue
+        model_id = str(m.get("id") or mid)
+        if len(model_id) > 128 or not VALID_VALUE.match(model_id):
+            continue
+        models.append({"id": model_id, "display_name": clean(m.get("name")),
+                       "release_date": clean(m.get("release_date"), 32)})
+    return models
 
 
 def stored(client: str) -> list[dict] | None:
     path = STATE / f"{client}.json"
     if not path.is_file():
         return None
-    return json.loads(path.read_text(encoding="utf-8")).get("models", [])
+    gone = unavailable().get(client, {})
+    return [m for m in json.loads(path.read_text(encoding="utf-8")).get("models", []) if m["id"] not in gone]
+
+
+UNAVAILABLE = STATE / "unavailable.json"
+
+
+def unavailable() -> dict:
+    """{client: {model: {reason, observed_at}}}; a damaged file is reported and ignored, never fatal."""
+    if not UNAVAILABLE.is_file():
+        return {}
+    try:
+        data = json.loads(UNAVAILABLE.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        print(f"caphe-models: ignoring unreadable {UNAVAILABLE} ({type(exc).__name__}); "
+              "fix or delete it to restore marks", file=sys.stderr)
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {c: {m: i for m, i in v.items() if isinstance(i, dict)}
+            for c, v in data.items() if isinstance(c, str) and isinstance(v, dict)}
+
+
+def save_unavailable(data: dict) -> None:
+    atomic_write(UNAVAILABLE, json.dumps(data, indent=2, sort_keys=True) + "\n")
+
+
+def default_fetch_clients() -> list[str]:
+    return list(dict.fromkeys([*CLIENTS, *CATALOG_PROVIDER, *global_tiers()]))
 
 
 def cmd_fetch(args) -> int:
     failed = False
-    for client in args.clients or CLIENTS:
-        if client not in PROVIDERS:
-            print(f"{client}: no model-list API built in; set its tiers to the model IDs or aliases the client "
-                  f"accepts (`caphe-models set {client} <tier> <model>`)")
-            continue
-        vendor, key_vars, fetch = PROVIDERS[client]
-        key = next((os.environ[v] for v in key_vars if os.environ.get(v)), None)
-        if not key:
-            print(f"{client}: skipped (no {' or '.join(key_vars)}; optional). Signed in with a subscription? "
-                  f"No key needed: set tiers to the model aliases or IDs the client accepts (its --model option); "
-                  f"aliases track the client's newest models.")
+    clients = args.clients or default_fetch_clients()
+    if args.catalog_provider and (len(clients) != 1 or args.source == "api"):
+        die("--catalog-provider needs exactly one client and cannot be combined with --source api")
+    for client in clients:
+        api = PROVIDERS.get(client)
+        key = next((os.environ[v] for v in api[1] if os.environ.get(v)), None) if api else None
+        provider = args.catalog_provider or CATALOG_PROVIDER.get(client)
+        if key and args.source in ("auto", "api"):
+            source, fetch = api[0], (lambda: api[2](key))
+        elif args.source in ("auto", "catalog") and provider:
+            source, fetch = CATALOG_SOURCE, (lambda: fetch_catalog(provider))
+        else:
+            why = "no API key set" if args.source == "api" else "no catalog provider known"
+            print(f"{client}: skipped ({why}; use --catalog-provider <id> or set tiers directly)")
             continue
         try:
-            models = fetch(key)
-        except (urllib.error.URLError, OSError, ValueError, KeyError) as exc:
-            reason = getattr(exc, "code", None) or getattr(exc, "reason", None) or type(exc).__name__
-            print(f"{client}: FAILED to fetch {vendor} models ({reason})", file=sys.stderr)
+            models = fetch()
+        except LookupError as exc:  # provider absent from the catalog: nothing to list, not an error
+            print(f"{client}: skipped ({exc}; set its tiers to aliases or IDs directly)")
+            continue
+        except (urllib.error.URLError, OSError, ValueError, TypeError, AttributeError) as exc:
+            reason = getattr(exc, "code", None) or getattr(exc, "reason", None) or exc
+            print(f"{client}: FAILED to fetch from {source} ({reason})", file=sys.stderr)
             failed = True
             continue
         STATE.mkdir(parents=True, exist_ok=True)
         record = {
             "fetched_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-            "source": vendor,
+            "source": source,
+            "best_effort": source == CATALOG_SOURCE,
             "models": sorted(models, key=lambda m: m["id"]),
         }
-        (STATE / f"{client}.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
-        print(f"{client}: {len(models)} models from {vendor}")
+        atomic_write(STATE / f"{client}.json", json.dumps(record, indent=2) + "\n")
+        hidden = len(unavailable().get(client, {}))
+        print(f"{client}: {len(models)} models from {source}" + (f" ({hidden} marked unavailable, hidden)" if hidden else ""))
     return 1 if failed else 0
 
 
 # ---------------------------------------------------------------- commands
 
 def cmd_list(args) -> int:
-    for client in [args.client] if args.client else CLIENTS:
+    for client in [args.client] if args.client else default_fetch_clients():
         models = stored(client)
-        hint = "  (not fetched: needs an API key; optional on a subscription)" if client in PROVIDERS else \
-            "  (no model-list API built in; set IDs or aliases directly)"
-        print(f"[{client}]" + ("" if models is not None else hint))
+        path = STATE / f"{client}.json"
+        source = json.loads(path.read_text(encoding="utf-8")).get("source", "") if path.is_file() else ""
+        hint = "  (not fetched: run `caphe-models fetch`)" if client in CATALOG_PROVIDER or client in PROVIDERS \
+            else "  (no list source known: `caphe-models fetch " + client + " --catalog-provider <id>`)"
+        print(f"[{client}]" + (f"  from {source}" if models is not None else hint))
         for m in models or []:
-            print(f"  {m['id']}" + (f"  ({m['display_name']})" if m.get("display_name") else ""))
+            extra = ", ".join(x for x in (m.get("display_name"), m.get("release_date")) if x)
+            print(f"  {m['id']}" + (f"  ({extra})" if extra else ""))
+        for mid, info in sorted(unavailable().get(client, {}).items()):
+            print(f"  x {mid}  (unavailable to this account: {info.get('reason', 'no reason given')})")
     return 0
 
 
 def cmd_set(args) -> int:
     checked(args.value, "value")
+    if args.value in unavailable().get(args.client, {}):
+        die(f"'{args.value}' is marked unavailable for {args.client}; "
+            f"run `caphe-models mark-available {args.client} {args.value}` if that changed")
     tiers = global_tiers()
     known = stored(args.client)
     if known is None:
@@ -261,6 +369,57 @@ def cmd_set(args) -> int:
     tiers.setdefault(args.client, {t: "" for t in TIERS})[args.tier] = args.value
     write_config(tiers)
     print(f"{args.client}.{args.tier} = {args.value}")
+    return 0
+
+
+def installer_hint() -> str:
+    src = STATE.parent / "install-source"
+    if src.is_file():
+        script = pathlib.Path(src.read_text(encoding="utf-8").strip()) / "install.sh"
+        if script.is_file():
+            return f"re-render agent profiles: {shlex.quote(str(script))}"
+    return "re-run install.sh from your CaPhe checkout to re-render agent profiles"
+
+
+def cmd_mark_unavailable(args) -> int:
+    checked(args.model, "model")
+    data = unavailable()
+    data.setdefault(args.client, {})[args.model] = {
+        "reason": clean(args.reason, 200),
+        "observed_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+    }
+    save_unavailable(data)
+    print(f"{args.client}: marked {args.model} unavailable to this account (hidden from list, refused by set)")
+    tiers, cleared = global_tiers(), []
+    for tier in TIERS:
+        if tiers.get(args.client, {}).get(tier) == args.model:
+            tiers[args.client][tier] = ""
+            cleared.append(tier)
+    if cleared:
+        write_config(tiers)
+        print(f"{args.client}: cleared tier(s) {', '.join(cleared)}; they fall back to the client default "
+              f"until you `caphe-models set` a replacement")
+    if args.repo:
+        for name in (".caphe.toml", ".caphe.local.toml"):
+            path = pathlib.Path(args.repo) / name
+            models = table(load_toml(path), "models", path)
+            for tier, value in table(models, args.client, path).items():
+                if value == args.model:
+                    print(f"{path}: [models.{args.client}].{tier} still names it (ignored until edited)")
+    if cleared:
+        print(installer_hint())
+    return 0
+
+
+def cmd_mark_available(args) -> int:
+    data = unavailable()
+    if data.get(args.client, {}).pop(args.model, None) is None:
+        print(f"{args.client}: {args.model} was not marked unavailable")
+        return 0
+    if not data[args.client]:
+        del data[args.client]
+    save_unavailable(data)
+    print(f"{args.client}: {args.model} is available again")
     return 0
 
 
@@ -289,7 +448,11 @@ def cmd_render(args) -> int:
         bad = [n for n in names if n not in TIERS]
         if bad:
             die(f"{args.template}: unknown tier placeholder(s): {', '.join(bad)}")
-        values = {n: resolve(args.client, n, args.repo)[0] for n in names}
+        resolved = {n: resolve(args.client, n, args.repo) for n in names}
+        for n, (value, source) in resolved.items():
+            if not value and source.startswith("unavailable"):
+                print(f"caphe-models: {args.client}.{n} is {source}; rendering without a model", file=sys.stderr)
+        values = {n: v for n, (v, _) in resolved.items()}
         if any(not v for v in values.values()):
             continue  # unset tier: drop the line so the client falls back to its default
         out.append(PLACEHOLDER.sub(lambda m: values[m.group(1)], line))
@@ -301,8 +464,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(prog="caphe-models", description=__doc__.split("\n\n")[1],
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
-    p = sub.add_parser("fetch", help="fetch model lists from provider APIs")
+    p = sub.add_parser("fetch", help="fetch model lists (provider API with a key, else the public catalog)")
     p.add_argument("clients", nargs="*", type=client_name)
+    p.add_argument("--source", choices=("auto", "api", "catalog"), default="auto")
+    p.add_argument("--catalog-provider", help="models.dev provider id for a client without a built-in mapping")
     p = sub.add_parser("list", help="show fetched model IDs")
     p.add_argument("client", nargs="?", type=client_name)
     p = sub.add_parser("set", help="map a tier to a model")
@@ -315,13 +480,22 @@ def main() -> int:
             p.add_argument("client", type=client_name)
             p.add_argument("tier", choices=TIERS)
         p.add_argument("--repo")
+    p = sub.add_parser("mark-unavailable", help="record that this account cannot use a model")
+    p.add_argument("client", type=client_name)
+    p.add_argument("model")
+    p.add_argument("--reason", help="short error text, e.g. the HTTP status and message")
+    p.add_argument("--repo", help="also report repo overrides that still name the model")
+    p = sub.add_parser("mark-available", help="undo mark-unavailable")
+    p.add_argument("client", type=client_name)
+    p.add_argument("model")
     p = sub.add_parser("render", help="fill {{tier:NAME}} placeholders in a template")
     p.add_argument("client", type=client_name)
     p.add_argument("template")
     p.add_argument("--repo")
     args = parser.parse_args()
-    return {"fetch": cmd_fetch, "list": cmd_list, "set": cmd_set, "get": cmd_get,
-            "show": cmd_show, "render": cmd_render}[args.cmd](args)
+    return {"fetch": cmd_fetch, "list": cmd_list, "set": cmd_set, "get": cmd_get, "show": cmd_show,
+            "render": cmd_render, "mark-unavailable": cmd_mark_unavailable,
+            "mark-available": cmd_mark_available}[args.cmd](args)
 
 
 if __name__ == "__main__":
