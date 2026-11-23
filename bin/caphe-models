@@ -2,15 +2,19 @@
 """caphe-models: provider-neutral model tiers for the CaPhe Agentic Stack.
 
 The stack never names models. Agent roles map to three tiers (fast, standard,
-frontier); this tool fetches each provider's live model list and resolves a
-tier to the model you chose for it.
+frontier); you map each tier to a model per client, and the installer renders it
+into the agent profiles. No API key is needed: on a subscription, set tiers to the
+model aliases or IDs your client accepts. A key only adds `fetch` for exact IDs.
 
-  caphe-models fetch [client...]            fetch model lists (providers with an API key set)
-  caphe-models list [client]                show fetched model IDs
-  caphe-models set <client> <tier> <value>  map a tier to a model ID or client alias
+  caphe-models set <client> <tier> <value>  map a tier to a model alias or ID
   caphe-models get <client> <tier>          print the resolved value (empty if unset)
   caphe-models show                         table of every client x tier and its source
+  caphe-models fetch [client...]            optional: live model lists for clients with an API key
+  caphe-models list [client]                show fetched model IDs
   caphe-models render <client> <template>   fill {{tier:NAME}} placeholders (installer use)
+
+Clients: claude, codex, gemini are built in (gemini also covers Antigravity); any other
+name (deepseek, kimi, minimax, ...) works the same way.
 
 get/show/render accept --repo DIR to apply that repo's .caphe.toml / .caphe.local.toml
 [models.<client>] overrides. Precedence: .caphe.local.toml > .caphe.toml > global config.
@@ -30,7 +34,10 @@ import urllib.parse
 import urllib.request
 
 TIERS = ("fast", "standard", "frontier")
+# Built-in clients (installed agent profiles; optional API model-list fetch). Any other client name works too,
+# e.g. `caphe-models set kimi fast <model>`: tiers are just per-client config.
 CLIENTS = ("claude", "codex", "gemini")
+CLIENT_NAME = re.compile(r"^[a-z][a-z0-9-]*$")
 PLACEHOLDER = re.compile(r"\{\{tier:([a-z]+)\}\}")
 # Model IDs and client aliases are plain tokens. Anything else could break the TOML/YAML profiles it is rendered into.
 VALID_VALUE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@-]*$")
@@ -76,14 +83,26 @@ def checked(value, where: str) -> str:
     return value
 
 
+def client_name(value: str) -> str:
+    if not CLIENT_NAME.match(value):
+        raise argparse.ArgumentTypeError(f"invalid client name {value!r} (lowercase letters, digits, -)")
+    return value
+
+
 def global_tiers() -> dict:
     data = load_toml(CONFIG)
-    return {c: {t: checked(table(data, c, CONFIG).get(t), f"{CONFIG} [{c}].{t}") for t in TIERS} for c in CLIENTS}
+    clients = list(CLIENTS) + sorted(k for k in data if k not in CLIENTS)
+    return {c: {t: checked(table(data, client_name(c), CONFIG).get(t), f"{CONFIG} [{c}].{t}") for t in TIERS}
+            for c in clients}
+
+
+def all_clients() -> list[str]:
+    return list(global_tiers())
 
 
 def resolve(client: str, tier: str, repo: str | None) -> tuple[str, str]:
     """Return (value, source) after applying repo overrides."""
-    value, source = global_tiers()[client][tier], str(CONFIG)
+    value, source = global_tiers().get(client, {}).get(tier, ""), str(CONFIG)
     if repo:
         for name in (".caphe.toml", ".caphe.local.toml"):
             path = pathlib.Path(repo) / name
@@ -100,7 +119,7 @@ def write_config(tiers: dict) -> None:
         "# Managed by `caphe-models set` (rewritten on every set; comments are not kept). Empty = client default.",
         "# Roles: explorer -> fast, worker -> standard, reviewer/orchestrator -> frontier.",
     ]
-    for client in CLIENTS:
+    for client in tiers:
         lines.append(f"\n[{client}]")
         for tier in TIERS:
             lines.append(f"{tier} = {json.dumps(tiers[client][tier])}")
@@ -187,10 +206,16 @@ def stored(client: str) -> list[dict] | None:
 def cmd_fetch(args) -> int:
     failed = False
     for client in args.clients or CLIENTS:
+        if client not in PROVIDERS:
+            print(f"{client}: no model-list API built in; set its tiers to the model IDs or aliases the client "
+                  f"accepts (`caphe-models set {client} <tier> <model>`)")
+            continue
         vendor, key_vars, fetch = PROVIDERS[client]
         key = next((os.environ[v] for v in key_vars if os.environ.get(v)), None)
         if not key:
-            print(f"{client}: skipped (set {' or '.join(key_vars)} to fetch {vendor} models)")
+            print(f"{client}: skipped (no {' or '.join(key_vars)}; optional). Signed in with a subscription? "
+                  f"No key needed: set tiers to the model aliases or IDs the client accepts (its --model option); "
+                  f"aliases track the client's newest models.")
             continue
         try:
             models = fetch(key)
@@ -215,7 +240,9 @@ def cmd_fetch(args) -> int:
 def cmd_list(args) -> int:
     for client in [args.client] if args.client else CLIENTS:
         models = stored(client)
-        print(f"[{client}]" + ("" if models is not None else "  (not fetched: run `caphe-models fetch`)"))
+        hint = "  (not fetched: needs an API key; optional on a subscription)" if client in PROVIDERS else \
+            "  (no model-list API built in; set IDs or aliases directly)"
+        print(f"[{client}]" + ("" if models is not None else hint))
         for m in models or []:
             print(f"  {m['id']}" + (f"  ({m['display_name']})" if m.get("display_name") else ""))
     return 0
@@ -226,12 +253,12 @@ def cmd_set(args) -> int:
     tiers = global_tiers()
     known = stored(args.client)
     if known is None:
-        print(f"caphe-models: no fetched {args.client} list; saving '{args.value}' unvalidated "
-              "(fine for client aliases)", file=sys.stderr)
+        print(f"caphe-models: no fetched {args.client} list; saved '{args.value}' as given "
+              "(normal on a subscription: use the alias or ID your client accepts)", file=sys.stderr)
     elif args.value not in {m["id"] for m in known}:
         print(f"caphe-models: '{args.value}' is not in the fetched {args.client} list; saving anyway "
               "(fine for client aliases). See `caphe-models list " + args.client + "`.", file=sys.stderr)
-    tiers[args.client][args.tier] = args.value
+    tiers.setdefault(args.client, {t: "" for t in TIERS})[args.tier] = args.value
     write_config(tiers)
     print(f"{args.client}.{args.tier} = {args.value}")
     return 0
@@ -245,11 +272,13 @@ def cmd_get(args) -> int:
 
 
 def cmd_show(args) -> int:
-    print(f"{'client':8} {'tier':9} {'model':34} source")
-    for client in CLIENTS:
+    clients = all_clients()
+    width = max(8, *(len(c) for c in clients))
+    print(f"{'client':{width}} {'tier':9} {'model':34} source")
+    for client in clients:
         for tier in TIERS:
             value, source = resolve(client, tier, args.repo)
-            print(f"{client:8} {tier:9} {value or '-':34} {source}")
+            print(f"{client:{width}} {tier:9} {value or '-':34} {source}")
     return 0
 
 
@@ -273,21 +302,21 @@ def main() -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("fetch", help="fetch model lists from provider APIs")
-    p.add_argument("clients", nargs="*", choices=CLIENTS)
+    p.add_argument("clients", nargs="*", type=client_name)
     p = sub.add_parser("list", help="show fetched model IDs")
-    p.add_argument("client", nargs="?", choices=CLIENTS)
+    p.add_argument("client", nargs="?", type=client_name)
     p = sub.add_parser("set", help="map a tier to a model")
-    p.add_argument("client", choices=CLIENTS)
+    p.add_argument("client", type=client_name)
     p.add_argument("tier", choices=TIERS)
     p.add_argument("value")
     for name, helptext in (("get", "print a tier's resolved model"), ("show", "show all tiers")):
         p = sub.add_parser(name, help=helptext)
         if name == "get":
-            p.add_argument("client", choices=CLIENTS)
+            p.add_argument("client", type=client_name)
             p.add_argument("tier", choices=TIERS)
         p.add_argument("--repo")
     p = sub.add_parser("render", help="fill {{tier:NAME}} placeholders in a template")
-    p.add_argument("client", choices=CLIENTS)
+    p.add_argument("client", type=client_name)
     p.add_argument("template")
     p.add_argument("--repo")
     args = parser.parse_args()

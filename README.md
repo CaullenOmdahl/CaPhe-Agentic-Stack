@@ -77,12 +77,19 @@ Profiles are templates with `{{tier:…}}` placeholders. The installer fills the
 
 ### Model tiers: [`bin/caphe-models`](bin/caphe-models)
 
-No model names are hard-coded anywhere in this repo. Lineups change constantly and differ per provider, so you map each tier to a model once, picking from the provider's own live list:
+No model names are hard-coded anywhere in this repo. Lineups change constantly and differ per provider, so you map each tier to a model once:
 
 ```bash
-caphe-models fetch                       # live model lists from Anthropic / OpenAI / Gemini (whichever keys are set)
-caphe-models list claude                 # see what's available
-caphe-models set claude fast <model-id>  # repeat for standard and frontier, and per client
+# No API key needed: on a subscription or coding plan, use the model aliases or IDs your client accepts.
+# Aliases resolve to the client's newest models, so they never go stale.
+caphe-models set claude fast <alias>     # repeat for standard and frontier
+caphe-models set kimi fast <model>       # any client: deepseek, kimi, minimax, your own harness...
+
+# Optional, with an API key: pick exact IDs from the provider's live list.
+caphe-models fetch                       # Anthropic / OpenAI / Gemini, whichever keys are set
+caphe-models list claude
+caphe-models set claude fast <model-id>
+
 ./install.sh                             # re-render the agent profiles
 ```
 
@@ -108,7 +115,7 @@ Only clean scans are cached. Changing a lockfile invalidates the cache immediate
 
 ## Install
 
-**Requirements:** `bash`, `git`, Python **3.11+**. Recommended: [`osv-scanner`](https://github.com/google/osv-scanner) for universal CVE coverage, and a provider API key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`) so `caphe-models fetch` can list models.
+**Requirements:** `bash`, `git`, Python **3.11+**. Recommended: [`osv-scanner`](https://github.com/google/osv-scanner) for universal CVE coverage. **No API key required**: subscription users set tiers to their client's model aliases, and a key only adds `caphe-models fetch` for pinning exact IDs.
 
 ```bash
 ./install.sh                    # rules, skills, agent profiles, CVE checker
