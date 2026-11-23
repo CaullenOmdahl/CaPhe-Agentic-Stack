@@ -212,17 +212,20 @@ PY
   if [ -f "$CODEX_CFG" ]; then
     cp "$CODEX_CFG" "${CODEX_CFG}.bak-${TS}"
   fi
-  python3 - "$CODEX_CFG" <<'PY'
+  python3 - "$CODEX_CFG" "$("${MODELS[@]}" get codex standard)" <<'PY'
 import pathlib, re, sys
 target = pathlib.Path(sys.argv[1])
+standard_tier = sys.argv[2]  # already validated by caphe-models (plain token, safe inside TOML quotes)
 begin = "# CAPHE:V2:BEGIN"
 end = "# CAPHE:V2:END"
+# Subagents without an explicit model default to the standard tier (only when it is configured).
+model_line = f'default_subagent_model = "{standard_tier}"\n' if standard_tier else ""
 block = f"""{begin}
 [agents]
 enabled = true
 max_concurrent_threads_per_session = 6
 default_subagent_reasoning_effort = "low"
-{end}
+{model_line}{end}
 """
 text = target.read_text(encoding="utf-8") if target.exists() else ""
 pattern = re.compile(re.escape(begin) + r".*?" + re.escape(end) + r"\n?", re.S)
@@ -231,6 +234,8 @@ if pattern.search(text):
 elif re.search(r"(?m)^\[agents\]\s*$", text):
     # Preserve existing [agents] table rather than duplicating TOML section headers
     new_text = text
+    print(f"  Note:    {target} already has its own [agents] table; left as is "
+          "(add default_subagent_model there yourself if you want the standard tier as the subagent default)")
 else:
     new_text = text.rstrip("\n") + ("\n\n" if text.strip() else "") + block
 target.write_text(new_text, encoding="utf-8")
