@@ -1,6 +1,6 @@
 # CaPhe Agentic Canon (v2)
 
-Single always-loaded rule set (~55 lines). Keep this file static for prompt caching. Load specialized rules on demand via `skills/` only when the task requires them.
+Single always-loaded rule set (~40 lines, ~1k tokens). Keep this file static for prompt caching. Load specialized rules on demand via `skills/` only when the task requires them.
 
 ## 1. Per-Repo Config (`.caphe.toml`)
 - If `.caphe.toml` exists in the repo root (with optional gitignored `.caphe.local.toml` overrides for person/machine preferences), treat its rules, commands, and feature toggles as binding for that repo.

@@ -106,7 +106,7 @@ target.write_text(new_text, encoding="utf-8")
 PY
 }
 
-# 1. Global canon (~55 lines, static & cache-friendly)
+# 1. Global canon (~40 lines, static & cache-friendly)
 install_item "$SRC/docs/canon.md" "$HOME/AGENTS_GLOBAL.md"
 
 # 2. Managed pointer blocks (preserves existing personal machine instructions)

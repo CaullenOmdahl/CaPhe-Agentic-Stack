@@ -2,8 +2,8 @@
 
 ## How Context Loading Works (Progressive Disclosure)
 CaPhe v2 avoids loading everything up front:
-1. **Always-loaded static base (~450 tokens):** Only the root entrypoint + `docs/canon.md` (installed to `~/AGENTS_GLOBAL.md`). Because it is short and static, providers cache the prefix (up to ~90% input discount).
-2. **On-demand skills (~15 tokens per skill header until matched):** Each skill under `skills/<name>/SKILL.md` exposes only its `name` and 1-line `description` at session start. The body loads **only** when the task matches (e.g., `git-github` loads only for branches/pushes/PRs; `verify-ship` loads only when verifying/shipping).
+1. **Always-loaded static base (~1k tokens):** Only the root entrypoint + `docs/canon.md` (installed to `~/AGENTS_GLOBAL.md`). Because it is short and static, providers serve it from the prompt cache, where cached input is billed at a fraction of the normal rate.
+2. **On-demand skills (~50 tokens per skill header until matched):** Each skill under `skills/<name>/SKILL.md` exposes only its `name` and 1-line `description` at session start. The body loads **only** when the task matches (e.g., `git-github` loads only for branches/pushes/PRs; `verify-ship` loads only when verifying/shipping).
 3. **Reference docs (`docs/*.md`, `templates/`):** Never auto-loaded into agent prompts; read by humans or `install.sh` only.
 
 ## Complementary Ecosystem Tools (4 Waste Layers)

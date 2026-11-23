@@ -2,9 +2,9 @@
 
 ## Verification
 
-## Public-safety check
+<!-- Exact commands run and their results, e.g. `bash tests/test_v2.sh` → ALL V2 CHECKS PASSED. -->
 
-- [ ] No credentials, tokens, hostnames, private paths, client data, or local cache files are included.
-- [ ] Relevant tests or document checks were run.
-- [ ] Relevant verification and any useful/required separate review are described; required GitHub checks/approvals remain visible.
-- [ ] Optional QA is separate from defect closure; extra acceptance work has a distinct reason.
+## Checklist
+
+- [ ] `bash tests/test_v2.sh` passes locally.
+- [ ] No credentials, tokens, private hostnames, local paths, or `.caphe.local.toml` are included.

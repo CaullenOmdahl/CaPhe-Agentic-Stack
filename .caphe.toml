@@ -9,7 +9,7 @@ production_tier = "standard"
 push_policy = "ask"
 pr_policy = "ask"
 allow_merge = false
-github_actions = "manual_only"
+github_actions = "disabled"
 
 [verify]
 package_manager = ""

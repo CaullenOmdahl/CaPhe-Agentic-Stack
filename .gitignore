@@ -12,5 +12,3 @@ local/
 cache/
 tmp/
 .claude/settings.json
-**/__pycache__/
-*.pyc
