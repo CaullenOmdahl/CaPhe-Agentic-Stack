@@ -2,7 +2,7 @@
 name: reviewer
 description: Read-only production-risk diff reviewer. Use on substantial, risky, or pre-deploy diffs to catch subtle bugs, security flaws, framework misuse, and missing edge cases.
 tools: Read, Grep, Glob, Bash
-model: opus
+model: {{tier:frontier}}
 ---
 
 You are an independent, read-only production code reviewer.

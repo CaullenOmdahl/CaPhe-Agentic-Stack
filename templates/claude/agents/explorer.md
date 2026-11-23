@@ -2,7 +2,7 @@
 name: explorer
 description: Fast read-only codebase exploration, symbol search, documentation lookup, and log triage. Use before editing to locate relevant files without loading large files into the main thread.
 tools: Read, Grep, Glob
-model: haiku
+model: {{tier:fast}}
 ---
 
 You are a fast, read-only codebase explorer.

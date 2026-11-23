@@ -1,0 +1,299 @@
+#!/usr/bin/env python3
+"""caphe-models: provider-neutral model tiers for the CaPhe Agentic Stack.
+
+The stack never names models. Agent roles map to three tiers (fast, standard,
+frontier); this tool fetches each provider's live model list and resolves a
+tier to the model you chose for it.
+
+  caphe-models fetch [client...]            fetch model lists (providers with an API key set)
+  caphe-models list [client]                show fetched model IDs
+  caphe-models set <client> <tier> <value>  map a tier to a model ID or client alias
+  caphe-models get <client> <tier>          print the resolved value (empty if unset)
+  caphe-models show                         table of every client x tier and its source
+  caphe-models render <client> <template>   fill {{tier:NAME}} placeholders (installer use)
+
+get/show/render accept --repo DIR to apply that repo's .caphe.toml / .caphe.local.toml
+[models.<client>] overrides. Precedence: .caphe.local.toml > .caphe.toml > global config.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import os
+import pathlib
+import re
+import sys
+import tomllib
+import urllib.error
+import urllib.parse
+import urllib.request
+
+TIERS = ("fast", "standard", "frontier")
+CLIENTS = ("claude", "codex", "gemini")
+PLACEHOLDER = re.compile(r"\{\{tier:([a-z]+)\}\}")
+# Model IDs and client aliases are plain tokens. Anything else could break the TOML/YAML profiles it is rendered into.
+VALID_VALUE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@-]*$")
+MAX_PAGES = 100
+
+
+def xdg(var: str, default: str) -> pathlib.Path:
+    return pathlib.Path(os.environ.get(var) or pathlib.Path.home() / default)
+
+
+CONFIG = xdg("XDG_CONFIG_HOME", ".config") / "caphe" / "models.toml"
+STATE = xdg("XDG_STATE_HOME", ".local/state") / "caphe" / "models"
+
+
+def die(msg: str, code: int = 2) -> None:
+    print(f"caphe-models: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+# ---------------------------------------------------------------- config
+
+def load_toml(path: pathlib.Path) -> dict:
+    if not path.is_file():
+        return {}
+    try:
+        return tomllib.loads(path.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as exc:
+        die(f"invalid TOML in {path}: {exc}")
+    return {}
+
+
+def table(data: dict, key: str, where: pathlib.Path) -> dict:
+    value = data.get(key, {})
+    if not isinstance(value, dict):
+        die(f"{where}: `{key}` must be a table, got {type(value).__name__}")
+    return value
+
+
+def checked(value, where: str) -> str:
+    value = "" if value is None else str(value)
+    if value and not VALID_VALUE.match(value):
+        die(f"{where}: invalid model value {value!r} (expected a model ID or alias such as letters, digits, . _ - : / @)")
+    return value
+
+
+def global_tiers() -> dict:
+    data = load_toml(CONFIG)
+    return {c: {t: checked(table(data, c, CONFIG).get(t), f"{CONFIG} [{c}].{t}") for t in TIERS} for c in CLIENTS}
+
+
+def resolve(client: str, tier: str, repo: str | None) -> tuple[str, str]:
+    """Return (value, source) after applying repo overrides."""
+    value, source = global_tiers()[client][tier], str(CONFIG)
+    if repo:
+        for name in (".caphe.toml", ".caphe.local.toml"):
+            path = pathlib.Path(repo) / name
+            models = table(load_toml(path), "models", path)
+            override = checked(table(models, client, path).get(tier), f"{path} [models.{client}].{tier}")
+            if override:
+                value, source = str(override), str(path)
+    return value, (source if value else "unset")
+
+
+def write_config(tiers: dict) -> None:
+    lines = [
+        "# CaPhe model tiers: map each tier to a model ID (or an alias the client accepts).",
+        "# Managed by `caphe-models set` (rewritten on every set; comments are not kept). Empty = client default.",
+        "# Roles: explorer -> fast, worker -> standard, reviewer/orchestrator -> frontier.",
+    ]
+    for client in CLIENTS:
+        lines.append(f"\n[{client}]")
+        for tier in TIERS:
+            lines.append(f"{tier} = {json.dumps(tiers[client][tier])}")
+    CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+# ---------------------------------------------------------------- fetch
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Model-list endpoints never redirect; refusing keeps API keys from being forwarded to another host."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, f"refused redirect to {newurl}", headers, fp)
+
+
+OPENER = urllib.request.build_opener(NoRedirect)
+
+
+def http_json(url: str, headers: dict) -> dict:
+    req = urllib.request.Request(url, headers={"Accept": "application/json", **headers})
+    with OPENER.open(req, timeout=30) as resp:
+        return json.load(resp)
+
+
+def next_cursor(cursor: str | None, seen: set) -> str | None:
+    """Stop paging on a missing, repeated, or runaway cursor."""
+    if not cursor or cursor in seen or len(seen) >= MAX_PAGES:
+        return None
+    seen.add(cursor)
+    return cursor
+
+
+def fetch_claude(key: str) -> list[dict]:
+    base = os.environ.get("CAPHE_ANTHROPIC_BASE_URL", "https://api.anthropic.com")
+    headers = {"x-api-key": key, "anthropic-version": "2026-10-21"}
+    models, after, seen = [], None, set()
+    while True:
+        query = {"limit": "1000", **({"after_id": after} if after else {})}
+        page = http_json(f"{base}/v1/models?{urllib.parse.urlencode(query)}", headers)
+        for m in page.get("data", []):
+            if m.get("lifecycle", "active") == "active":
+                models.append({"id": m["id"], "display_name": m.get("display_name", "")})
+        after = next_cursor(page.get("last_id") if page.get("has_more") else None, seen)
+        if not after:
+            return models
+
+
+def fetch_codex(key: str) -> list[dict]:
+    base = os.environ.get("CAPHE_OPENAI_BASE_URL", "https://api.openai.com")
+    page = http_json(f"{base}/v1/models", {"Authorization": f"Bearer {key}"})
+    return [{"id": m["id"], "display_name": ""} for m in page.get("data", [])]
+
+
+def fetch_gemini(key: str) -> list[dict]:
+    base = os.environ.get("CAPHE_GEMINI_BASE_URL", "https://generativelanguage.googleapis.com")
+    models, token, seen = [], None, set()
+    while True:
+        query = {"pageSize": "1000", **({"pageToken": token} if token else {})}
+        page = http_json(f"{base}/v1beta/models?{urllib.parse.urlencode(query)}", {"x-goog-api-key": key})
+        for m in page.get("models", []):
+            if "generateContent" in m.get("supportedGenerationMethods", []):
+                name = m["name"].removeprefix("models/")
+                models.append({"id": name, "display_name": m.get("displayName", "")})
+        token = next_cursor(page.get("nextPageToken"), seen)
+        if not token:
+            return models
+
+
+PROVIDERS = {
+    "claude": ("Anthropic", ("ANTHROPIC_API_KEY",), fetch_claude),
+    "codex": ("OpenAI", ("OPENAI_API_KEY",), fetch_codex),
+    "gemini": ("Google Gemini", ("GEMINI_API_KEY", "GOOGLE_API_KEY"), fetch_gemini),
+}
+
+
+def stored(client: str) -> list[dict] | None:
+    path = STATE / f"{client}.json"
+    if not path.is_file():
+        return None
+    return json.loads(path.read_text(encoding="utf-8")).get("models", [])
+
+
+def cmd_fetch(args) -> int:
+    failed = False
+    for client in args.clients or CLIENTS:
+        vendor, key_vars, fetch = PROVIDERS[client]
+        key = next((os.environ[v] for v in key_vars if os.environ.get(v)), None)
+        if not key:
+            print(f"{client}: skipped (set {' or '.join(key_vars)} to fetch {vendor} models)")
+            continue
+        try:
+            models = fetch(key)
+        except (urllib.error.URLError, OSError, ValueError, KeyError) as exc:
+            reason = getattr(exc, "code", None) or getattr(exc, "reason", None) or type(exc).__name__
+            print(f"{client}: FAILED to fetch {vendor} models ({reason})", file=sys.stderr)
+            failed = True
+            continue
+        STATE.mkdir(parents=True, exist_ok=True)
+        record = {
+            "fetched_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+            "source": vendor,
+            "models": sorted(models, key=lambda m: m["id"]),
+        }
+        (STATE / f"{client}.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+        print(f"{client}: {len(models)} models from {vendor}")
+    return 1 if failed else 0
+
+
+# ---------------------------------------------------------------- commands
+
+def cmd_list(args) -> int:
+    for client in [args.client] if args.client else CLIENTS:
+        models = stored(client)
+        print(f"[{client}]" + ("" if models is not None else "  (not fetched: run `caphe-models fetch`)"))
+        for m in models or []:
+            print(f"  {m['id']}" + (f"  ({m['display_name']})" if m.get("display_name") else ""))
+    return 0
+
+
+def cmd_set(args) -> int:
+    checked(args.value, "value")
+    tiers = global_tiers()
+    known = stored(args.client)
+    if known is None:
+        print(f"caphe-models: no fetched {args.client} list; saving '{args.value}' unvalidated "
+              "(fine for client aliases)", file=sys.stderr)
+    elif args.value not in {m["id"] for m in known}:
+        print(f"caphe-models: '{args.value}' is not in the fetched {args.client} list; saving anyway "
+              "(fine for client aliases). See `caphe-models list " + args.client + "`.", file=sys.stderr)
+    tiers[args.client][args.tier] = args.value
+    write_config(tiers)
+    print(f"{args.client}.{args.tier} = {args.value}")
+    return 0
+
+
+def cmd_get(args) -> int:
+    value, _ = resolve(args.client, args.tier, args.repo)
+    if value:
+        print(value)
+    return 0
+
+
+def cmd_show(args) -> int:
+    print(f"{'client':8} {'tier':9} {'model':34} source")
+    for client in CLIENTS:
+        for tier in TIERS:
+            value, source = resolve(client, tier, args.repo)
+            print(f"{client:8} {tier:9} {value or '-':34} {source}")
+    return 0
+
+
+def cmd_render(args) -> int:
+    out = []
+    for line in pathlib.Path(args.template).read_text(encoding="utf-8").splitlines(keepends=True):
+        names = PLACEHOLDER.findall(line)
+        bad = [n for n in names if n not in TIERS]
+        if bad:
+            die(f"{args.template}: unknown tier placeholder(s): {', '.join(bad)}")
+        values = {n: resolve(args.client, n, args.repo)[0] for n in names}
+        if any(not v for v in values.values()):
+            continue  # unset tier: drop the line so the client falls back to its default
+        out.append(PLACEHOLDER.sub(lambda m: values[m.group(1)], line))
+    sys.stdout.write("".join(out))
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog="caphe-models", description=__doc__.split("\n\n")[1],
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("fetch", help="fetch model lists from provider APIs")
+    p.add_argument("clients", nargs="*", choices=CLIENTS)
+    p = sub.add_parser("list", help="show fetched model IDs")
+    p.add_argument("client", nargs="?", choices=CLIENTS)
+    p = sub.add_parser("set", help="map a tier to a model")
+    p.add_argument("client", choices=CLIENTS)
+    p.add_argument("tier", choices=TIERS)
+    p.add_argument("value")
+    for name, helptext in (("get", "print a tier's resolved model"), ("show", "show all tiers")):
+        p = sub.add_parser(name, help=helptext)
+        if name == "get":
+            p.add_argument("client", choices=CLIENTS)
+            p.add_argument("tier", choices=TIERS)
+        p.add_argument("--repo")
+    p = sub.add_parser("render", help="fill {{tier:NAME}} placeholders in a template")
+    p.add_argument("client", choices=CLIENTS)
+    p.add_argument("template")
+    p.add_argument("--repo")
+    args = parser.parse_args()
+    return {"fetch": cmd_fetch, "list": cmd_list, "set": cmd_set, "get": cmd_get,
+            "show": cmd_show, "render": cmd_render}[args.cmd](args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

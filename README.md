@@ -21,7 +21,7 @@ Coding agents tend to fail in the same few ways:
 | **Instruction bloat.** Giant `CLAUDE.md` / `AGENTS.md` files get re-read on every turn, crowding out the actual code. | A ~40-line [canon](docs/canon.md) is always loaded. Everything else is a [skill](skills/) that loads only when the task matches. |
 | **"It's fixed" without running anything.** Agents reason about code instead of executing it. | The canon requires *oracles over prose*: typecheck → lint → targeted tests → build, plus a look at the real rendered output or response. |
 | **Over-engineering.** Custom wrappers and abstractions where the framework already has a primitive. | The [`ponytail`](skills/ponytail/SKILL.md) ladder: needed at all? already in the repo? stdlib? framework? existing dependency? Write custom code only as a last resort, and never cut validation, types, or auth checks to get there. |
-| **Frontier models doing intern work.** An expensive orchestrator spawns expensive subagents to grep files. | Ready-made `explorer` (fast tier), `worker` (standard tier), and `reviewer` (frontier tier) agent profiles for Claude Code and Codex. See [model tiering](docs/model-tiering.md). |
+| **Frontier models doing intern work.** An expensive orchestrator spawns expensive subagents to grep files. | Ready-made `explorer` (fast tier), `worker` (standard tier), and `reviewer` (frontier tier) agent profiles for Claude Code and Codex. The stack never hard-codes a model name: you map each tier to a model from the provider's live list. See [model tiers](#model-tiers). |
 | **Silent vulnerable deploys.** Dependency audits get skipped because nobody asked. | `caphe-cve-check` is mandatory, cached, and needs no LLM tokens. It flags high/critical CVEs before ship (and blocks the push with the optional pre-push hook), and never reports a failed scan as clean. |
 | **Agents acting on irreversible things.** Prod deploys, migrations, force-pushes, auth changes. | The canon defines hard human stops that apply unless the repo's `.caphe.toml` or the user explicitly authorizes the action. |
 
@@ -67,11 +67,26 @@ The one file every agent always reads. Six short sections:
 
 ### Agent profiles: [`templates/`](templates/)
 
-| Role | Claude Code | Codex | Used for |
-| --- | --- | --- | --- |
-| `explorer` | `haiku`, read-only tools | low effort, read-only sandbox | File discovery, symbol search, log triage |
-| `worker` | `sonnet` | medium effort | Well-scoped implementation and tests |
-| `reviewer` | `opus`, read-only | high effort, read-only sandbox | Production-risk and security diff review |
+| Role | Tier | Claude Code | Codex | Used for |
+| --- | --- | --- | --- | --- |
+| `explorer` | `fast` | read-only tools | low reasoning effort | File discovery, symbol search, log triage |
+| `worker` | `standard` | full tools | medium reasoning effort | Well-scoped implementation and tests |
+| `reviewer` | `frontier` | read-only tools | high reasoning effort | Production-risk and security diff review |
+
+Profiles are templates with `{{tier:…}}` placeholders. The installer fills them in from your model tiers.
+
+### Model tiers: [`bin/caphe-models`](bin/caphe-models)
+
+No model names are hard-coded anywhere in this repo. Lineups change constantly and differ per provider, so you map each tier to a model once, picking from the provider's own live list:
+
+```bash
+caphe-models fetch                       # live model lists from Anthropic / OpenAI / Gemini (whichever keys are set)
+caphe-models list claude                 # see what's available
+caphe-models set claude fast <model-id>  # repeat for standard and frontier, and per client
+./install.sh                             # re-render the agent profiles
+```
+
+Tiers live in `~/.config/caphe/models.toml`. A repo can override them under `[models.<client>]` in `.caphe.toml`, or under `.caphe.local.toml` for personal settings. Until a tier is set, its agents simply run on the client's default model, and the installer tells you which tiers are unset. Details are in [docs/model-tiering.md](docs/model-tiering.md).
 
 ### CVE gate: [`hooks/cve-check.sh`](hooks/cve-check.sh), installed as `caphe-cve-check`
 
@@ -93,7 +108,7 @@ Only clean scans are cached. Changing a lockfile invalidates the cache immediate
 
 ## Install
 
-**Requirements:** `bash`, `git`, Python **3.11+**. Recommended: [`osv-scanner`](https://github.com/google/osv-scanner) for universal CVE coverage.
+**Requirements:** `bash`, `git`, Python **3.11+**. Recommended: [`osv-scanner`](https://github.com/google/osv-scanner) for universal CVE coverage, and a provider API key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`) so `caphe-models fetch` can list models.
 
 ```bash
 ./install.sh                    # rules, skills, agent profiles, CVE checker
@@ -107,8 +122,8 @@ What lands where:
 | `~/AGENTS_GLOBAL.md` | The canon |
 | `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.gemini/GEMINI.md` | A small pointer block between `<!-- CAPHE:V2:BEGIN/END -->` markers. The rest of each file is left alone |
 | `~/.claude/skills/`, `~/.codex/skills/`, `~/.gemini/config/skills/`, `~/.agents/skills/` | The six skills |
-| `~/.claude/agents/`, `~/.codex/agents/` | `explorer`, `worker`, `reviewer` |
-| `~/.local/bin/caphe-cve-check` | The CVE gate |
+| `~/.claude/agents/`, `~/.codex/agents/` | `explorer`, `worker`, `reviewer`, rendered with your model tiers |
+| `~/.local/bin/caphe-cve-check`, `~/.local/bin/caphe-models` | The CVE gate and the model-tier tool |
 | `~/.claude/settings.json`, `~/.codex/config.toml` | Only with `--apply-settings`: merged in, existing keys kept, backed up first |
 
 ### It won't clobber your setup
@@ -117,6 +132,7 @@ Re-running the installer is safe, because it keeps a record of everything it wri
 
 - **Files you haven't touched** are upgraded in place.
 - **Files you've customized**, or same-named files from another tool, are **kept** and listed in the output.
+- **Agent profiles** are re-rendered whenever your model tiers change, so a new mapping takes effect on the next run.
 - **`--force`** replaces the kept files with the stack version, saving each original first under `~/.local/state/caphe/backups/<timestamp>/` (same paths relative to `$HOME`). To restore one, copy it back.
 
 <details>
@@ -127,7 +143,7 @@ Every path the installer wrote is in the manifest. Review the list, then remove:
 ```bash
 cut -f1 ~/.local/state/caphe/install-manifest.tsv          # review
 cut -f1 ~/.local/state/caphe/install-manifest.tsv | xargs -d '\n' rm -rf
-rm -rf ~/.local/state/caphe
+rm -rf ~/.local/state/caphe ~/.config/caphe
 ```
 
 Then delete the `<!-- CAPHE:V2:BEGIN -->` … `<!-- CAPHE:V2:END -->` block from `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, and `~/.gemini/GEMINI.md`.
@@ -169,7 +185,8 @@ cp hooks/pre-push-check.sh .git/hooks/pre-push && chmod +x .git/hooks/pre-push
 docs/canon.md            the always-loaded rulebook (installed as ~/AGENTS_GLOBAL.md)
 docs/                    reference: model tiering, production safety, token stack
 skills/                  six on-demand SKILL.md playbooks
-templates/               agent profiles, settings baselines, per-repo AGENTS.md + .caphe.toml
+templates/               tier-placeholder agent profiles, settings baselines, per-repo AGENTS.md + .caphe.toml
+bin/caphe-models         fetch provider model lists, map tiers, render agent profiles
 hooks/                   cve-check.sh (caphe-cve-check) and pre-push-check.sh
 install.sh               idempotent, collision-safe installer
 tests/test_v2.sh         the full verification suite
@@ -190,6 +207,8 @@ The suite checks:
 - **Context budgets.** The canon stays ≤ 70 lines, each skill ≤ 60, each entrypoint ≤ 15.
 - **Installer, in a throwaway `$HOME`.** Idempotency, settings merges that keep existing keys, customizations preserved, `--force` backups, untouched files upgraded.
 - **CVE gate, with a mocked scanner on a restricted `PATH`.** Clean scans are cached, lockfile changes invalidate the cache, a scanner error returns `2` and is never cached, findings return `1`, a missing scanner returns `2`.
+- **Model tiers, against a local mock of all three provider APIs.** Paginated fetches and filters, `set`/`get` precedence, and rendering with tiers set and unset.
+- **No model names.** Fails if any model name is hard-coded outside `tests/`.
 - **Public safety.** No credentials, tokens, private keys, local user paths, or sensitive filenames are committed.
 
 This repository is public. Never commit `.env*`, credentials, `.caphe.local.toml`, private hostnames, or local paths.
