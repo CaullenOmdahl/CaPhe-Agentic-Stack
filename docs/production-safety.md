@@ -18,7 +18,8 @@ Every production repository should declare its exact check commands in its root 
 ## Behind-the-Scenes CVE Scanning (Zero LLM Tokens)
 `install.sh` installs `caphe-cve-check` to `~/.local/bin/caphe-cve-check`. It uses `osv-scanner` (universal: JS/TS, Python, PHP, Java/Maven/Gradle, Go, Rust, Dart, Ruby) or `trivy` when installed, falling back to native ecosystem audits (`pnpm`/`npm`/`composer`/`pip-audit`/`cargo-audit`/`govulncheck`).
 
-- **Fast caching:** `--if-stale 24` skips repeat scans within 24 hours unless a lockfile changed.
+- **Fast caching:** `--if-stale 24` skips repeat scans within 24 hours unless a lockfile changed. Only clean scans are cached.
+- **Exit codes:** `0` clean, `1` high/critical CVEs flagged, `2` scan incomplete (scanner error or no scanner installed). An incomplete scan is never reported or cached as clean, so the next run retries.
 - **Background schedule (optional):** Run a lightweight daily cron or `systemd --user` timer across active project directories so open CVEs are flagged even between coding sessions:
   ```bash
   # Example daily background sweep (zero AI tokens; alerts only on findings)

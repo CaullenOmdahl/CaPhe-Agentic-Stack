@@ -32,6 +32,8 @@ Modern frontier models absorb heavy orchestration glue natively. v2 strips ~10,5
 - Installs the 6 on-demand skills into `~/.claude/skills/`, `~/.codex/skills/`, `~/.gemini/config/skills/`, and `~/.agents/skills/`.
 - Installs tiered `explorer`, `worker`, and `reviewer` subagent definitions for Claude Code and Codex.
 - `--apply-settings` merges non-destructive tiered subagent defaults into `~/.claude/settings.json` and `~/.codex/config.toml` (creating backups first).
+- Never overwrites your customizations: it records what it installs in `~/.local/state/caphe/install-manifest.tsv`. A same-named skill, agent profile, canon or `caphe-cve-check` that you edited, or that some other tool installed, is kept and listed in the output. Stack files you haven't touched are upgraded in place.
+- `--force` replaces the kept files with the stack versions, saving each original first under `~/.local/state/caphe/backups/<timestamp>/` (same paths relative to `$HOME`). To restore one, copy it back.
 
 ## Using in a Production Repository
 
