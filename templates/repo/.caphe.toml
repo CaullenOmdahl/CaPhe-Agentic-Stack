@@ -20,6 +20,13 @@ test = ""                       # e.g. "pnpm test"
 build = ""                      # e.g. "pnpm build"
 require_diff_review = true      # run read-only frontier reviewer before ship on risky/prod diffs
 
+# Optional: override machine-wide model tiers (~/.config/caphe/models.toml) for this repo.
+# Values are whatever the client accepts (full model ID or client alias); see `caphe-models list`.
+# [models.claude]
+# fast = ""
+# standard = ""
+# frontier = ""
+
 [features]
 ponytail = true                 # framework-first minimalism ladder
 verify_ship = true              # automated verification gate

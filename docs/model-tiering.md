@@ -1,19 +1,49 @@
-# Model Tiering Across Environments
+# Model Tiering
 
-Use frontier models where reasoning quality protects production accuracy, and route exploration and well-scoped code writing to faster, cheaper tiers.
+CaPhe never names a model. Roles map to three **tiers**, and you decide which model each tier means for each client. Model lineups change constantly and differ per provider, so the stack stays correct without edits when a new model ships.
 
-## Role Matrix
+## Roles → tiers
 
-| Role | Purpose | Claude Code | OpenAI Codex | Gemini / Antigravity |
-| --- | --- | --- | --- | --- |
-| **Orchestrator** | Planning (Plan Mode), architecture, tricky debugging, final sign-off | `opus` (`effort: medium`, raise to `high` only when needed) | Frontier model (`medium`, raise to `high` when needed) | Frontier (`pro` / default) |
-| **Explorer** | Read-only codebase search, doc lookup, log triage | `haiku` (`~/.claude/agents/explorer.md`) | Light tier (`~/.codex/agents/explorer.toml`) | `flash` |
-| **Worker** | Well-scoped implementation & unit tests | `sonnet` (`~/.claude/agents/worker.md`, plus `CLAUDE_CODE_SUBAGENT_MODEL=sonnet`) | Standard coding tier (`~/.codex/agents/worker.toml`) | `flash` / standard |
-| **Reviewer** | Read-only production-risk & security diff audit | `opus` (`~/.claude/agents/reviewer.md`) | Frontier tier (`~/.codex/agents/reviewer.toml`) | `pro` |
+| Role | Tier | Purpose |
+| --- | --- | --- |
+| **Explorer** | `fast` | Read-only codebase search, doc lookup, log triage |
+| **Worker** | `standard` | Well-scoped implementation and unit tests |
+| **Reviewer** | `frontier` | Read-only production-risk and security diff audit |
+| **Orchestrator** | `frontier` | Planning, architecture, tricky debugging, final sign-off (your main session) |
 
-## Preventing Frontier Subagent Leaks
-- **Claude Code:** Set `"CLAUDE_CODE_SUBAGENT_MODEL": "sonnet"` in `~/.claude/settings.json` under `"env"` so subagents never default to `opus` via `inherit`. Use `templates/claude/agents/*.md` for explicit per-role routing.
-- **OpenAI Codex:** Configure `[agents]` in `~/.codex/config.toml` with explicit `default_subagent_model`, `default_subagent_reasoning_effort`, and a sensible concurrency cap (`max_concurrent_threads_per_session = 6`). Use `templates/codex/agents/*.toml` for per-role routing.
-- **Gemini / Antigravity:** Pass `Model: "flash"` when invoking research/exploration subagents; reserve `inherit`/`pro` for complex work.
+## Choosing models: `caphe-models`
 
-> Do not hardcode retiring snapshot IDs into shared policies. Prefer client aliases (`opus`, `sonnet`, `haiku`, `flash`, `pro`) or update model names only in local client config.
+```bash
+caphe-models fetch                              # pull live model lists from each provider with an API key set
+caphe-models list claude                        # see what's available
+caphe-models set claude fast <model-id>         # map a tier to a model
+caphe-models show                               # every client x tier, and where each value comes from
+./install.sh                                    # re-render agent profiles with the new mapping
+```
+
+| Client | Model list source | Key |
+| --- | --- | --- |
+| `claude` | Anthropic `GET /v1/models` (active models only) | `ANTHROPIC_API_KEY` |
+| `codex` | OpenAI `GET /v1/models` | `OPENAI_API_KEY` |
+| `gemini` | Gemini API `GET /v1beta/models` (models that support `generateContent`) | `GEMINI_API_KEY` or `GOOGLE_API_KEY` |
+
+Providers without a key are skipped. A value doesn't have to come from the fetched list: anything the client itself accepts (such as a client-side alias) works, and `set` only warns when it can't validate one. Keys are read from the environment and never stored.
+
+## Where the mapping lives
+
+| File | Scope |
+| --- | --- |
+| `~/.config/caphe/models.toml` | Machine-wide tiers, written by `caphe-models set` |
+| `.caphe.toml` → `[models.<client>]` | Per-repo override (committed) |
+| `.caphe.local.toml` → `[models.<client>]` | Personal override (gitignored) |
+| `~/.local/state/caphe/models/<client>.json` | Fetched model lists (cache; re-fetch any time) |
+
+Precedence: `.caphe.local.toml` > `.caphe.toml` > global. `caphe-models get <client> <tier> --repo .` prints the resolved value.
+
+## How each client uses tiers
+
+- **Claude Code:** agent profiles in `templates/claude/agents/` carry `model: {{tier:…}}`. The installer renders the configured model into `~/.claude/agents/`. With `--apply-settings`, `CLAUDE_CODE_SUBAGENT_MODEL` is set to the standard tier, so subagents without an explicit model don't inherit the frontier orchestrator.
+- **OpenAI Codex:** agent profiles in `templates/codex/agents/` carry `model = "{{tier:…}}"` plus `model_reasoning_effort` (low / medium / high per role). They are rendered into `~/.codex/agents/`.
+- **Gemini:** no agent profiles. The entrypoint tells the agent to use fast-tier subagents for lookups, and to resolve the tier with `caphe-models get gemini fast`.
+
+**Unset tier:** the installer drops the `model` line, so the agent runs on the client's default model, and the install output lists every unset tier. Tiering only takes effect once the tiers are set.

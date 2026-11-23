@@ -106,21 +106,27 @@ target.write_text(new_text, encoding="utf-8")
 PY
 }
 
+# 0. Preflight: model-tier rendering needs Python 3.11+ (tomllib) and a valid tier config. Fail before writing anything.
+if ! python3 "$SRC/bin/caphe-models" show >/dev/null; then
+  echo "install.sh: caphe-models is unusable (needs python3 >= 3.11 and a valid ~/.config/caphe/models.toml); nothing was installed." >&2
+  exit 1
+fi
+
 # 1. Global canon (~40 lines, static & cache-friendly)
 install_item "$SRC/docs/canon.md" "$HOME/AGENTS_GLOBAL.md"
 
 # 2. Managed pointer blocks (preserves existing personal machine instructions)
 CLAUDE_BLOCK="## CaPhe Agentic Stack (v2)
 Read \`~/AGENTS_GLOBAL.md\` and treat it as binding unless overridden by the user or a repo's \`.caphe.toml\`.
-Use Plan Mode for non-trivial changes, route exploration to \`explorer\` (haiku) and scoped coding to \`worker\` (sonnet), and load skills on demand only when relevant."
+Use Plan Mode for non-trivial changes, route exploration to \`explorer\` (fast tier), scoped coding to \`worker\` (standard tier), and production-risk review to \`reviewer\` (frontier tier); load skills on demand only when relevant."
 
 CODEX_BLOCK="## CaPhe Agentic Stack (v2)
 Read \`~/AGENTS_GLOBAL.md\` and treat it as binding unless overridden by the user or a repo's \`.caphe.toml\`.
-Delegate exploration to \`explorer\` (low effort), scoped coding to \`worker\` (medium effort), and load skills on demand only when relevant."
+Delegate exploration to \`explorer\` (fast tier), scoped coding to \`worker\` (standard tier), and production-risk review to \`reviewer\` (frontier tier); load skills on demand only when relevant."
 
 GEMINI_BLOCK="## CaPhe Agentic Stack (v2)
 Read \`~/AGENTS_GLOBAL.md\` and treat it as binding unless overridden by the user or a repo's \`.caphe.toml\`.
-Delegate read-only lookups to \`flash\` subagents, reserve frontier models for planning/review, and load skills on demand only when relevant."
+Delegate read-only lookups to fast-tier subagents, reserve the frontier tier for planning/review, and load skills on demand only when relevant. Resolve a tier to a model with \`caphe-models get gemini <tier>\`."
 
 upsert_managed_block "$HOME/.claude/CLAUDE.md" "$CLAUDE_BLOCK"
 upsert_managed_block "$HOME/.codex/AGENTS.md" "$CODEX_BLOCK"
@@ -142,15 +148,34 @@ for sdir in "${SKILL_DIRS[@]}"; do
   done
 done
 
-# 4. Install tiered subagent definitions (explorer / worker / reviewer) & non-discretionary CVE checker
+# 4. Install tiered subagent definitions (explorer / worker / reviewer), rendered from provider-neutral
+#    templates: {{tier:NAME}} resolves through caphe-models; unset tiers drop the model line (client default).
+MODELS=(python3 "$SRC/bin/caphe-models")
+RENDER_DIR="$(mktemp -d)"
+trap 'rm -rf "$RENDER_DIR"' EXIT
+UNSET_TIERS=()
+for client in claude codex; do
+  for tier in fast standard frontier; do
+    [ -n "$("${MODELS[@]}" get "$client" "$tier")" ] || UNSET_TIERS+=("$client.$tier")
+  done
+done
 for agent in "$SRC"/templates/claude/agents/*.md; do
-  install_item "$agent" "$HOME/.claude/agents/$(basename "$agent")"
+  mkdir -p "$RENDER_DIR/claude"
+  "${MODELS[@]}" render claude "$agent" > "$RENDER_DIR/claude/$(basename "$agent")"
+  install_item "$RENDER_DIR/claude/$(basename "$agent")" "$HOME/.claude/agents/$(basename "$agent")"
 done
 for agent in "$SRC"/templates/codex/agents/*.toml; do
-  install_item "$agent" "$HOME/.codex/agents/$(basename "$agent")"
+  mkdir -p "$RENDER_DIR/codex"
+  "${MODELS[@]}" render codex "$agent" > "$RENDER_DIR/codex/$(basename "$agent")"
+  install_item "$RENDER_DIR/codex/$(basename "$agent")" "$HOME/.codex/agents/$(basename "$agent")"
 done
+
+# Non-discretionary CVE checker and the model-tier tool
 install_item "$SRC/hooks/cve-check.sh" "$HOME/.local/bin/caphe-cve-check"
-[ ! -f "$HOME/.local/bin/caphe-cve-check" ] || chmod +x "$HOME/.local/bin/caphe-cve-check"
+install_item "$SRC/bin/caphe-models" "$HOME/.local/bin/caphe-models"
+for bin in caphe-cve-check caphe-models; do
+  [ ! -f "$HOME/.local/bin/$bin" ] || chmod +x "$HOME/.local/bin/$bin"
+done
 
 # 5. Optional: merge non-destructive tiered settings into Claude & Codex configs
 if [ "$APPLY_SETTINGS" -eq 1 ]; then
@@ -161,14 +186,18 @@ if [ "$APPLY_SETTINGS" -eq 1 ]; then
   if [ -f "$CLAUDE_SETTINGS" ]; then
     cp "$CLAUDE_SETTINGS" "${CLAUDE_SETTINGS}.bak-${TS}"
   fi
-  python3 - "$CLAUDE_SETTINGS" "$SRC/templates/claude/settings.json" <<'PY'
+  python3 - "$CLAUDE_SETTINGS" "$SRC/templates/claude/settings.json" "$("${MODELS[@]}" get claude standard)" <<'PY'
 import json, pathlib, sys
 target = pathlib.Path(sys.argv[1])
 tmpl = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+standard_tier = sys.argv[3]
 cur = json.loads(target.read_text(encoding="utf-8")) if target.exists() else {}
 env = dict(cur.get("env") or {})
 for k, v in (tmpl.get("env") or {}).items():
     env[k] = v
+# Subagents without an explicit model default to the standard tier (only when it is configured).
+if standard_tier:
+    env["CLAUDE_CODE_SUBAGENT_MODEL"] = standard_tier
 cur["env"] = env
 cur["effortLevel"] = tmpl["effortLevel"]
 cur["enableWorkflows"] = tmpl["enableWorkflows"]
@@ -215,6 +244,11 @@ if [ "$APPLY_SETTINGS" -eq 1 ]; then
 fi
 if [ "$BACKED_UP" -eq 1 ]; then
   echo "  Backups: replaced customizations saved under $BACKUP_DIR (copy back to restore)"
+fi
+if [ "${#UNSET_TIERS[@]}" -gt 0 ]; then
+  echo "  Models:  tiers not configured (${UNSET_TIERS[*]}); those agents use the client's default model."
+  echo "           Set them with: caphe-models fetch && caphe-models list && caphe-models set <client> <tier> <model>"
+  echo "           then re-run ./install.sh to render the agent profiles."
 fi
 if [ "${#PRESERVED[@]}" -gt 0 ]; then
   echo "  Preserved (locally customized or not stack-managed; re-run with --force to back up and replace):"

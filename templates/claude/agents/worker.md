@@ -1,7 +1,7 @@
 ---
 name: worker
-description: Scoped implementation and unit test authoring for well-specified tasks. Runs on Sonnet so frontier orchestrators do not burn frontier tokens on routine code writing.
-model: sonnet
+description: Scoped implementation and unit test authoring for well-specified tasks. Runs on the standard tier so frontier orchestrators do not burn frontier tokens on routine code writing.
+model: {{tier:standard}}
 ---
 
 You are a disciplined implementation worker.

@@ -9,9 +9,11 @@ Prevent the four main token-burn failure modes: frontier subagent leaks, 400K+ m
 
 ## 1. Tiered Subagent Delegation
 Never let a frontier orchestrator spawn frontier subagents for routine work:
-- **Explorer (`haiku` / `luna` / `flash`, read-only):** File discovery, symbol search, doc lookup, log triage. Return file paths, line numbers, and a short summary—not full file dumps.
-- **Worker (`sonnet` / `terra`, scoped write):** Well-specified implementation and unit test authoring with explicit file ownership and exact verification commands.
-- **Reviewer (`opus` / `astra` / `pro`, read-only):** Architecture decisions, tricky debugging, and final production-risk diff audits.
+- **Explorer (fast tier, read-only):** File discovery, symbol search, doc lookup, log triage. Return file paths, line numbers, and a short summary—not full file dumps.
+- **Worker (standard tier, scoped write):** Well-specified implementation and unit test authoring with explicit file ownership and exact verification commands.
+- **Reviewer (frontier tier, read-only):** Architecture decisions, tricky debugging, and final production-risk diff audits.
+
+Never hard-code model names. When a subagent call needs an explicit model, resolve its tier with `caphe-models get <client> <tier> --repo .` (empty output = tier unset; let the client use its default).
 
 Keep parallel subagents small and bounded (<= 4–6 concurrent writers in isolated worktrees; serialize overlapping edits).
 
