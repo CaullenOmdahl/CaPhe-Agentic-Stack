@@ -50,7 +50,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 mkdir -p "$TMP/.claude" "$TMP/.codex"
 printf '# Existing personal rule\nKeep me intact.\n' > "$TMP/.claude/CLAUDE.md"
-printf '{"voice": {"enabled": true}, "env": {"EXISTING": "1"}}\n' > "$TMP/.claude/settings.json"
+printf '{"voice": {"enabled": true}, "env": {"EXISTING": "1"}, "enableWorkflows": true}\n' > "$TMP/.claude/settings.json"
 printf '[mcp_servers.demo]\ncommand = "demo"\n' > "$TMP/.codex/config.toml"
 
 HOME="$TMP" bash "$ROOT/install.sh" --apply-settings >/dev/null
@@ -73,7 +73,7 @@ assert cs["voice"]["enabled"] is True
 assert cs["env"]["EXISTING"] == "1"
 assert "CLAUDE_CODE_SUBAGENT_MODEL" not in cs["env"], "unset standard tier must not set a subagent model"
 assert cs["effortLevel"] == "medium"
-assert cs["enableWorkflows"] is False
+assert cs["enableWorkflows"] is True, "installer must leave the user's workflow choice alone"
 ct = tomllib.loads(pathlib.Path(sys.argv[2]).read_text())
 assert ct["mcp_servers"]["demo"]["command"] == "demo"
 assert ct["agents"]["max_concurrent_threads_per_session"] == 6
@@ -357,6 +357,7 @@ python3 - "$TS_HOME" <<'PY'
 import json, pathlib, sys, tomllib
 home = pathlib.Path(sys.argv[1])
 assert json.loads((home / ".claude/settings.json").read_text())["env"]["CLAUDE_CODE_SUBAGENT_MODEL"] == "my-alias"
+assert "enableWorkflows" not in json.loads((home / ".claude/settings.json").read_text()), "fresh install must not set workflows"
 assert tomllib.loads((home / ".codex/config.toml").read_text())["agents"]["default_subagent_model"] == "oai-x"
 for f in (home / ".codex/agents").glob("*.toml"):
     a = tomllib.loads(f.read_text())
