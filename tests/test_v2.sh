@@ -213,6 +213,14 @@ PY
 test "$("${CM[@]}" get claude fast)" = "anth-a"
 test -z "$("${CM[@]}" get gemini fast)"
 
+# Any client name works (subscription clients without a built-in list API); bad names are rejected
+"${CM[@]}" set kimi fast kimi-alias > /dev/null 2> "$MT/err"; grep -q "normal on a subscription" "$MT/err"
+test "$("${CM[@]}" get kimi fast)" = "kimi-alias"
+"${CM[@]}" show | grep -qE '^kimi +fast +kimi-alias'
+"${CM[@]}" fetch kimi | grep -q "no model-list API built in"
+rc=0; "${CM[@]}" set 'Bad Name' fast x > "$MT/out" 2>&1 || rc=$?; test "$rc" -eq 2
+test "$("${CM[@]}" get claude fast)" = "anth-a"   # other clients' tiers survive the rewrite
+
 # Precedence: .caphe.local.toml > .caphe.toml > global
 RP="$MT/repo"; mkdir -p "$RP"
 printf '[models.claude]\nfast = "repo-fast"\nstandard = "repo-standard"\n' > "$RP/.caphe.toml"

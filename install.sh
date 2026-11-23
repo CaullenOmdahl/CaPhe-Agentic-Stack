@@ -247,7 +247,8 @@ if [ "$BACKED_UP" -eq 1 ]; then
 fi
 if [ "${#UNSET_TIERS[@]}" -gt 0 ]; then
   echo "  Models:  tiers not configured (${UNSET_TIERS[*]}); those agents use the client's default model."
-  echo "           Set them with: caphe-models fetch && caphe-models list && caphe-models set <client> <tier> <model>"
+  echo "           Set them with: caphe-models set <client> <tier> <model-or-alias>"
+  echo "           (no API key needed: use an alias or ID your client accepts; with a key, caphe-models fetch lists exact IDs)"
   echo "           then re-run ./install.sh to render the agent profiles."
 fi
 if [ "${#PRESERVED[@]}" -gt 0 ]; then
