@@ -77,6 +77,8 @@ assert cs["enableWorkflows"] is False
 ct = tomllib.loads(pathlib.Path(sys.argv[2]).read_text())
 assert ct["mcp_servers"]["demo"]["command"] == "demo"
 assert ct["agents"]["max_concurrent_threads_per_session"] == 6
+assert "default_subagent_model" not in ct["agents"], "unset codex standard tier must not set a subagent model"
+assert "personality" not in ct, "deprecated Codex key"
 print("OK: sandbox install + idempotency + non-destructive merge verified")
 PY
 
@@ -355,6 +357,7 @@ python3 - "$TS_HOME" <<'PY'
 import json, pathlib, sys, tomllib
 home = pathlib.Path(sys.argv[1])
 assert json.loads((home / ".claude/settings.json").read_text())["env"]["CLAUDE_CODE_SUBAGENT_MODEL"] == "my-alias"
+assert tomllib.loads((home / ".codex/config.toml").read_text())["agents"]["default_subagent_model"] == "oai-x"
 for f in (home / ".codex/agents").glob("*.toml"):
     a = tomllib.loads(f.read_text())
     assert a["name"] and a["description"] and a["developer_instructions"].strip(), f

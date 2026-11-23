@@ -57,7 +57,7 @@ Precedence: `.caphe.local.toml` > `.caphe.toml` > global. `caphe-models get <cli
 ## How each client uses tiers
 
 - **Claude Code:** agent profiles in `templates/claude/agents/` carry `model: {{tier:…}}`. The installer renders the configured model into `~/.claude/agents/`. With `--apply-settings`, `CLAUDE_CODE_SUBAGENT_MODEL` is set to the standard tier, so subagents without an explicit model don't inherit the frontier orchestrator.
-- **OpenAI Codex:** agent profiles in `templates/codex/agents/` carry `model = "{{tier:…}}"` plus `model_reasoning_effort` (low / medium / high per role). They are rendered into `~/.codex/agents/`.
+- **OpenAI Codex:** agent profiles in `templates/codex/agents/` carry `model = "{{tier:…}}"` plus `model_reasoning_effort` (low / medium / high per role). They are rendered into `~/.codex/agents/`. With `--apply-settings`, `agents.default_subagent_model` in `~/.codex/config.toml` is set to the standard tier, the Codex counterpart of the Claude setting above.
 - **Gemini / Antigravity:** no agent profiles. The entrypoint tells the agent to use fast-tier subagents for lookups, and to resolve the tier with `caphe-models get gemini fast`.
 
 - **Other clients** (DeepSeek, Kimi, MiniMax, your own harness): no profiles are installed for them, but `caphe-models get <client> <tier>` gives any script or agent the model to use.

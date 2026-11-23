@@ -1,8 +1,8 @@
 # Clean Codex v2 baseline (merge into ~/.codex/config.toml)
-personality = "pragmatic"
 model_reasoning_effort = "medium"
 
 [agents]
 enabled = true
 max_concurrent_threads_per_session = 6
 default_subagent_reasoning_effort = "low"
+# default_subagent_model: set by `install.sh --apply-settings` from your codex standard tier (caphe-models)
