@@ -5,19 +5,80 @@ set -euo pipefail
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
 APPLY_SETTINGS=0
+FORCE=0
 
 for arg in "$@"; do
   case "$arg" in
     --apply-settings) APPLY_SETTINGS=1 ;;
+    --force) FORCE=1 ;;
     -h|--help)
-      echo "Usage: ./install.sh [--apply-settings]"
+      echo "Usage: ./install.sh [--apply-settings] [--force]"
       echo "  Installs ~/AGENTS_GLOBAL.md, managed entrypoint pointers, on-demand skills, and tiered agent profiles."
+      echo "  Locally customized or foreign same-named files are preserved and listed, never overwritten by default."
       echo "  --apply-settings  Also merge non-destructive tiered subagent defaults into Claude & Codex settings."
+      echo "  --force           Replace preserved files with the stack version, backing them up first."
       exit 0
       ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
 done
+
+# Stack-managed content tracking: a file/dir is replaced silently only when it is missing, already identical,
+# or byte-identical to what this installer last wrote (recorded in the manifest). Anything else is a local
+# customization or unrelated same-named content: preserved by default, or backed up then replaced with --force.
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/caphe"
+MANIFEST="$STATE_DIR/install-manifest.tsv"
+TS="$(date +%Y%m%dT%H%M%S)"
+BACKUP_DIR="$STATE_DIR/backups/$TS"
+PRESERVED=()
+BACKED_UP=0
+mkdir -p "$STATE_DIR"
+touch "$MANIFEST"
+
+tree_hash() {
+  if [ -d "$1" ]; then
+    (cd "$1" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum) | sha256sum | cut -c1-64
+  else
+    sha256sum < "$1" | cut -c1-64
+  fi
+}
+
+manifest_get() {
+  awk -F '\t' -v p="$1" '$1 == p { h = $2 } END { print h }' "$MANIFEST"
+}
+
+manifest_set() {
+  local tmp="$MANIFEST.tmp"
+  awk -F '\t' -v p="$1" '$1 != p' "$MANIFEST" > "$tmp"
+  printf '%s\t%s\n' "$1" "$2" >> "$tmp"
+  mv "$tmp" "$MANIFEST"
+}
+
+install_item() {
+  local src="$1" dest="$2" new cur
+  new="$(tree_hash "$src")"
+  if [ -e "$dest" ] || [ -L "$dest" ]; then
+    cur="$(tree_hash "$dest" 2>/dev/null || true)"
+    if [ "$cur" = "$new" ]; then
+      manifest_set "$dest" "$new"
+      return 0
+    fi
+    if [ "$cur" != "$(manifest_get "$dest")" ]; then
+      if [ "$FORCE" -ne 1 ]; then
+        PRESERVED+=("$dest")
+        return 0
+      fi
+      local rel="${dest#"$HOME"/}"
+      mkdir -p "$BACKUP_DIR/$(dirname "$rel")"
+      cp -RP "$dest" "$BACKUP_DIR/$rel"
+      BACKED_UP=1
+    fi
+    rm -rf "$dest"
+  fi
+  mkdir -p "$(dirname "$dest")"
+  cp -R "$src" "$dest"
+  manifest_set "$dest" "$new"
+}
 
 MARKER_BEGIN="<!-- CAPHE:V2:BEGIN -->"
 MARKER_END="<!-- CAPHE:V2:END -->"
@@ -46,7 +107,7 @@ PY
 }
 
 # 1. Global canon (~55 lines, static & cache-friendly)
-cp "$SRC/docs/canon.md" "$HOME/AGENTS_GLOBAL.md"
+install_item "$SRC/docs/canon.md" "$HOME/AGENTS_GLOBAL.md"
 
 # 2. Managed pointer blocks (preserves existing personal machine instructions)
 CLAUDE_BLOCK="## CaPhe Agentic Stack (v2)
@@ -77,22 +138,22 @@ for sdir in "${SKILL_DIRS[@]}"; do
   mkdir -p "$sdir"
   for skill in "$SRC"/skills/*; do
     [ -d "$skill" ] || continue
-    name="$(basename "$skill")"
-    rm -rf "$sdir/$name"
-    cp -R "$skill" "$sdir/$name"
+    install_item "$skill" "$sdir/$(basename "$skill")"
   done
 done
 
 # 4. Install tiered subagent definitions (explorer / worker / reviewer) & non-discretionary CVE checker
-mkdir -p "$HOME/.claude/agents" "$HOME/.codex/agents" "$HOME/.local/bin"
-cp "$SRC"/templates/claude/agents/*.md "$HOME/.claude/agents/"
-cp "$SRC"/templates/codex/agents/*.toml "$HOME/.codex/agents/"
-cp "$SRC/hooks/cve-check.sh" "$HOME/.local/bin/caphe-cve-check"
-chmod +x "$HOME/.local/bin/caphe-cve-check"
+for agent in "$SRC"/templates/claude/agents/*.md; do
+  install_item "$agent" "$HOME/.claude/agents/$(basename "$agent")"
+done
+for agent in "$SRC"/templates/codex/agents/*.toml; do
+  install_item "$agent" "$HOME/.codex/agents/$(basename "$agent")"
+done
+install_item "$SRC/hooks/cve-check.sh" "$HOME/.local/bin/caphe-cve-check"
+[ ! -f "$HOME/.local/bin/caphe-cve-check" ] || chmod +x "$HOME/.local/bin/caphe-cve-check"
 
 # 5. Optional: merge non-destructive tiered settings into Claude & Codex configs
 if [ "$APPLY_SETTINGS" -eq 1 ]; then
-  TS="$(date +%Y%m%dT%H%M%S)"
 
   # Claude settings.json merge (preserves plugins, voice, statusLine, existing env keys)
   CLAUDE_SETTINGS="$HOME/.claude/settings.json"
@@ -151,4 +212,11 @@ echo "  Skills:  $(ls -1 "$SRC/skills" | tr '\n' ' ')"
 echo "  Agents:  explorer, worker, reviewer (Claude & Codex)"
 if [ "$APPLY_SETTINGS" -eq 1 ]; then
   echo "  Config:  merged tiered subagent defaults into ~/.claude/settings.json & ~/.codex/config.toml"
+fi
+if [ "$BACKED_UP" -eq 1 ]; then
+  echo "  Backups: replaced customizations saved under $BACKUP_DIR (copy back to restore)"
+fi
+if [ "${#PRESERVED[@]}" -gt 0 ]; then
+  echo "  Preserved (locally customized or not stack-managed; re-run with --force to back up and replace):"
+  printf '    %s\n' "${PRESERVED[@]}"
 fi
