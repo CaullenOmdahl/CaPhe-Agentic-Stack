@@ -1,260 +1,53 @@
-# CaPhe Agentic Stack
+# CaPhe Agentic Stack (v2)
 
-CaPhe Agentic Stack is a public-safe, agent-agnostic distribution bundle for teams or solo developers using multiple coding agents in the same codebase.
+A lean, public-safe, cross-agent operating stack for **Claude Code**, **OpenAI Codex**, and **Gemini / Antigravity**—designed for **production accuracy**, **progressive context loading**, and **minimal token overhead**.
 
-It is not an app framework, prompt dump, private machine backup, or runtime state store. It is a small set of shared operating rules, agent entrypoints, reusable workflow skills, and install documentation designed to seed Codex, Claude, Gemini / Antigravity, and adjacent tools on a developer machine.
+> Looking for the legacy Strict Mode v3 / Python harness stack? It is preserved on the `v1-archive` git tag.
 
-## What This Repository Does
+## Why v2?
+Modern frontier models absorb heavy orchestration glue natively. v2 strips ~10,500 lines of legacy scaffolding down to a thin, progressive-disclosure setup:
 
-This repository provides:
+- **~55-line always-loaded canon** ([docs/canon.md](docs/canon.md)): Static and cache-friendly (~450 tokens). Encodes Karpathy's coding principles, Ponytail's framework-first minimalism, hard production stops, and native-tool hygiene.
+- **Per-repo & per-person config** ([`.caphe.toml`](templates/repo/.caphe.toml) + gitignored `.caphe.local.toml`): Keep the stack identical across projects while toggling repo-specific rules (e.g., disable paid GitHub Actions on private repos, set push/PR policies, pin exact verification commands, toggle optional features). Missing `.caphe.toml` triggers a one-time `repo-init` setup interview.
+- **6 bite-sized, on-demand skills** (`skills/`): Loaded only when a task matches—never dumped into every prompt:
+  - [`repo-init`](skills/repo-init/SKILL.md) — first-run repo interview & `.caphe.toml` / `.caphe.local.toml` generator
+  - [`ponytail`](skills/ponytail/SKILL.md) — 7-step framework-first / YAGNI ladder (never cuts validation, types, or security)
+  - [`verify-ship`](skills/verify-ship/SKILL.md) — native typecheck -> lint -> test -> build gate + prod-risk diff audit
+  - [`git-github`](skills/git-github/SKILL.md) — branch, commit, push, PR, CI, and review flow via `git` + `gh`
+  - [`intended-behavior`](skills/intended-behavior/SKILL.md) — brief UX/API contract before non-trivial user-facing work
+  - [`session-hygiene`](skills/session-hygiene/SKILL.md) — tiered subagents, `/clear` handoffs, and zero frontier polling
+- **Native model tiering** (`templates/`): Ready-to-use configs and `explorer` / `worker` / `reviewer` agent profiles so frontier orchestrators stop spawning frontier subagents.
+- **Zero `Stop` hooks, minimal MCPs**: Deterministic verification runs via native commands, non-discretionary CVE scanning ([`hooks/cve-check.sh`](hooks/cve-check.sh) installed as `caphe-cve-check`), and opt-in [`hooks/pre-push-check.sh`](hooks/pre-push-check.sh)—never blocking every turn.
+- **Ecosystem-ready** ([docs/token-stack.md](docs/token-stack.md)): Pairs cleanly with **Ponytail**, **RTK**, and optional **Caveman**.
 
-- one shared canon for how coding agents should work;
-- root-level entrypoint files that common agent tools can auto-detect;
-- thin agent-specific adapters for Codex, Claude, and Gemini / Antigravity;
-- reusable skills for intended behavior, review, branch orientation, and UX-first planning;
-- a pull-request-centered review workflow;
-- a CLI worker harness with versioned task routes, bounded briefs, isolated source snapshots, and per-run usage records;
-- proportionate workflow guidance with relevant checks, optional runtime helpers, and scoped human gates;
-- a local MemPalace-derived memory adapter that preserves source citations and security-domain isolation;
-- CLI-first tool-selection rules that prefer the developer's existing environment over auth-dependent integrations;
-- an agent-facing install route for copying prompts, entrypoints, and skills into normal local config locations;
-- public-safety rules for keeping private machine and client details out of public docs;
-- a research index of outside public accounts and repositories worth monitoring.
+## Quick Install (Machine-Global)
 
-The main design goal is to prevent drift. Instead of maintaining unrelated `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md` files with subtly different rules, each tool gets a thin entrypoint that points back to the same canon.
-
-The intended direction is one-way: install from this repository onto a machine. Local agents may inventory tools, paths, accounts, repositories, and environment quirks in private local notes, but that runtime inventory does not flow back into this public repository.
-
-## What This Is Not
-
-This repository intentionally does not include:
-
-- credentials, tokens, cookies, signing keys, service accounts, or `.env` files;
-- local cache, telemetry, browser state, session history, or task-state files;
-- private hostnames, IP addresses, SSH aliases, VPN details, or network topology;
-- client-specific release procedures, customer data, or private project history;
-- a replacement for independent pull-request review.
-
-If a workflow depends on private operational details, document the shape of the workflow here and keep the private values in an ignored local file or a private repository.
-
-## Repository Layout
-
-```text
-.
-├── AGENTS.md
-├── CLAUDE.md
-├── GEMINI.md
-├── adapters/
-│   ├── claude/CLAUDE.md
-│   ├── codex/AGENTS.md
-│   ├── codex/CODEX.md
-│   └── gemini/GEMINI.md
-├── docs/
-│   ├── canon.md
-│   ├── current-stack-inventory.md
-│   ├── external-account-research.md
-│   ├── external-workflow-integrations.md
-│   ├── install-for-agents.md
-│   ├── public-safety.md
-│   ├── review-workflow.md
-│   └── reviewer-catalog.md
-├── memory/
-│   ├── benchmark_memory.py
-│   ├── export_codex_memory.py
-│   ├── mempalace_adapter.py
-│   ├── project_memory.py
-│   ├── resolve_codex_memory.py
-│   └── sync_mempalace.py
-├── strict-mode/
-│   ├── bin/
-│   ├── templates/
-│   └── test/
-├── bin/
-│   └── harness
-├── tools/
-│   └── caphe_harness.py
-└── skills/
-    ├── code-refactor-review/SKILL.md
-    ├── gh-review-certify-loop/SKILL.md
-    ├── intended-behavior/SKILL.md
-    ├── prepare-branch-context/SKILL.md
-    ├── memory-palace-recall/SKILL.md
-    ├── strict-mode/SKILL.md
-    └── ux-flow-plan/SKILL.md
+```bash
+./install.sh --apply-settings
 ```
 
-## Core Concepts
+`install.sh` is idempotent and non-destructive:
+- Copies `docs/canon.md` to `~/AGENTS_GLOBAL.md`.
+- Adds a small managed pointer block (`<!-- CAPHE:V2:BEGIN -->` ... `<!-- CAPHE:V2:END -->`) to `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, and `~/.gemini/GEMINI.md` without overwriting your personal machine rules.
+- Installs the 6 on-demand skills into `~/.claude/skills/`, `~/.codex/skills/`, `~/.gemini/config/skills/`, and `~/.agents/skills/`.
+- Installs tiered `explorer`, `worker`, and `reviewer` subagent definitions for Claude Code and Codex.
+- `--apply-settings` merges non-destructive tiered subagent defaults into `~/.claude/settings.json` and `~/.codex/config.toml` (creating backups first).
 
-### Shared Canon
+## Using in a Production Repository
 
-[`docs/canon.md`](docs/canon.md) is the central operating model. It defines:
+Copy [`templates/repo/AGENTS.md`](templates/repo/AGENTS.md) and [`templates/repo/.caphe.toml`](templates/repo/.caphe.toml) to your repo root (or let the agent run `repo-init` on first use), and optionally symlink `CLAUDE.md` and `GEMINI.md` to `AGENTS.md`:
 
-- autonomy and when agents should keep going;
-- when to stop for a human;
-- how to handle non-trivial behavior changes;
-- how to choose local CLI tools before auth-dependent integrations;
-- how to use non-code analysis artifacts before code;
-- the expected build and verification discipline;
-- the pull-request review rule;
-- public/private environment boundaries.
+```bash
+ln -s AGENTS.md CLAUDE.md
+ln -s AGENTS.md GEMINI.md
+```
 
-Agent-specific files should not reinvent those rules. They should point back to the canon and add only tool-specific notes.
+For an optional git pre-push verification hook (reads `[verify]` from `.caphe.toml`):
 
-### Root Entrypoints
+```bash
+cp hooks/pre-push-check.sh /path/to/repo/.git/hooks/pre-push
+chmod +x /path/to/repo/.git/hooks/pre-push
+```
 
-The root files are designed for agent auto-detection:
-
-- [`AGENTS.md`](AGENTS.md) for Codex-style agents;
-- [`CLAUDE.md`](CLAUDE.md) for Claude-based tools;
-- [`GEMINI.md`](GEMINI.md) for Gemini / Antigravity.
-
-These files are intentionally short. They direct the agent to the relevant adapter and the shared canon.
-
-### Agent Adapters
-
-The `adapters/` directory contains tool-specific instructions:
-
-- [`adapters/codex/AGENTS.md`](adapters/codex/AGENTS.md): Codex-native adapter-local entrypoint that forwards to `CODEX.md`.
-- [`adapters/codex/CODEX.md`](adapters/codex/CODEX.md): Codex-specific notes around filesystem/network access, memory, and offload boundaries.
-- [`adapters/claude/CLAUDE.md`](adapters/claude/CLAUDE.md): Claude-specific skill and review reminders.
-- [`adapters/gemini/GEMINI.md`](adapters/gemini/GEMINI.md): Gemini / Antigravity-specific model-effort and offload reminders.
-
-Adapters should stay small. If a rule applies to every agent, put it in `docs/canon.md`.
-
-### Skills
-
-The `skills/` directory contains reusable public workflow skills:
-
-- [`skills/code-refactor-review`](skills/code-refactor-review/SKILL.md): review diffs for reuse, composition, codebase consistency, unnecessary indirection, React/frontend state slop, and avoidable churn.
-- [`skills/gh-review-certify-loop`](skills/gh-review-certify-loop/SKILL.md): discover currently active GitHub reviewers and drive thread-aware PR review without waiting on retired integrations.
-- [`skills/intended-behavior`](skills/intended-behavior/SKILL.md): infer product behavior, UI placement, recurrence, and ask-versus-infer thresholds before implementation.
-- [`skills/memory-palace-recall`](skills/memory-palace-recall/SKILL.md): retrieve scoped prior context through sanitized, source-linked local evidence.
-- [`skills/project-memory`](skills/project-memory/SKILL.md): read and write the Git-stored project memory that every agent shares.
-- [`skills/prepare-branch-context`](skills/prepare-branch-context/SKILL.md): build read-only context for a branch or PR before follow-up work.
-- [`skills/strict-mode`](skills/strict-mode/SKILL.md): apply the shared proportionate workflow and relevant verification tools.
-- [`skills/ux-flow-plan`](skills/ux-flow-plan/SKILL.md): map current and desired product flows before attaching implementation files.
-
-These skills preserve tests and artifact verification while selecting one independent review route.
-
-## Review Model
-
-When review is useful or required, choose one separately performed diff review: remote preferred, local
-fallback when unavailable or requested. Same-family review is allowed; self-attestation is not review.
-
-The default route is:
-
-1. Work on a branch.
-2. Inspect the actual diff before staging.
-3. Commit only intended files.
-4. Run relevant verification.
-5. Push and open a pull request.
-6. Trigger or wait for independent agent review where available.
-7. Address actionable findings.
-8. Leave merge approval to a human maintainer.
-
-See [`docs/review-workflow.md`](docs/review-workflow.md) for the detailed route. [`docs/reviewer-catalog.md`](docs/reviewer-catalog.md) lists every remote and local reviewer the
-route can use, including options for machines that have only one agent installed.
-
-Successful separate local review satisfies an applicable review expectation; do not routinely run both.
-Optional UTC cooldowns and request reservations can coordinate concurrent requests; they are not
-prerequisites for ordinary repository work.
-Provider reset times are distinguished from estimated recheck times. Required branch protections remain binding.
-
-## Public Safety
-
-This repository is meant to be public. Before pushing, use the checks in [`docs/public-safety.md`](docs/public-safety.md), including scans for:
-
-- secrets and token-like strings;
-- local user paths;
-- hostnames and IP-like strings;
-- sensitive filenames such as `.env`, `.npmrc`, and credential/secret files.
-
-The public-safety rule is conservative by design: if a workflow needs private details, keep them outside this repository and document only the reusable structure here.
-
-## Stack Inventory
-
-[`docs/current-stack-inventory.md`](docs/current-stack-inventory.md) describes the current public-safe shape of the stack: entrypoints, adapter roles, skill categories, review policy, worktree policy, and the boundary between reusable public workflow and private operational details.
-
-[`docs/install-for-agents.md`](docs/install-for-agents.md) gives agents the one-way installation procedure for copying this stack into normal local config locations.
-
-## External Workflow Research
-
-The stack includes these research documents:
-
-- [`docs/external-workflow-integrations.md`](docs/external-workflow-integrations.md): records external workflow ideas already integrated or rejected, including the jnsahaj gists that motivated the first skills.
-- [`docs/external-account-research.md`](docs/external-account-research.md): tracks public GitHub accounts and repositories worth monitoring, such as Vercel Labs agent-skill work, agent-agnostic repository guides, and multi-agent coordination catalogs.
-- [`docs/efficiency-improvement-plan.md`](docs/efficiency-improvement-plan.md): evaluates published efficiency results and proposes measured context, verification, and model-and-effort improvements with implementation instructions.
-
-[`docs/efficiency-runtime.md`](docs/efficiency-runtime.md) documents the implemented tools, conservative defaults, and installation steps.
-
-Research notes are not automatically adopted rules. Changes to the stack should still go through a focused PR.
-
-## How To Use This Stack
-
-### In A Repository
-
-For a repo that should follow this stack:
-
-1. Copy or symlink the root entrypoint files your tools need:
-   - `AGENTS.md`
-   - `CLAUDE.md`
-   - `GEMINI.md`
-2. Keep `docs/canon.md` and the corresponding `adapters/` files available at the relative paths referenced by those entrypoints, or adjust the paths after copying.
-3. Copy only the skills that are relevant to that repo.
-4. Keep private local overrides outside the public repository.
-
-### Globally On A Machine
-
-For machine-global use, install the stack into each tool's normal config locations. Do not keep a runtime checkout of this repository on every machine just so agents can read it.
-
-The checked-in entrypoints are repository templates and use repo-relative paths such as `docs/canon.md` and `../../docs/canon.md`. For global installation:
-
-1. Copy the canon to the machine-level canon location, usually `~/AGENTS_GLOBAL.md`.
-2. Merge or copy the relevant adapter instructions into each tool's global entrypoint.
-3. Rewrite repo-relative canon references so global entrypoints read the machine-level canon.
-4. Rewrite any other repo-relative support references in copied adapters, such as review workflow docs, or remove those links if the supporting docs are not installed.
-5. Install only the skill directories, including any subdirectories, the machine needs into that tool's normal skill directories.
-6. Update installed skills so their canon reference points to the machine-level canon.
-7. Leave active installed files and the minimal verified runtime payload in normal config locations. Remove temporary install staging after verification; normal use does not require a source checkout.
-8. Store machine inventory and private operational notes only in local files outside this repository.
-
-Typical target roles are:
-
-- `~/AGENTS_GLOBAL.md` as the shared machine-level canon;
-- `~/.codex/AGENTS.md` as the Codex global entrypoint;
-- `~/.claude/CLAUDE.md` as the Claude global entrypoint;
-- `~/.gemini/GEMINI.md` as the Gemini / Antigravity global entrypoint;
-- `~/.codex/skills/<skill-name>/` for Codex-readable reusable skills;
-- `~/.claude/skills/<skill-name>/` for Claude-readable reusable skills;
-- `~/.gemini/skills/<skill-name>/` for Gemini-readable reusable skills when supported;
-- `~/.agents/skills/<skill-name>/` as a shared compatibility location for tools that read common agent skills.
-
-Do not commit machine-global install outputs, private paths, hostnames, usernames, account names, or local infrastructure details here. Local install notes may contain those details when useful; they just belong outside this public repository.
-
-## How To Change This Stack
-
-Use the same workflow this stack recommends:
-
-1. Create a branch.
-2. Keep the change scoped.
-3. Update docs and skills together when their behavior changes.
-4. Run public-safety checks.
-5. Open a pull request.
-6. Address agent and human review.
-7. Merge only after review is satisfactory.
-
-For new skills, keep `SKILL.md` concise and public-safe. Put detailed reference material in a linked `references/` directory only when needed.
-
-## Current Status
-
-The current stack includes:
-
-- shared canon and root entrypoints;
-- Codex, Claude, and Gemini / Antigravity adapters;
-- seven workflow skills, including active-review discovery, strict-mode governance, and scoped memory recall;
-- Strict Mode v3 source, templates, tests, and completion tooling;
-- a pinned, local-only MemPalace export/sync/benchmark adapter;
-- PR-review and public-safety documentation;
-- external workflow and account research notes.
-
-Private project skills, local credentials, cache state, and client-specific operations are deliberately outside this repository.
+## Public-Safety Rule
+This repository is public. Never commit credentials, tokens, `.env*` files, `.caphe.local.toml`, private hostnames, local usernames/paths, or private project notes. Run `bash tests/test_v2.sh` before pushing.

@@ -1,0 +1,4 @@
+name = "explorer"
+description = "Fast read-only codebase search, symbol lookup, and log triage."
+reasoning_effort = "low"
+sandbox_mode = "read-only"

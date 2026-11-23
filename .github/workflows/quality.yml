@@ -1,7 +1,6 @@
 name: quality
 
-# Dormant opt-in recipe: Actions is intentionally disabled to control cost.
-# No automatic PR/push workload; do not enable or dispatch without owner authorization.
+# Dormant opt-in recipe: manual dispatch only to avoid unnecessary CI minutes.
 on:
   workflow_dispatch:
 
@@ -11,7 +10,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,33 +18,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Run repository regressions and security checks
+      - name: Run CaPhe v2 verification and public-safety checks
         shell: bash
         run: |
           set -euo pipefail
-          unset PYTHONPATH PYTHONHOME
-          task_root=$(mktemp -d "$RUNNER_TEMP/caphe-checks.XXXXXX")
-          trap 'rm -rf "$task_root"' EXIT
-          mkdir -p "$task_root"/{home,config,data,state,cache}
-          export HOME="$task_root/home"
-          export XDG_CONFIG_HOME="$task_root/config" XDG_DATA_HOME="$task_root/data"
-          export XDG_STATE_HOME="$task_root/state" XDG_CACHE_HOME="$task_root/cache"
-          export TMPDIR="$(python3 -I -c 'import os,tempfile; print(os.path.realpath(tempfile.gettempdir()))')"
-          # Some permission regressions deliberately compare normal 0755/0644 files to private modes.
-          umask 022
-          check_status=0
-          # Import the stdlib runner before exposing project modules to test imports.
-          python3 -I - <<'PY' || check_status=1
-          import os, sys, unittest
-          sys.path.append(os.getcwd())
-          unittest.main(module=None, argv=['unittest', 'discover', '-s', 'tests', '-v'])
-          PY
-          for check in strict-mode/test/shell-syntax-test.sh \
-                       strict-mode/test/strict-confer-isolation-test.sh \
-                       strict-mode/test/strict-init-refresh-test.sh \
-                       test/public-safety-test.sh; do
-            bash "$check" || check_status=1
-          done
-          # Tests must not alter tracked source or leave unexpected public artifacts.
-          test -z "$(git status --porcelain=v1 --untracked-files=all)" || check_status=1
-          exit "$check_status"
+          bash tests/test_v2.sh
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"

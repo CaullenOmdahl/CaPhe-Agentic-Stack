@@ -1,0 +1,3 @@
+name = "worker"
+description = "Scoped code implementation and targeted test authoring."
+reasoning_effort = "medium"
