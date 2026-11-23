@@ -1,11 +1,11 @@
 # Production Safety Guide
 
-CaPhe v2 replaces ceremonial evidence files and post-turn `Stop` hooks with **deterministic automated checks** and **targeted diff audits** at ship time.
+CaPhe relies on **deterministic automated checks** and **targeted diff audits** at ship time, not on post-turn `Stop` hooks or hand-written evidence files.
 
 ## Why No `Stop` Hooks?
 Post-turn `Stop` hooks run after every assistant turn—even during exploratory reads or partial edits—causing multi-second/multi-minute hangs and noisy interruptions. Run checks instead:
 1. **Explicitly during implementation** on the affected package/test file.
-2. **Automatically at `pre-push` or CI** using the repository's real toolchain (see `hooks/pre-push-check.sh`).
+2. **Automatically at `pre-push`** using the repository's real toolchain (see `hooks/pre-push-check.sh`).
 
 ## Automated Verification Ladder
 Every production repository should declare its exact check commands in its root `AGENTS.md` (see `templates/repo/AGENTS.md`):
