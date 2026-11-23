@@ -34,6 +34,8 @@ PRESERVED=()
 BACKED_UP=0
 mkdir -p "$STATE_DIR"
 touch "$MANIFEST"
+# Lets `caphe-models mark-unavailable` print the exact re-render command.
+printf '%s\n' "$SRC" > "$STATE_DIR/install-source"
 
 tree_hash() {
   if [ -d "$1" ]; then

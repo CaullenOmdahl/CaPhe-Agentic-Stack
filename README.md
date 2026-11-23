@@ -85,15 +85,15 @@ No model names are hard-coded anywhere in this repo. Lineups change constantly a
 caphe-models set claude fast <alias>     # repeat for standard and frontier
 caphe-models set kimi fast <model>       # any client: deepseek, kimi, minimax, your own harness...
 
-# Optional, with an API key: pick exact IDs from the provider's live list.
-caphe-models fetch                       # Anthropic / OpenAI / Gemini, whichever keys are set
-caphe-models list claude
+# Real model IDs, no key needed: the public models.dev catalog (best effort), or a provider API if a key is set.
+caphe-models fetch                       # claude, codex, gemini, deepseek, kimi, minimax
+caphe-models list kimi
 caphe-models set claude fast <model-id>
 
 ./install.sh                             # re-render the agent profiles
 ```
 
-Tiers live in `~/.config/caphe/models.toml`. A repo can override them under `[models.<client>]` in `.caphe.toml`, or under `.caphe.local.toml` for personal settings. Until a tier is set, its agents simply run on the client's default model, and the installer tells you which tiers are unset. Details are in [docs/model-tiering.md](docs/model-tiering.md).
+Tiers live in `~/.config/caphe/models.toml`. A repo can override them under `[models.<client>]` in `.caphe.toml`, or under `.caphe.local.toml` for personal settings. Until a tier is set, its agents simply run on the client's default model, and the installer tells you which tiers are unset. If a model turns out to be unavailable to your account, agents record that themselves with `caphe-models mark-unavailable`, so it's hidden and any tier using it is cleared. Rate limits and outages never trigger this. Details are in [docs/model-tiering.md](docs/model-tiering.md).
 
 ### CVE gate: [`hooks/cve-check.sh`](hooks/cve-check.sh), installed as `caphe-cve-check`
 
@@ -115,7 +115,7 @@ Only clean scans are cached. Changing a lockfile invalidates the cache immediate
 
 ## Install
 
-**Requirements:** `bash`, `git`, Python **3.11+**. Recommended: [`osv-scanner`](https://github.com/google/osv-scanner) for universal CVE coverage. **No API key required**: subscription users set tiers to their client's model aliases, and a key only adds `caphe-models fetch` for pinning exact IDs.
+**Requirements:** `bash`, `git`, Python **3.11+**. Recommended: [`osv-scanner`](https://github.com/google/osv-scanner) for universal CVE coverage. **No API key required**: `caphe-models fetch` uses the public models.dev catalog, and aliases always work. A provider key only makes `fetch` reflect your exact account.
 
 ```bash
 ./install.sh                    # rules, skills, agent profiles, CVE checker
@@ -214,7 +214,7 @@ The suite checks:
 - **Context budgets.** The canon stays ≤ 70 lines, each skill ≤ 60, each entrypoint ≤ 15.
 - **Installer, in a throwaway `$HOME`.** Idempotency, settings merges that keep existing keys, customizations preserved, `--force` backups, untouched files upgraded.
 - **CVE gate, with a mocked scanner on a restricted `PATH`.** Clean scans are cached, lockfile changes invalidate the cache, a scanner error returns `2` and is never cached, findings return `1`, a missing scanner returns `2`.
-- **Model tiers, against a local mock of all three provider APIs.** Paginated fetches and filters, `set`/`get` precedence, and rendering with tiers set and unset.
+- **Model tiers, against a local mock of the provider APIs and the models.dev catalog.** Keyless catalog fallback and filters, paginated API fetches, `set`/`get` precedence, `mark-unavailable` / `mark-available`, and rendering with tiers set and unset.
 - **No model names.** Fails if any model name is hard-coded outside `tests/`.
 - **Public safety.** No credentials, tokens, private keys, local user paths, or sensitive filenames are committed.
 

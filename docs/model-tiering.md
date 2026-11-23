@@ -21,7 +21,7 @@ caphe-models set kimi standard <model>   # any client name works, not just the b
 ./install.sh
 ```
 
-**Optional, with an API key**, `fetch` pulls the provider's live list, so you can pin exact model IDs and have `set` validate them:
+**To see real model IDs without a key**, `caphe-models fetch` reads the public [models.dev](https://models.dev) catalog. It's best effort: it lists what a provider offers, not what your plan includes. It keeps only current models that support tool calls and text output, which coding agents need. With a provider **API key**, `fetch` uses that provider's own API instead, which reflects your account:
 
 ```bash
 caphe-models fetch                              # pull live model lists from each provider with an API key set
@@ -36,7 +36,10 @@ caphe-models show                               # every client x tier, and where
 | `claude` | Anthropic `GET /v1/models` (active models only) | `ANTHROPIC_API_KEY` |
 | `codex` | OpenAI `GET /v1/models` | `OPENAI_API_KEY` |
 | `gemini` (also Antigravity) | Gemini API `GET /v1beta/models` (models that support `generateContent`) | `GEMINI_API_KEY` or `GOOGLE_API_KEY` |
-| any other client | none built in: set aliases or IDs directly | — |
+| `deepseek`, `kimi`, `minimax` | models.dev catalog (`deepseek`, `moonshotai`, `minimax`) | — |
+| any other client | `caphe-models fetch <client> --catalog-provider <models.dev id>`, or set aliases/IDs directly | — |
+
+With no key, every client above falls back to the models.dev catalog (`claude` → `anthropic`, `codex` → `openai`, `gemini` → `google`).
 
 Providers without a key are skipped. A value doesn't have to come from the fetched list: anything the client accepts works, and `set` only warns when it can't validate a value. Keys are read from the environment and never stored. `caphe-models` never reads a client's sign-in credentials.
 
@@ -58,5 +61,15 @@ Precedence: `.caphe.local.toml` > `.caphe.toml` > global. `caphe-models get <cli
 - **Gemini / Antigravity:** no agent profiles. The entrypoint tells the agent to use fast-tier subagents for lookups, and to resolve the tier with `caphe-models get gemini fast`.
 
 - **Other clients** (DeepSeek, Kimi, MiniMax, your own harness): no profiles are installed for them, but `caphe-models get <client> <tier>` gives any script or agent the model to use.
+
+## When a model isn't available to your account
+
+Catalog lists are best effort, so sometimes a listed model turns out to be unavailable to your account. When a model call's own error says the account can't use *that model* (404 model not found, 403 permission/plan) and other models on the same client still work, agents run the command below. If every model fails, that's a setup problem (key, sign-in, base URL, gateway), so agents report it instead of marking anything:
+
+```bash
+caphe-models mark-unavailable <client> <model> --reason "404 not_found_error: ..."
+```
+
+That records the model in `~/.local/state/caphe/models/unavailable.json`. The model is then hidden from `list`, refused by `set`, ignored if a repo override still names it, and not brought back by a later `fetch`. Any tier that named it is cleared, falling back to the client default, and the command prints how to re-render the agent profiles. Matching is exact: marking a full model ID doesn't affect a tier set to an alias of it, and vice versa. The state file is written atomically, so parallel agents can't corrupt it, and a damaged file is ignored with a warning rather than breaking installs. Transient errors (429, 5xx, timeouts) are never grounds for marking. `caphe-models mark-available <client> <model>` undoes it.
 
 **Unset tier:** the installer drops the `model` line, so the agent runs on the client's default model, and the install output lists every unset tier. Tiering only takes effect once the tiers are set.

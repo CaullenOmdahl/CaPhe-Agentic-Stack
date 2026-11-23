@@ -29,6 +29,7 @@ Stop and confirm before executing unless `.caphe.toml` or explicit user authoriz
 - **Use native tools first:** Prefer `Read`, `Edit`, `Grep`, `Glob` over `Bash` (`grep`, `sed`, `cat >`). Prefer authenticated local CLIs (`git`, `gh`, `cf`, `railway`, etc.) over heavy MCP servers.
 - **Bound shell output:** Filter noisy logs/tests (`rtk` when installed, or `tail -n 80` / `--short` / targeted test filters). Never dump raw multi-megabyte logs into context.
 - **Tiered delegation:** Never spawn frontier subagents for routine lookups or mechanical edits. Route exploration to fast/light models, scoped implementation to standard coding models, and architecture/prod diff review to frontier models.
+- **Model access errors:** When a model call's own error says this account can't use *that model* (404 model not found, 403 plan/permission) while other models on the same client still work, run `caphe-models mark-unavailable <client> <model> --reason "<error>"`, re-render as it prints, continue on the tier/default, and tell the user. If every model fails, it's setup (key, URL, gateway): stop and report. Never mark on transient errors (429, 5xx, timeouts).
 - **No frontier polling:** Never loop `sleep` or recurring wakeups inside an active frontier coding session just to wait on healthy/unchanged state.
 - **Fresh task boundaries:** Use `/clear` (or a new session) with a brief handoff note between distinct tasks; keep context lean.
 - **Peer tone:** Be concise, direct, and factual. No filler, lecturing, or ceremonial summaries.

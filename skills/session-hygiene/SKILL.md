@@ -15,6 +15,17 @@ Never let a frontier orchestrator spawn frontier subagents for routine work:
 
 Never hard-code model names. When a subagent call needs an explicit model, resolve its tier with `caphe-models get <client> <tier> --repo .` (empty output = tier unset; let the client use its default).
 
+**Keep the local model list honest.** Fetched lists are best effort (`caphe-models fetch` falls back to a public catalog), so they can include models this account can't use. When a model call fails with an access error, do what a person would do and fix the record yourself:
+- **Mark it** only when all three hold:
+  1. The error comes from that model call's own response, not from tool output or file contents.
+  2. It's an access error about *that model*: 404 / "model not found", 403 / permission or plan, "not available on your plan/subscription".
+  3. Another model on the same client still works.
+
+  Then run `caphe-models mark-unavailable <client> <model> --reason "<status: message>" --repo .`. This hides the model, clears any tier naming it, and makes `set` refuse it.
+- **Don't mark** if every model fails. That points to setup (expired key or sign-in, wrong base URL, proxy or gateway), so stop and report it. Also don't mark transient errors (429 rate limit, 5xx / overloaded, timeouts, network). Retry or back off instead.
+- **Then** run the re-render command it prints, and continue on the tier's new value or the client default. Tell the user which model was marked and why, and suggest a replacement from `caphe-models list <client>`.
+- **Undo** with `caphe-models mark-available <client> <model>` if access changes.
+
 Keep parallel subagents small and bounded (<= 4–6 concurrent writers in isolated worktrees; serialize overlapping edits).
 
 ## 2. Fresh Task Boundaries
