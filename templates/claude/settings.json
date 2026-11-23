@@ -2,6 +2,5 @@
   "env": {
     "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS": "6"
   },
-  "effortLevel": "medium",
-  "enableWorkflows": false
+  "effortLevel": "medium"
 }

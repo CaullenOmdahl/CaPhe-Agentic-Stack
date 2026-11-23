@@ -202,7 +202,7 @@ if standard_tier:
     env["CLAUDE_CODE_SUBAGENT_MODEL"] = standard_tier
 cur["env"] = env
 cur["effortLevel"] = tmpl["effortLevel"]
-cur["enableWorkflows"] = tmpl["enableWorkflows"]
+# Workflows (enableWorkflows / disableWorkflows) are the user's choice: never touched here.
 target.write_text(json.dumps(cur, indent=2) + "\n", encoding="utf-8")
 PY
 
