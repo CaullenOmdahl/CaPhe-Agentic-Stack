@@ -4,6 +4,7 @@
 # 2) Context-budget checks (always-loaded canon stays tiny)
 # 3) Sandboxed installer idempotency, non-destructive merge & collision-safety tests
 # 4) Pre-push hook execution test
+# 4b) Evaluation kit sanity (tasks real, graders discriminate, reference solutions pass; no model run)
 # 5) Public-safety scan (no secrets, private paths, or sensitive filenames) + no hard-coded model names
 set -euo pipefail
 
@@ -530,6 +531,43 @@ grep -q "npm .*/apps/web$" "$MOCK_LOG"
 [ "$(grep -c "npm .*nested-fbfull$" "$MOCK_LOG")" = 1 ]
 unset CVE_REPO MOCK_LOG
 echo "OK: pre-push hook & CVE check verified"
+
+echo "4b. Validating the evaluation kit (no model is run)..."
+bash -n eval/run_trial.sh eval/score_trial.sh eval/*/grader/run.sh
+EV="$(mktemp -d)"
+# check_score <json> <hidden> <visible> <regression> <out-of-scope count>
+check_score() {
+  printf '%s' "$1" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+want = (sys.argv[1] == "1", sys.argv[2] == "1", sys.argv[3] == "1", int(sys.argv[4]))
+got = (d["hidden_pass"], d["visible_pass"], d["regression"], len(d["out_of_scope_files"]))
+sys.exit(0 if got == want else "score mismatch: %r != %r" % (got, want))' "$2" "$3" "$4" "$5"
+}
+for task in implement bugfix ui risk; do
+  test -s "eval/$task/TASK.md"
+  test -s "eval/$task/allowlist.txt"
+  test -d "eval/$task/reference"
+  if [ "$task" = ui ] && ! command -v node >/dev/null; then echo "SKIP: node missing, ui task not validated"; continue; fi
+  bash eval/run_trial.sh "$task" baseline "$EV" > "$EV/$task.out"
+  WS="$(ls -d "$EV/$task"-baseline-*/workspace)"
+  # The hidden grader and reference solution must never be inside the agent's workspace.
+  [ -z "$(find "$WS" -path "$WS/.git" -prune -o \( -name 'test_hidden*' -o -name grader -o -name reference \) -print)" ]
+  # Unmodified fixture: the task is real (visible task tests fail, hidden grader fails, existing tests pass).
+  check_score "$(bash eval/score_trial.sh "$WS" "$task" --seconds 1 --tokens 2 --cost 0.5)" 0 0 0 0
+  # Reference solution: everything passes and nothing is out of scope.
+  cp -R "eval/$task/reference/." "$WS/"
+  check_score "$(bash eval/score_trial.sh "$WS" "$task" --condition baseline --verification yes)" 1 1 0 0
+  # An unlisted changed file is reported as out of scope.
+  echo stray > "$WS/stray.txt"
+  check_score "$(bash eval/score_trial.sh "$WS" "$task")" 1 1 0 1
+done
+# The v2 condition installs into a throwaway HOME only.
+bash eval/run_trial.sh implement v2 "$EV" > "$EV/v2.out"
+[ -f "$(ls -d "$EV"/implement-v2-*/home)/AGENTS_GLOBAL.md" ]
+grep -q 'claude -p' "$EV/v2.out"
+rm -rf "$EV"
+echo "OK: eval kit tasks are real, graders discriminate, reference solutions pass, scores are valid JSON"
 
 echo "5. Running public-safety scan..."
 failed=0
