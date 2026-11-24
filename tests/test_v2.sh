@@ -390,11 +390,12 @@ echo "$OUT" | grep -q "pre-push-ran-ok"
 # CVE checker (#28) with a hermetic PATH: only core utilities plus a mocked osv-scanner, so host scanners never run.
 MINBIN="$TMP/minbin"
 mkdir -p "$MINBIN"
-for tool in bash git sha256sum cut date mkdir cat tail rm dirname pwd; do
+for tool in bash git sha256sum cut date mkdir cat tail rm dirname basename pwd find sort; do
   ln -s "$(command -v "$tool")" "$MINBIN/$tool"
 done
 cat > "$TMP/mockbin/osv-scanner" <<'EOF'
 #!/usr/bin/env bash
+[ -z "${MOCK_LOG:-}" ] || echo "osv-scanner $*" >> "$MOCK_LOG"
 case "${MOCK_OSV:-clean}" in
   vuln) echo "CVE-2026-99999 CRITICAL example-pkg 1.0.0 -> fix 1.0.1"; exit 1 ;;
   error) echo "osv-scanner: failed to query OSV API"; exit 2 ;;
@@ -407,8 +408,8 @@ printf '{"lockfileVersion": 3}\n' > "$REPO_TMP/package-lock.json"
 expect_cve() {  # expect_cve WANT_EXIT MODE [args...]; output lands in $TMP/cve.out
   local want="$1" mode="$2" rc=0
   shift 2
-  PATH="$TMP/mockbin:$MINBIN" XDG_CACHE_HOME="$TMP/cache" MOCK_OSV="$mode" \
-    bash "$ROOT/hooks/cve-check.sh" --repo "$REPO_TMP" "$@" > "$TMP/cve.out" 2>&1 || rc=$?
+  PATH="$TMP/mockbin:$MINBIN" XDG_CACHE_HOME="$TMP/cache" MOCK_OSV="$mode" MOCK_LOG="${MOCK_LOG:-}" \
+    bash "$ROOT/hooks/cve-check.sh" --repo "${CVE_REPO:-$REPO_TMP}" "$@" > "$TMP/cve.out" 2>&1 || rc=$?
   if [ "$rc" -ne "$want" ]; then
     echo "cve-check ($mode $*): expected exit $want, got $rc" >&2
     cat "$TMP/cve.out" >&2
@@ -439,8 +440,95 @@ expect_cve 0 clean --if-stale 24; not_in_out "cached"
 printf '{"lockfileVersion": 3, "name": "changed-third"}\n' > "$REPO_TMP/package-lock.json"
 rc=0
 PATH="$MINBIN" XDG_CACHE_HOME="$TMP/cache" bash "$ROOT/hooks/cve-check.sh" --repo "$REPO_TMP" --if-stale 24 > "$TMP/cve.out" 2>&1 || rc=$?
-test "$rc" -eq 2; grep -q "no CVE scanner installed" "$TMP/cve.out"
+test "$rc" -eq 2; grep -q "no CVE scanner can audit" "$TMP/cve.out"
 expect_cve 0 clean --if-stale 24; not_in_out "cached"
+# --- Nested workspace manifests (#37): discovery, exclusions, cache invalidation, native fallback coverage ---
+in_out() { grep -q -- "$1" "$TMP/cve.out" || { echo "missing '$1' in cve output" >&2; cat "$TMP/cve.out" >&2; exit 1; }; }
+scanner_calls() { if [ -f "$MOCK_LOG" ]; then wc -l < "$MOCK_LOG" | tr -d ' '; else echo 0; fi; }
+want_calls() { [ "$(scanner_calls)" = "$1" ] || { echo "expected $1 scanner call(s), got $(scanner_calls)" >&2; exit 1; }; }
+new_repo() { CVE_REPO="$TMP/nested-$1"; rm -rf "$CVE_REPO"; mkdir -p "$CVE_REPO"; MOCK_LOG="$TMP/scanner-$1.log"; rm -f "$MOCK_LOG"; }
+
+# Nested-only manifest: scanner must be reached (not "no manifests"); cached, then invalidated by edits
+new_repo only
+mkdir -p "$CVE_REPO/apps/web app/server"
+printf '{}\n' > "$CVE_REPO/apps/web app/server/package-lock.json"
+expect_cve 0 clean --if-stale 24; in_out "OK"; in_out "scanned 1 manifest"; not_in_out "no supported dependency manifests"; want_calls 1
+expect_cve 0 clean --if-stale 24; in_out "cached"; want_calls 1
+printf '{"changed":1}\n' > "$CVE_REPO/apps/web app/server/package-lock.json"
+expect_cve 0 clean --if-stale 24; not_in_out "cached"; want_calls 2
+
+# Adding a nested manifest invalidates the cache; removing one does too
+printf 'requests==1.0\n' > "$CVE_REPO/apps/web app/requirements.txt"
+expect_cve 0 clean --if-stale 24; not_in_out "cached"; in_out "scanned 2 manifest"; want_calls 3
+rm "$CVE_REPO/apps/web app/requirements.txt"
+expect_cve 0 clean --if-stale 24; not_in_out "cached"; in_out "scanned 1 manifest"; want_calls 4
+expect_cve 0 clean --if-stale 24; in_out "cached"; want_calls 4
+
+# Root plus nested
+new_repo both
+mkdir -p "$CVE_REPO/services/api"
+printf '{}\n' > "$CVE_REPO/package-lock.json"; printf 'module x\n' > "$CVE_REPO/services/api/go.sum"
+expect_cve 0 clean; in_out "scanned 2 manifest"; in_out "services/api/go.sum"; want_calls 1
+
+# Manifest only inside excluded dirs -> "no supported dependency manifests", exit 0, scanner never invoked
+new_repo excl
+mkdir -p "$CVE_REPO/node_modules/x" "$CVE_REPO/vendor/y" "$CVE_REPO/apps/a/.venv"
+printf '{}\n' > "$CVE_REPO/node_modules/x/package-lock.json"; printf '{}\n' > "$CVE_REPO/vendor/y/composer.lock"
+printf 'a==1\n' > "$CVE_REPO/apps/a/.venv/requirements.txt"
+expect_cve 0 clean; in_out "no supported dependency manifests"; not_in_out "OK"; want_calls 0
+
+# --exclude skips a custom directory; without it the manifest is scanned
+new_repo cust
+mkdir -p "$CVE_REPO/fixtures/app"; printf '{}\n' > "$CVE_REPO/fixtures/app/package-lock.json"
+expect_cve 0 clean; in_out "scanned 1 manifest"; want_calls 1
+expect_cve 0 clean --exclude fixtures; in_out "no supported dependency manifests"; want_calls 1
+
+# Traversal is bounded: a manifest deeper than the depth limit is not discovered
+new_repo deep
+mkdir -p "$CVE_REPO/a/b/c/d/e/f/g"; printf '{}\n' > "$CVE_REPO/a/b/c/d/e/f/g/package-lock.json"
+expect_cve 0 clean; in_out "no supported dependency manifests"; want_calls 0
+
+# No manifests at all
+new_repo none
+expect_cve 0 clean; in_out "no supported dependency manifests"; want_calls 0
+
+# Scanner error on a nested-only repo: exit 2, never cached, retried next run
+new_repo err
+mkdir -p "$CVE_REPO/apps/web"; printf '{}\n' > "$CVE_REPO/apps/web/package-lock.json"
+expect_cve 2 error --if-stale 24; in_out "SCAN INCOMPLETE"; not_in_out "OK"
+expect_cve 2 error --if-stale 24; want_calls 2
+expect_cve 1 vuln --if-stale 24; in_out "OPEN CVEs FLAGGED"
+
+# Native fallback (no osv-scanner/trivy on PATH): mock npm only
+FBBIN="$TMP/fbbin"; mkdir -p "$FBBIN"
+cat > "$FBBIN/npm" <<'EOF'
+#!/usr/bin/env bash
+echo "npm $(pwd)" >> "$MOCK_LOG"
+exit 0
+EOF
+chmod +x "$FBBIN/npm"
+expect_fb() {  # expect_fb WANT_EXIT [args...]
+  local want="$1" rc=0; shift
+  PATH="$FBBIN:$MINBIN" XDG_CACHE_HOME="$TMP/cache" MOCK_LOG="$MOCK_LOG" \
+    bash "$ROOT/hooks/cve-check.sh" --repo "$CVE_REPO" "$@" > "$TMP/cve.out" 2>&1 || rc=$?
+  [ "$rc" -eq "$want" ] || { echo "fallback: expected exit $want, got $rc" >&2; cat "$TMP/cve.out" >&2; exit 1; }
+}
+
+# Partial coverage: npm audits the lockfile but nothing can audit nested pom.xml -> incomplete, never clean, never cached
+new_repo fbpart
+mkdir -p "$CVE_REPO/services/java"
+printf '{}\n' > "$CVE_REPO/package-lock.json"; printf '<project/>\n' > "$CVE_REPO/services/java/pom.xml"
+expect_fb 2 --if-stale 24; in_out "SCAN INCOMPLETE"; in_out "services/java/pom.xml"; not_in_out "OK"
+expect_fb 2 --if-stale 24; not_in_out "cached"; want_calls 2
+
+# Full native coverage: only package-lock.json manifests (root + nested) -> exit 0, npm run once per directory
+new_repo fbfull
+mkdir -p "$CVE_REPO/apps/web"
+printf '{}\n' > "$CVE_REPO/package-lock.json"; printf '{}\n' > "$CVE_REPO/apps/web/package-lock.json"
+expect_fb 0; in_out "OK"; in_out "scanned 2 manifest"; want_calls 2
+grep -q "npm .*/apps/web$" "$MOCK_LOG"
+[ "$(grep -c "npm .*nested-fbfull$" "$MOCK_LOG")" = 1 ]
+unset CVE_REPO MOCK_LOG
 echo "OK: pre-push hook & CVE check verified"
 
 echo "5. Running public-safety scan..."

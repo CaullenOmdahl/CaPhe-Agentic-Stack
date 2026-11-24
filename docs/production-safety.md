@@ -18,8 +18,11 @@ Every production repository should declare its exact check commands in its root 
 ## Behind-the-Scenes CVE Scanning (Zero LLM Tokens)
 `install.sh` installs `caphe-cve-check` to `~/.local/bin/caphe-cve-check`. It uses `osv-scanner` (universal: JS/TS, Python, PHP, Java/Maven/Gradle, Go, Rust, Dart, Ruby) or `trivy` when installed, falling back to native ecosystem audits (`pnpm`/`npm`/`composer`/`pip-audit`/`cargo-audit`/`govulncheck`).
 
-- **Fast caching:** `--if-stale 24` skips repeat scans within 24 hours unless a lockfile changed. Only clean scans are cached.
-- **Exit codes:** `0` clean, `1` high/critical CVEs flagged, `2` scan incomplete (scanner error or no scanner installed). An incomplete scan is never reported or cached as clean, so the next run retries.
+- **Nested discovery:** Manifests/lockfiles are found recursively up to 6 directory levels deep (monorepo `apps/*`, `services/*`, `packages/*`, not just the root). Dependency and build output is never searched: `.git`, `node_modules`, `vendor`, `target`, `dist`, `build`, `out`, virtualenvs, framework caches and similar. Add more with a repeatable `--exclude DIRNAME`.
+- **Fast caching:** `--if-stale 24` skips repeat scans within 24 hours. The cache key covers the path and content of every discovered manifest, so adding, removing, moving or editing any of them (nested included) forces a re-scan. Only clean scans are cached.
+- **Native fallbacks are per directory:** Without `osv-scanner`/`trivy`, each manifest is audited by its ecosystem tool in its own directory. A manifest no installed tool can audit (for example `pom.xml`, `yarn.lock`) is listed as not scanned and makes the run incomplete, never clean.
+- **Outcomes:** (1) `no supported dependency manifests found` (exit `0`; nothing to scan, scanner not run); (2) `clean (cached result ...; not re-scanned)` (exit `0`; a previous clean scan of identical manifests); (3) `OK — scanned N manifest(s) with <scanners>` (exit `0`; a real scan ran); (4) `SCAN INCOMPLETE` (exit `2`) or `OPEN CVEs FLAGGED` (exit `1`).
+- **Exit codes:** `0` clean, `1` high/critical CVEs flagged, `2` scan incomplete (scanner error, no scanner installed, or manifests that no installed tool covers). An incomplete scan is never reported or cached as clean, so the next run retries.
 - **Background schedule (optional):** Run a lightweight daily cron or `systemd --user` timer across active project directories so open CVEs are flagged even between coding sessions:
   ```bash
   # Example daily background sweep (zero AI tokens; alerts only on findings)
