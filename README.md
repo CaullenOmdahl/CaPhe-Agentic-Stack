@@ -1,8 +1,10 @@
 # CaPhe Agentic Stack
 
-**A small, always-on rulebook plus six on-demand skills that make Claude Code, OpenAI Codex, and Gemini work like a careful senior engineer: verify before claiming, keep diffs surgical, never ship past an open CVE, and spend frontier tokens only where they matter.**
+**A small, always-on rulebook plus six on-demand skills that make Claude Code, OpenAI Codex, and Gemini work like a careful senior engineer: verify before claiming, keep diffs surgical, check dependencies for known CVEs before shipping, and spend frontier tokens only where they matter.**
 
 One install gives all three agents the same operating rules. The rules cost about 1k tokens of context, and the specialized playbooks load only when a task needs them.
+
+The rules and skills are instructions agents are asked to follow, not enforcement. See [what's enforced vs. what's guidance](#whats-enforced-vs-whats-guidance) for exactly what the stack does and does not guarantee.
 
 ```bash
 git clone https://github.com/CaullenOmdahl/CaPhe-Agentic-Stack.git
@@ -22,7 +24,7 @@ Coding agents tend to fail in the same few ways:
 | **"It's fixed" without running anything.** Agents reason about code instead of executing it. | The canon requires *oracles over prose*: typecheck → lint → targeted tests → build, plus a look at the real rendered output or response. |
 | **Over-engineering.** Custom wrappers and abstractions where the framework already has a primitive. | The [`ponytail`](skills/ponytail/SKILL.md) ladder: needed at all? already in the repo? stdlib? framework? existing dependency? Write custom code only as a last resort, and never cut validation, types, or auth checks to get there. |
 | **Frontier models doing intern work.** An expensive orchestrator spawns expensive subagents to grep files. | Ready-made `explorer` (fast tier), `worker` (standard tier), and `reviewer` (frontier tier) agent profiles for Claude Code and Codex. The stack never hard-codes a model name: you map each tier to a model from the provider's live list. See [model tiers](#model-tiers). |
-| **Silent vulnerable deploys.** Dependency audits get skipped because nobody asked. | `caphe-cve-check` is mandatory, cached, and needs no LLM tokens. It flags high/critical CVEs before ship (and blocks the push with the optional pre-push hook), and never reports a failed scan as clean. |
+| **Silent vulnerable deploys.** Dependency audits get skipped because nobody asked. | The canon instructs agents to run `caphe-cve-check`, an installed tool that is cached and uses no LLM tokens. When run, it flags high/critical CVEs and never reports a failed scan as clean. The optional, bypassable pre-push hook can fail a push on findings. Neither is a release gate by itself. |
 | **Agents acting on irreversible things.** Prod deploys, migrations, force-pushes, auth changes. | The canon defines hard human stops that apply unless the repo's `.caphe.toml` or the user explicitly authorizes the action. |
 
 ## How context stays small
@@ -49,14 +51,14 @@ The one file every agent always reads. Six short sections:
 
 1. **Per-repo config.** Honor `.caphe.toml`. If it's missing, run `repo-init` once.
 2. **Accuracy & code discipline.** State assumptions, go framework-first, keep diffs surgical, check API freshness instead of trusting memory.
-3. **Production verification.** Real checks in order, the mandatory CVE check, inspection of real artifacts, a diff audit before shipping.
+3. **Production verification.** Real checks in order, the required CVE check (an instruction), inspection of real artifacts, a diff audit before shipping.
 4. **Hard human stops.** Prod deploys, migrations, auth/secrets/billing, and irreversible or outward-facing actions.
 5. **Token & tool hygiene.** Native tools first, bounded shell output, tiered delegation, no idle polling.
 6. **Skill index.** Which skill to load for which task.
 
 ### Skills: [`skills/`](skills/)
 
-| Skill | Loads when you're… | What it enforces |
+| Skill | Loads when you're… | What it asks of the agent |
 | --- | --- | --- |
 | [`repo-init`](skills/repo-init/SKILL.md) | starting work in a repo with no `.caphe.toml` | Detects the toolchain, asks the per-repo judgment calls in one batch, writes `.caphe.toml` |
 | [`ponytail`](skills/ponytail/SKILL.md) | designing, implementing, or refactoring | The 7-rung framework-first ladder plus production guardrails |
@@ -64,6 +66,24 @@ The one file every agent always reads. Six short sections:
 | [`git-github`](skills/git-github/SKILL.md) | branching, committing, pushing, opening PRs | Scoped branches, atomic commits, `gh`-based PRs, no self-merge without authorization |
 | [`intended-behavior`](skills/intended-behavior/SKILL.md) | building user-facing UI, flows, or API behavior | A 5–10 line observable-behavior contract before code, then one real artifact checked |
 | [`session-hygiene`](skills/session-hygiene/SKILL.md) | delegating or running long sessions | Tiered subagents, fresh-session handoffs, no frontier polling |
+
+### What's enforced vs. what's guidance
+
+Installing this stack changes what agents are *told* and gives them tools to run. It does not make them obey, and it does not gate releases.
+
+| Layer | What it is | What it does and doesn't do |
+| --- | --- | --- |
+| **Instructions** (canon, skills) | Text agents are asked to follow | Nothing enforces compliance. An agent can skip or misapply a rule. |
+| **Installed tools** (`caphe-cve-check`, `caphe-models`) | Scripts in `~/.local/bin`, run when invoked | Deterministic when run; nothing runs them automatically. |
+| **Optional hook** (`hooks/pre-push-check.sh`) | A git pre-push hook you copy in yourself | Opt-in per repo. Bypassed by `CAPHE_SKIP_PRE_PUSH=1` or `git push --no-verify`. Runs `caphe-cve-check --if-stale 24`, then the `[verify]` commands. |
+| **Repo-configured commands** (`.caphe.toml` `[verify]`) | Commands your repo declares | Only as strong as the commands you put there. |
+| **External release controls** (branch protection, required reviews, CI gates) | Your platform's settings | **Not provided by this stack.** Setting them up is the operator's job. |
+
+Caveats on the CVE check:
+
+- **Cache window.** With `--if-stale 24`, a clean result is reused for up to 24 hours while the dependency files are unchanged. A new advisory published for unchanged dependencies in that window is not seen until the next real scan. Run `caphe-cve-check` without `--if-stale` before a release.
+- **Scan incomplete (exit `2`).** A scanner error, or no scanner available for the manifests present, is never cached as clean. The operator must resolve it (for example by installing `osv-scanner`); it is not a pass. The native fallbacks cover only some ecosystems, so `osv-scanner` is recommended.
+- **Not a guarantee.** A clean result means the scanner found no high/critical advisories it knows about in the files it scanned. It does not mean zero vulnerabilities.
 
 ### Agent profiles: [`templates/`](templates/)
 
@@ -107,11 +127,11 @@ caphe-cve-check --repo ../api --quiet-ok
 
 | Exit | Meaning |
 | --- | --- |
-| `0` | No high/critical CVEs (or a fresh clean result from the cache) |
+| `0` | No high/critical CVEs found by the scanner (or a clean result reused from the cache) |
 | `1` | CVEs flagged: fix before deploying |
-| `2` | Scan incomplete (scanner error or no scanner installed). Never cached, so the next run retries |
+| `2` | Scan incomplete (scanner error or no scanner installed). Never cached as clean; the operator must resolve it |
 
-Only clean scans are cached. Changing a lockfile invalidates the cache immediately.
+Only clean scans are cached. Changing a lockfile invalidates the cache immediately, but a new advisory against unchanged dependencies is not seen until the cache expires (24h with `--if-stale 24`). Omit `--if-stale` for a fresh scan before a release.
 
 ## Install
 
@@ -168,7 +188,7 @@ allow_merge = false            # agents never merge unless the repo says so
 github_actions = "disabled"    # disabled | manual_only | auto
 
 [verify]
-test = "pnpm test"             # the exact commands agents must run
+test = "pnpm test"             # the exact commands agents are told to run (and the pre-push hook runs)
 typecheck = "pnpm typecheck"
 ```
 
@@ -180,7 +200,7 @@ You can also adopt the [`AGENTS.md` template](templates/repo/AGENTS.md) for repo
 ln -s AGENTS.md CLAUDE.md && ln -s AGENTS.md GEMINI.md
 ```
 
-**Optional pre-push gate.** It runs the CVE check, then the `[verify]` commands from `.caphe.toml`:
+**Optional pre-push hook (opt-in).** It runs `caphe-cve-check --if-stale 24`, then the `[verify]` commands from `.caphe.toml`. It is not installed by `install.sh`, and `CAPHE_SKIP_PRE_PUSH=1` or `git push --no-verify` bypasses it:
 
 ```bash
 cp hooks/pre-push-check.sh .git/hooks/pre-push && chmod +x .git/hooks/pre-push
@@ -207,6 +227,8 @@ All verification runs locally:
 ```bash
 bash tests/test_v2.sh
 ```
+
+The suite tests the installer and tools. It does **not** show that agents follow the canon or skills. The cheaper, fewer-defects, and fewer-tokens benefits described above are design intent, not measured results; the planned measurement is in [docs/evaluation.md](docs/evaluation.md).
 
 The suite checks:
 
