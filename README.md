@@ -82,7 +82,7 @@ Installing this stack changes what agents are *told* and gives them tools to run
 Caveats on the CVE check:
 
 - **Cache window.** With `--if-stale 24`, a clean result is reused for up to 24 hours while the dependency files are unchanged. A new advisory published for unchanged dependencies in that window is not seen until the next real scan. Run `caphe-cve-check` without `--if-stale` before a release.
-- **Scan incomplete (exit `2`).** A scanner error, or no scanner available for the manifests present, is never cached as clean. The operator must resolve it (for example by installing `osv-scanner`); it is not a pass. The native fallbacks cover only some ecosystems, so `osv-scanner` is recommended.
+- **Scan incomplete (exit `2`).** A scanner error, no scanner, or partial coverage (any discovered manifest that no installed tool can audit) reports "SCAN INCOMPLETE" and is never cached as clean. The operator must resolve it, typically by installing `osv-scanner` or `trivy`; it is not a pass. The native fallbacks cover only some ecosystems (no yarn, bun, Maven/Gradle, Poetry/uv, Pipfile, Dart, or Ruby).
 - **Not a guarantee.** A clean result means the scanner found no high/critical advisories it knows about in the files it scanned. It does not mean zero vulnerabilities.
 
 ### Agent profiles: [`templates/`](templates/)
@@ -117,7 +117,7 @@ Tiers live in `~/.config/caphe/models.toml`. A repo can override them under `[mo
 
 ### CVE gate: [`hooks/cve-check.sh`](hooks/cve-check.sh), installed as `caphe-cve-check`
 
-Finds your lockfiles and scans them with `osv-scanner` (preferred, covers most ecosystems), or `trivy`, or falls back to native audits (`pnpm`/`npm audit`, `composer audit`, `cargo audit`, `pip-audit`, `govulncheck`).
+Finds your manifests and lockfiles at the repo root and in nested workspaces (up to 6 levels deep, skipping dependency and build directories such as `node_modules`, `vendor`, `target`, and `.venv`; add more with `--exclude DIRNAME`), then scans them with `osv-scanner` (preferred, covers most ecosystems), or `trivy`, or falls back to native audits (`pnpm`/`npm audit`, `composer audit`, `cargo audit`, `pip-audit`, `govulncheck`).
 
 ```bash
 caphe-cve-check                    # scan the current repo now
@@ -129,7 +129,7 @@ caphe-cve-check --repo ../api --quiet-ok
 | --- | --- |
 | `0` | No high/critical CVEs found by the scanner (or a clean result reused from the cache) |
 | `1` | CVEs flagged: fix before deploying |
-| `2` | Scan incomplete (scanner error or no scanner installed). Never cached as clean; the operator must resolve it |
+| `2` | Scan incomplete: a scanner error, no scanner installed, or any discovered manifest that no installed tool can audit (for example a `pom.xml` when only `npm` is available). Never cached as clean; the operator must resolve it |
 
 Only clean scans are cached. Changing a lockfile invalidates the cache immediately, but a new advisory against unchanged dependencies is not seen until the cache expires (24h with `--if-stale 24`). Omit `--if-stale` for a fresh scan before a release.
 

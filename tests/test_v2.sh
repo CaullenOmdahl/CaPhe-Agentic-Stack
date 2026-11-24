@@ -376,7 +376,7 @@ trap 'rm -rf "$TMP"' EXIT
 unset XDG_CONFIG_HOME XDG_STATE_HOME CAPHE_CATALOG_URL CAPHE_ANTHROPIC_BASE_URL CAPHE_OPENAI_BASE_URL CAPHE_GEMINI_BASE_URL
 echo "OK: model lists fetched & filtered, tier precedence, rendering with tiers set/unset, re-render on change"
 
-echo "4. Testing pre-push hook & non-discretionary CVE check..."
+echo "4. Testing pre-push hook & CVE check..."
 REPO_TMP="$TMP/repo"
 mkdir -p "$REPO_TMP" "$TMP/mockbin"
 git -C "$REPO_TMP" init -q

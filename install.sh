@@ -172,7 +172,7 @@ for agent in "$SRC"/templates/codex/agents/*.toml; do
   install_item "$RENDER_DIR/codex/$(basename "$agent")" "$HOME/.codex/agents/$(basename "$agent")"
 done
 
-# Non-discretionary CVE checker and the model-tier tool
+# CVE checker and the model-tier tool
 install_item "$SRC/hooks/cve-check.sh" "$HOME/.local/bin/caphe-cve-check"
 install_item "$SRC/bin/caphe-models" "$HOME/.local/bin/caphe-models"
 for bin in caphe-cve-check caphe-models; do
