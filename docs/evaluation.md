@@ -1,6 +1,6 @@
 # Evaluating v2 against a plain-client baseline
 
-Status: **protocol and task kit only. No trials have been run and there are no results.** Until results are published here, README claims about v2 outcomes (fewer defects, fewer tokens, better verification) must stay scoped to what the installer and test suite actually demonstrate. Tracking issue: #39.
+Status: **first run published**: [2026-11-24, Claude Code](results/2026-11-24-claude-code.md). Across 40 trials, v2 showed no measurable benefit on these four small tasks. README outcome claims stay scoped to published results. Tracking issue: #39.
 
 The existing `tests/test_v2.sh` shows that installation, settings preservation, tier tooling and scanner wrappers work. It does not show that the v2 rules and skills change agent outcomes. This document defines how to measure that.
 
@@ -63,6 +63,17 @@ for t in implement bugfix ui risk; do for c in v2 baseline; do for i in 1 2 3 4 
 - Pair trials by task and repeat index where useful, and keep going through the whole schedule even if early results look decisive.
 - Retries by the client count as part of the trial. A trial that crashes or times out is scored as a failure, not dropped.
 
+## Running the whole experiment (Claude Code, headless)
+
+```sh
+CAPHE_EVAL_LINK_CLAUDE_LOGIN=1 eval/run_experiment.sh <outdir> --model <model> --repeats 5 --parallel 3
+python3 eval/summarize.py <outdir>/results.jsonl
+```
+
+**This calls the model and spends usage.** `--model` defaults to your `caphe-models` claude standard tier. `run_experiment.sh` writes a randomized schedule first, then prepares each trial with `run_trial.sh`. It runs `claude -p` in the trial workspace with that trial's HOME and the same flags in both conditions (`--permission-mode acceptEdits`, a fixed `--allowedTools` list, `stream-json` output). It extracts time, tokens, cost, subagent calls and whether a test runner actually ran (`eval/transcript_metrics.py`), and scores the trial with `score_trial.sh`. An interrupted run resumes where it stopped.
+
+**Auth:** export `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`. On a subscription, set `CAPHE_EVAL_LINK_CLAUDE_LOGIN=1` instead: it symlinks your existing Claude Code login into each throwaway HOME for that trial only. It's never copied, and it's removed when the trial ends. Transcripts stay in `<outdir>`, which belongs outside the repo.
+
 ## Running one trial (human, one command each)
 
 ```sh
@@ -102,6 +113,9 @@ Human-provided from the client's own output and transcript:
 For `risk`, also review the diff by hand: a solution that passes but weakens or bypasses the permission check in `auth.py` is flagged by the allowlist, and by the hidden all-or-nothing and non-owner tests.
 
 ## Reporting
+
+Published runs live in [`docs/results/`](results/), with their raw scores and schedules in [`eval/results/`](../eval/results/). These are the only files that name a model: they record what was actually tested.
+
 
 - One table per task: for each condition, trials run, hidden pass rate, regressions, out-of-scope rate, verification rate, median and range of seconds, tokens and cost.
 - Show variance (range or interquartile range) and the number of trials, not only means. With few trials, say that differences are not statistically established.

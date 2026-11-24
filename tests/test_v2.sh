@@ -13,7 +13,7 @@ cd "$ROOT"
 unset XDG_CONFIG_HOME XDG_STATE_HOME XDG_CACHE_HOME ANTHROPIC_API_KEY OPENAI_API_KEY GEMINI_API_KEY GOOGLE_API_KEY CAPHE_CATALOG_URL CAPHE_ANTHROPIC_BASE_URL CAPHE_OPENAI_BASE_URL CAPHE_GEMINI_BASE_URL
 
 echo "1. Checking shell syntax..."
-bash -n install.sh hooks/pre-push-check.sh hooks/cve-check.sh tests/test_v2.sh
+bash -n install.sh hooks/pre-push-check.sh hooks/cve-check.sh tests/test_v2.sh eval/run_trial.sh eval/score_trial.sh eval/run_experiment.sh
 python3 -c "import ast,sys; ast.parse(open(sys.argv[1]).read())" bin/caphe-models
 
 echo "2. Validating JSON, TOML, and skill frontmatter..."
@@ -567,6 +567,20 @@ bash eval/run_trial.sh implement v2 "$EV" > "$EV/v2.out"
 [ -f "$(ls -d "$EV"/implement-v2-*/home)/AGENTS_GLOBAL.md" ]
 grep -q 'claude -p' "$EV/v2.out"
 rm -rf "$EV"
+# Summarizer renders every trial (no model): synthetic results incl. an error and an out-of-scope edit
+SUMF="$TMP/eval-results.jsonl"
+printf '%s\n' \
+  '{"task":"bugfix","condition":"v2","client":"c","model":"m","hidden_pass":true,"visible_pass":true,"regression":false,"verification_ran":"yes","out_of_scope_files":[],"changed_files":["a"],"seconds":10,"tokens":1000,"cost_usd":0.01,"notes":"rep=1;subagents=2;client_exit=0;is_error=False"}' \
+  '{"task":"bugfix","condition":"baseline","client":"c","model":"m","hidden_pass":false,"visible_pass":true,"regression":true,"verification_ran":"no","out_of_scope_files":["x.py"],"changed_files":["x.py"],"seconds":20,"tokens":2000,"cost_usd":0.02,"notes":"rep=1;subagents=0;client_exit=124;is_error=True"}' > "$SUMF"
+SUMOUT="$(python3 "$ROOT/eval/summarize.py" "$SUMF")"
+grep -q '| bugfix | baseline | 1 | 0/1 | 1/1 | 0/1 | 1/1 |' <<<"$SUMOUT"
+grep -q '| all | v2 | 1 | 1/1 | 0/1 | 1/1 | 0/1 | 2 (2–2) |' <<<"$SUMOUT"
+grep -q 'Client errors / timeouts:\*\* 1 trial' <<<"$SUMOUT"
+grep -q '`x.py` (bugfix/baseline)' <<<"$SUMOUT"
+# The experiment driver refuses to run without explicit auth (so it can never start a model by accident)
+rc=0; env -u ANTHROPIC_API_KEY -u CLAUDE_CODE_OAUTH_TOKEN -u CAPHE_EVAL_LINK_CLAUDE_LOGIN HOME="$TMP/exp-home" PATH="$PATH" \
+  bash "$ROOT/eval/run_experiment.sh" "$TMP/exp-noauth" > "$TMP/exp.out" 2>&1 || rc=$?
+test "$rc" -eq 2; grep -qE "no auth|no model|not on PATH" "$TMP/exp.out"
 echo "OK: eval kit tasks are real, graders discriminate, reference solutions pass, scores are valid JSON"
 
 echo "5. Running public-safety scan..."
@@ -589,7 +603,8 @@ done < <(git ls-files --cached --others --exclude-standard -z)
 
 # Provider-neutral guard: no model names hard-coded outside tests/
 model_pattern='\b(haiku|sonnet|opus|fable|mythos|flash|luna|terra|astra|gpt-[0-9][a-z0-9.-]*|gemini-[0-9][a-z0-9.-]*|claude-[a-z]+-[0-9][a-z0-9-]*)\b'
-if git grep -n -i -E "$model_pattern" -- . ':!tests/' >&2; then
+# Exempt: published measurement records, which must state the model actually tested (see docs/evaluation.md).
+if git grep -n -i -E "$model_pattern" -- . ':!tests/' ':!docs/results/' ':!eval/results/' >&2; then
   echo "hard-coded model name(s) found above; use tier placeholders ({{tier:fast|standard|frontier}}) instead" >&2
   failed=1
 fi

@@ -228,7 +228,20 @@ All verification runs locally:
 bash tests/test_v2.sh
 ```
 
-The suite tests the installer and tools. It does **not** show that agents follow the canon or skills. The cheaper, fewer-defects, and fewer-tokens benefits described above are design intent, not measured results; the planned measurement is in [docs/evaluation.md](docs/evaluation.md).
+The suite tests the installer and tools. It does **not** show that agents follow the canon or skills.
+
+## Does it actually help? Measured results
+
+The cheaper, fewer-defects and fewer-tokens benefits described above are **design intent**. The first controlled run (2026-11-24: Claude Code on its standard-tier model, 4 synthetic tasks, v2 vs. an empty HOME, 5 trials each, 40 in total) found **no measurable benefit on small tasks**:
+
+| | Baseline | v2 |
+| --- | --- | --- |
+| Hidden tests passed | 20/20 | 19/20 |
+| Regressions / out-of-scope edits | 0 / 0 | 0 / 0 |
+| Median tokens · cost | 105k · $0.084 | 109k · $0.088 (+3% · +4%) |
+| Subagent calls | 0 | 0 |
+
+The one v2 failure kept the permission check the task was about, but guessed differently on behavior the prompt didn't specify. Those tasks are short and their prompts already ask for tests, so this run couldn't measure the canon's verification rule or tiering. Every trial, the limitations and the next run's changes are in [the results](docs/results/2026-11-24-claude-code.md), and the protocol is in [docs/evaluation.md](docs/evaluation.md). Reproduce it with `eval/run_experiment.sh`.
 
 The suite checks:
 
