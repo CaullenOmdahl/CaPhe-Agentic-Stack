@@ -11,7 +11,7 @@ if [ "${CAPHE_SKIP_PRE_PUSH:-0}" = "1" ]; then
   exit 0
 fi
 
-# Non-discretionary CVE check (cached 24h when lockfiles are unchanged; instant re-scan on lockfile edit)
+# CVE check (a clean result is reused for up to 24h while manifests are unchanged; re-scans when any manifest changes)
 if command -v caphe-cve-check >/dev/null 2>&1; then
   caphe-cve-check --if-stale 24
 elif [ -x "$(dirname "$0")/cve-check.sh" ]; then
